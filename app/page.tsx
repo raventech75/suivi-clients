@@ -76,7 +76,7 @@ interface Project {
 }
 
 const COLLECTION_NAME = 'wedding_projects';
-const ADMIN_PASS = 'admin123';
+const ADMIN_PASS = 'iz2025';
 
 const PHOTO_STEPS = {
   'waiting': { label: 'En attente', percent: 5 },
