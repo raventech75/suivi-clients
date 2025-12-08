@@ -8,7 +8,7 @@ import {
   Clock, Check, ExternalLink, Link as LinkIcon,
   UserCheck, Users as UsersIcon, ImagePlus, Hourglass,
   Upload, Loader2, Filter, Mail, AtSign, MessageSquare, Send,
-  Copy, ClipboardCheck
+  Copy, ClipboardCheck, BookOpen, ArrowRight
 } from 'lucide-react';
 
 // --- Configuration Firebase ---
@@ -25,17 +25,14 @@ import {
 } from 'firebase/storage';
 
 // --- Correction TypeScript pour Vercel ---
-// On déclare ces variables globales pour que TypeScript ne bloque pas la compilation
 declare const __firebase_config: string | undefined;
 declare const __initial_auth_token: string | undefined;
 declare const __app_id: string | undefined;
 
 const getFirebaseConfig = () => {
-  // Vérification sécurisée pour l'environnement Preview
   if (typeof __firebase_config !== 'undefined') {
     return JSON.parse(__firebase_config);
   }
-  // Configuration standard pour Vercel (Production)
   return {
     apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
     authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
@@ -66,6 +63,7 @@ interface Project {
   photographerName: string;
   videographerName: string;
   managerName?: string; 
+  managerEmail?: string; 
   onSiteTeam?: string;
   coverImage?: string; 
   estimatedDelivery?: string;
@@ -73,6 +71,7 @@ interface Project {
   linkVideo?: string;
   notes: string;
   clientNotes?: string; 
+  hasAlbum?: boolean; // Nouveau champ pour l'album
   createdAt: any;
 }
 
@@ -134,7 +133,6 @@ export default function WeddingTracker() {
     const q = query(colRef);
     const unsubscribeData = onSnapshot(q, (snapshot) => {
       const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as Project[];
-      // Tri par date de mariage (du plus récent au plus ancien) pour une meilleure visibilité
       setProjects(data.sort((a, b) => new Date(b.weddingDate).getTime() - new Date(a.weddingDate).getTime()));
       setLoading(false);
     }, (error) => {
@@ -207,6 +205,7 @@ function ClientPortal({ projects, onBack }: { projects: Project[], onBack: () =>
   const [imgError, setImgError] = useState(false);
   const [notes, setNotes] = useState('');
   const [savingNotes, setSavingNotes] = useState(false);
+  const [emailCopied, setEmailCopied] = useState(false);
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
@@ -240,6 +239,34 @@ function ClientPortal({ projects, onBack }: { projects: Project[], onBack: () =>
     }
   };
 
+  const handleContactManager = () => {
+    if (!foundProject) return;
+    const email = foundProject.managerEmail;
+    if (!email) {
+      alert("L'email du responsable n'a pas été renseigné pour ce dossier.");
+      return;
+    }
+    const subject = `Question sur le dossier ${foundProject.code} - ${foundProject.clientNames}`;
+    window.location.href = `mailto:${email}?subject=${encodeURIComponent(subject)}`;
+  };
+
+  const copyProdEmail = () => {
+    navigator.clipboard.writeText('irzzenproductions@gmail.com').then(() => {
+      setEmailCopied(true);
+      setTimeout(() => setEmailCopied(false), 2000);
+    }).catch(() => {
+      // Fallback
+      const textArea = document.createElement("textarea");
+      textArea.value = 'irzzenproductions@gmail.com';
+      document.body.appendChild(textArea);
+      textArea.select();
+      document.execCommand('copy');
+      document.body.removeChild(textArea);
+      setEmailCopied(true);
+      setTimeout(() => setEmailCopied(false), 2000);
+    });
+  };
+
   useEffect(() => {
     if (foundProject) setImgError(false);
   }, [foundProject?.coverImage]);
@@ -250,6 +277,7 @@ function ClientPortal({ projects, onBack }: { projects: Project[], onBack: () =>
 
     return (
       <div className="min-h-screen bg-stone-50">
+        {/* Header Immersif */}
         <div className="relative h-[40vh] md:h-[50vh] w-full overflow-hidden bg-stone-900">
            <img 
              src={displayImage}
@@ -281,12 +309,14 @@ function ClientPortal({ projects, onBack }: { projects: Project[], onBack: () =>
         <div className="max-w-4xl mx-auto px-4 -mt-20 relative z-10 pb-20">
           
           <div className="flex justify-end mb-4">
-             <a 
-               href={`mailto:contact@votreagence.com?subject=Question dossier ${foundProject.code} - ${foundProject.clientNames}`} 
-               className="bg-white text-stone-600 px-4 py-2 rounded-full shadow-lg text-sm font-medium flex items-center gap-2 hover:bg-stone-50 transition-colors"
-             >
-               <Mail className="w-4 h-4" /> Contacter mon responsable
-             </a>
+             {foundProject.managerEmail && (
+               <button 
+                 onClick={handleContactManager}
+                 className="bg-white text-stone-600 px-4 py-2 rounded-full shadow-lg text-sm font-medium flex items-center gap-2 hover:bg-stone-50 transition-colors"
+               >
+                 <Mail className="w-4 h-4" /> Contacter mon responsable
+               </button>
+             )}
           </div>
 
           {foundProject.estimatedDelivery && (
@@ -302,6 +332,8 @@ function ClientPortal({ projects, onBack }: { projects: Project[], onBack: () =>
           )}
 
           <div className="bg-white rounded-2xl shadow-xl border border-stone-100 p-6 md:p-10 space-y-12">
+            
+            {/* Grille Photo / Vidéo */}
             <div className={`grid gap-10 ${foundProject.statusPhoto !== 'none' && foundProject.statusVideo !== 'none' ? 'md:grid-cols-2' : 'grid-cols-1 max-w-2xl mx-auto'}`}>
               
               {foundProject.statusPhoto !== 'none' && (
@@ -375,6 +407,56 @@ function ClientPortal({ projects, onBack }: { projects: Project[], onBack: () =>
               )}
             </div>
 
+            {/* --- Section Album Photo (Nouvelle) --- */}
+            {foundProject.hasAlbum && foundProject.statusPhoto === 'delivered' && (
+              <div className="mt-12 bg-stone-800 rounded-2xl p-8 text-white relative overflow-hidden">
+                <div className="absolute top-0 right-0 w-64 h-64 bg-stone-700 rounded-full mix-blend-overlay filter blur-3xl opacity-20 -translate-y-1/2 translate-x-1/2"></div>
+                
+                <div className="relative z-10">
+                  <div className="flex items-center gap-3 mb-6">
+                    <div className="bg-stone-700 p-3 rounded-xl">
+                      <BookOpen className="w-6 h-6 text-amber-200" />
+                    </div>
+                    <h3 className="font-serif text-2xl">Production de l'Album</h3>
+                  </div>
+
+                  <div className="grid md:grid-cols-2 gap-8">
+                    <div className="space-y-4">
+                      <p className="text-stone-300">
+                        Votre galerie est livrée ! Pour lancer la création de votre album photo, nous avons besoin de votre sélection.
+                      </p>
+                      <ul className="space-y-2 text-sm text-stone-400">
+                        <li className="flex items-center gap-2"><div className="w-1.5 h-1.5 rounded-full bg-amber-500"></div> Sélectionnez vos photos préférées</li>
+                        <li className="flex items-center gap-2"><div className="w-1.5 h-1.5 rounded-full bg-amber-500"></div> Créez un dossier unique</li>
+                        <li className="flex items-center gap-2"><div className="w-1.5 h-1.5 rounded-full bg-amber-500"></div> Envoyez-le nous via WeTransfer</li>
+                      </ul>
+                    </div>
+
+                    <div className="bg-stone-900/50 p-6 rounded-xl border border-stone-700">
+                      <div className="mb-4">
+                        <label className="text-xs uppercase text-stone-500 font-bold mb-1 block">Adresse d'envoi</label>
+                        <div className="flex items-center gap-2 bg-stone-800 p-2 rounded-lg border border-stone-700">
+                          <code className="flex-1 text-sm text-amber-100">irzzenproductions@gmail.com</code>
+                          <button onClick={copyProdEmail} className="p-1.5 hover:bg-stone-700 rounded text-stone-400 hover:text-white transition-colors">
+                            {emailCopied ? <ClipboardCheck className="w-4 h-4 text-green-400"/> : <Copy className="w-4 h-4"/>}
+                          </button>
+                        </div>
+                      </div>
+                      <a 
+                        href="https://wetransfer.com/" 
+                        target="_blank" 
+                        rel="noopener noreferrer"
+                        className="w-full bg-white text-stone-900 py-3 rounded-lg font-medium hover:bg-amber-50 transition-colors flex items-center justify-center gap-2"
+                      >
+                        Envoyer ma sélection <ArrowRight className="w-4 h-4"/>
+                      </a>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Section Notes Client */}
             <div className="border-t border-stone-100 pt-8 mt-8">
               <h4 className="font-serif text-xl text-stone-800 mb-4 flex items-center gap-2">
                 <MessageSquare className="w-5 h-5 text-stone-400" /> Informations Complémentaires
@@ -443,7 +525,7 @@ function AdminDashboard({ projects, user, onLogout }: { projects: Project[], use
   const [isAdding, setIsAdding] = useState(false);
   const [newProject, setNewProject] = useState({ 
     clientNames: '', clientEmail: '', weddingDate: '', photographerName: '', videographerName: '', 
-    managerName: '', onSiteTeam: '', hasPhoto: true, hasVideo: true 
+    managerName: '', managerEmail: '', onSiteTeam: '', hasPhoto: true, hasVideo: true, hasAlbum: false // Init
   });
   
   const [filter, setFilter] = useState<'all' | 'active' | 'completed' | 'late'>('all');
@@ -472,15 +554,17 @@ function AdminDashboard({ projects, user, onLogout }: { projects: Project[], use
       clientNotes: '', 
       clientEmail: newProject.clientEmail || '', 
       managerName: newProject.managerName || '',
+      managerEmail: newProject.managerEmail || '',
       onSiteTeam: newProject.onSiteTeam || '',
       coverImage: '', 
       estimatedDelivery: '',
+      hasAlbum: newProject.hasAlbum || false, // Sauvegarde du choix
       createdAt: serverTimestamp()
     });
     setIsAdding(false);
     setNewProject({ 
       clientNames: '', clientEmail: '', weddingDate: '', photographerName: '', videographerName: '', 
-      managerName: '', onSiteTeam: '', hasPhoto: true, hasVideo: true 
+      managerName: '', managerEmail: '', onSiteTeam: '', hasPhoto: true, hasVideo: true, hasAlbum: false 
     });
   };
 
@@ -560,11 +644,15 @@ function AdminDashboard({ projects, user, onLogout }: { projects: Project[], use
             <h3 className="text-lg font-bold mb-6 border-b pb-2">Nouveau Mariage</h3>
             <form onSubmit={handleAddProject} className="space-y-4">
               <div><label className="text-sm font-medium text-stone-600 block mb-1">Mariés</label><input required placeholder="Ex: Sophie & Marc" className="w-full border rounded-lg p-2.5" value={newProject.clientNames} onChange={e => setNewProject({...newProject, clientNames: e.target.value})} /></div>
-              <div><label className="text-sm font-medium text-stone-600 block mb-1">Email des mariés</label><input type="email" placeholder="mariage@exemple.com" className="w-full border rounded-lg p-2.5" value={newProject.clientEmail} onChange={e => setNewProject({...newProject, clientEmail: e.target.value})} /></div>
               <div className="grid grid-cols-2 gap-4">
+                 <div><label className="text-sm font-medium text-stone-600 block mb-1">Email des mariés</label><input type="email" placeholder="mariage@exemple.com" className="w-full border rounded-lg p-2.5" value={newProject.clientEmail} onChange={e => setNewProject({...newProject, clientEmail: e.target.value})} /></div>
                  <div><label className="text-sm font-medium text-stone-600 block mb-1">Date</label><input required type="date" className="w-full border rounded-lg p-2.5" value={newProject.weddingDate} onChange={e => setNewProject({...newProject, weddingDate: e.target.value})} /></div>
-                 <div><label className="text-sm font-medium text-stone-600 block mb-1">Responsable</label><input placeholder="Ex: Julien" className="w-full border rounded-lg p-2.5" value={newProject.managerName} onChange={e => setNewProject({...newProject, managerName: e.target.value})} /></div>
               </div>
+              <div className="grid grid-cols-2 gap-4">
+                 <div><label className="text-sm font-medium text-stone-600 block mb-1">Responsable</label><input placeholder="Ex: Julien" className="w-full border rounded-lg p-2.5" value={newProject.managerName} onChange={e => setNewProject({...newProject, managerName: e.target.value})} /></div>
+                 <div><label className="text-sm font-medium text-stone-600 block mb-1">Email Responsable</label><input type="email" placeholder="julien@votreagence.com" className="w-full border rounded-lg p-2.5" value={newProject.managerEmail} onChange={e => setNewProject({...newProject, managerEmail: e.target.value})} /></div>
+              </div>
+              
               <div className="grid grid-cols-2 gap-4 pt-2">
                 <div className="p-3 bg-stone-50 rounded-lg border border-stone-100">
                   <label className="flex items-center gap-2 mb-2 font-medium text-sm cursor-pointer"><input type="checkbox" checked={newProject.hasPhoto} onChange={e => setNewProject({...newProject, hasPhoto: e.target.checked})} className="accent-amber-600" /> Prestation Photo</label>
@@ -575,6 +663,15 @@ function AdminDashboard({ projects, user, onLogout }: { projects: Project[], use
                   {newProject.hasVideo && <input placeholder="Nom Vidéaste" className="w-full text-sm border rounded p-1.5" value={newProject.videographerName} onChange={e => setNewProject({...newProject, videographerName: e.target.value})} />}
                 </div>
               </div>
+
+              {/* Checkbox Album */}
+              <div className="pt-2">
+                 <label className="flex items-center gap-2 text-sm font-medium text-stone-700 cursor-pointer p-3 bg-stone-50 rounded-lg border border-stone-100">
+                    <input type="checkbox" checked={newProject.hasAlbum} onChange={e => setNewProject({...newProject, hasAlbum: e.target.checked})} className="accent-stone-800" />
+                    <span className="flex items-center gap-2"><BookOpen className="w-4 h-4 text-stone-500" /> Album Photo inclus (Active l'étape de sélection post-livraison)</span>
+                 </label>
+              </div>
+
               <div className="flex gap-3 mt-8 pt-4">
                 <button type="button" onClick={() => setIsAdding(false)} className="flex-1 py-2.5 bg-gray-100 hover:bg-gray-200 rounded-lg font-medium transition">Annuler</button>
                 <button type="submit" className="flex-1 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium transition">Créer le projet</button>
@@ -722,9 +819,13 @@ function ProjectEditor({ project, onDelete }: { project: Project, onDelete: () =
                   <input className="w-full text-sm border-b border-stone-200 py-1 focus:outline-none focus:border-stone-500 bg-transparent" placeholder="Ex: Julien" value={localData.managerName || ''} onChange={e => updateField('managerName', e.target.value)} />
                 </div>
                 <div>
-                  <label className="text-xs font-semibold text-stone-500 uppercase block mb-1">Équipe sur place (Liste complète)</label>
-                  <input className="w-full text-sm border-b border-stone-200 py-1 focus:outline-none focus:border-stone-500 bg-transparent" placeholder="Ex: Sophie (Photo), Marc (Vidéo), Assistant..." value={localData.onSiteTeam || ''} onChange={e => updateField('onSiteTeam', e.target.value)} />
+                  <label className="text-xs font-semibold text-stone-500 uppercase block mb-1">Email Responsable</label>
+                  <input className="w-full text-sm border-b border-stone-200 py-1 focus:outline-none focus:border-stone-500 bg-transparent" placeholder="julien@votreagence.com" value={localData.managerEmail || ''} onChange={e => updateField('managerEmail', e.target.value)} />
                 </div>
+             </div>
+             <div className="mb-4">
+                <label className="text-xs font-semibold text-stone-500 uppercase block mb-1">Équipe sur place (Liste complète)</label>
+                <input className="w-full text-sm border-b border-stone-200 py-1 focus:outline-none focus:border-stone-500 bg-transparent" placeholder="Ex: Sophie (Photo), Marc (Vidéo), Assistant..." value={localData.onSiteTeam || ''} onChange={e => updateField('onSiteTeam', e.target.value)} />
              </div>
              <div className="mb-4">
                 <label className="text-xs font-semibold text-stone-500 uppercase flex items-center gap-1 mb-1"><AtSign className="w-3 h-3" /> Email des mariés (pour notifications)</label>
@@ -757,6 +858,14 @@ function ProjectEditor({ project, onDelete }: { project: Project, onDelete: () =
                   <label className="text-xs font-semibold text-stone-500 uppercase flex items-center gap-1 mb-1"><Clock className="w-3 h-3" /> Estimation de Livraison</label>
                   <input className="w-full text-sm border-b border-stone-200 py-1 focus:outline-none focus:border-stone-500 bg-transparent" placeholder="Ex: Entre le 15 et le 20 Octobre" value={localData.estimatedDelivery || ''} onChange={e => updateField('estimatedDelivery', e.target.value)} />
                </div>
+             </div>
+
+             {/* Toggle Album */}
+             <div className="mt-4 pt-4 border-t border-stone-100">
+               <label className="flex items-center gap-2 text-sm font-medium text-stone-700 cursor-pointer">
+                  <input type="checkbox" checked={localData.hasAlbum || false} onChange={e => updateField('hasAlbum', e.target.checked)} className="accent-stone-800" />
+                  <span className="flex items-center gap-2"><BookOpen className="w-4 h-4 text-stone-500" /> Album Photo inclus (Active l'étape de sélection post-livraison)</span>
+               </label>
              </div>
            </div>
 
