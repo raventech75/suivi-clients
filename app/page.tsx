@@ -239,17 +239,6 @@ function ClientPortal({ projects, onBack }: { projects: Project[], onBack: () =>
     }
   };
 
-  const handleContactManager = () => {
-    if (!foundProject) return;
-    const email = foundProject.managerEmail;
-    if (!email) {
-      alert("L'email du responsable n'a pas été renseigné pour ce dossier.");
-      return;
-    }
-    const subject = `Question sur le dossier ${foundProject.code} - ${foundProject.clientNames}`;
-    window.location.href = `mailto:${email}?subject=${encodeURIComponent(subject)}`;
-  };
-
   const copyProdEmail = () => {
     navigator.clipboard.writeText('irzzenproductions@gmail.com').then(() => {
       setEmailCopied(true);
@@ -310,12 +299,12 @@ function ClientPortal({ projects, onBack }: { projects: Project[], onBack: () =>
           
           <div className="flex justify-end mb-4">
              {foundProject.managerEmail && (
-               <button 
-                 onClick={handleContactManager}
+               <a 
+                 href={`mailto:${foundProject.managerEmail}?subject=${encodeURIComponent(`Question sur le dossier ${foundProject.code} - ${foundProject.clientNames}`)}`}
                  className="bg-white text-stone-600 px-4 py-2 rounded-full shadow-lg text-sm font-medium flex items-center gap-2 hover:bg-stone-50 transition-colors"
                >
                  <Mail className="w-4 h-4" /> Contacter mon responsable
-               </button>
+               </a>
              )}
           </div>
 
