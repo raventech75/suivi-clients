@@ -63,7 +63,7 @@ interface Project {
   photographerName: string;
   videographerName: string;
   managerName?: string; 
-  managerEmail?: string; 
+  // managerEmail retiré
   onSiteTeam?: string;
   coverImage?: string; 
   estimatedDelivery?: string;
@@ -71,7 +71,7 @@ interface Project {
   linkVideo?: string;
   notes: string;
   clientNotes?: string; 
-  hasAlbum?: boolean; // Nouveau champ pour l'album
+  hasAlbum?: boolean;
   createdAt: any;
 }
 
@@ -297,17 +297,6 @@ function ClientPortal({ projects, onBack }: { projects: Project[], onBack: () =>
 
         <div className="max-w-4xl mx-auto px-4 -mt-20 relative z-10 pb-20">
           
-          <div className="flex justify-end mb-4">
-             {foundProject.managerEmail && (
-               <a 
-                 href={`mailto:${foundProject.managerEmail}?subject=${encodeURIComponent(`Question sur le dossier ${foundProject.code} - ${foundProject.clientNames}`)}`}
-                 className="bg-white text-stone-600 px-4 py-2 rounded-full shadow-lg text-sm font-medium flex items-center gap-2 hover:bg-stone-50 transition-colors"
-               >
-                 <Mail className="w-4 h-4" /> Contacter mon responsable
-               </a>
-             )}
-          </div>
-
           {foundProject.estimatedDelivery && (
              <div className="bg-white rounded-xl shadow-lg border border-amber-100 p-6 mb-8 flex items-center gap-4 animate-fade-in">
                <div className="p-3 bg-amber-50 rounded-full">
@@ -514,7 +503,7 @@ function AdminDashboard({ projects, user, onLogout }: { projects: Project[], use
   const [isAdding, setIsAdding] = useState(false);
   const [newProject, setNewProject] = useState({ 
     clientNames: '', clientEmail: '', weddingDate: '', photographerName: '', videographerName: '', 
-    managerName: '', managerEmail: '', onSiteTeam: '', hasPhoto: true, hasVideo: true, hasAlbum: false // Init
+    managerName: '', onSiteTeam: '', hasPhoto: true, hasVideo: true, hasAlbum: false // Init
   });
   
   const [filter, setFilter] = useState<'all' | 'active' | 'completed' | 'late'>('all');
@@ -543,7 +532,6 @@ function AdminDashboard({ projects, user, onLogout }: { projects: Project[], use
       clientNotes: '', 
       clientEmail: newProject.clientEmail || '', 
       managerName: newProject.managerName || '',
-      managerEmail: newProject.managerEmail || '',
       onSiteTeam: newProject.onSiteTeam || '',
       coverImage: '', 
       estimatedDelivery: '',
@@ -553,7 +541,7 @@ function AdminDashboard({ projects, user, onLogout }: { projects: Project[], use
     setIsAdding(false);
     setNewProject({ 
       clientNames: '', clientEmail: '', weddingDate: '', photographerName: '', videographerName: '', 
-      managerName: '', managerEmail: '', onSiteTeam: '', hasPhoto: true, hasVideo: true, hasAlbum: false 
+      managerName: '', onSiteTeam: '', hasPhoto: true, hasVideo: true, hasAlbum: false 
     });
   };
 
@@ -639,7 +627,7 @@ function AdminDashboard({ projects, user, onLogout }: { projects: Project[], use
               </div>
               <div className="grid grid-cols-2 gap-4">
                  <div><label className="text-sm font-medium text-stone-600 block mb-1">Responsable</label><input placeholder="Ex: Julien" className="w-full border rounded-lg p-2.5" value={newProject.managerName} onChange={e => setNewProject({...newProject, managerName: e.target.value})} /></div>
-                 <div><label className="text-sm font-medium text-stone-600 block mb-1">Email Responsable</label><input type="email" placeholder="julien@votreagence.com" className="w-full border rounded-lg p-2.5" value={newProject.managerEmail} onChange={e => setNewProject({...newProject, managerEmail: e.target.value})} /></div>
+                 {/* Email Responsable retiré */}
               </div>
               
               <div className="grid grid-cols-2 gap-4 pt-2">
@@ -807,10 +795,7 @@ function ProjectEditor({ project, onDelete }: { project: Project, onDelete: () =
                   <label className="text-xs font-semibold text-stone-500 uppercase block mb-1">Responsable du dossier</label>
                   <input className="w-full text-sm border-b border-stone-200 py-1 focus:outline-none focus:border-stone-500 bg-transparent" placeholder="Ex: Julien" value={localData.managerName || ''} onChange={e => updateField('managerName', e.target.value)} />
                 </div>
-                <div>
-                  <label className="text-xs font-semibold text-stone-500 uppercase block mb-1">Email Responsable</label>
-                  <input className="w-full text-sm border-b border-stone-200 py-1 focus:outline-none focus:border-stone-500 bg-transparent" placeholder="julien@votreagence.com" value={localData.managerEmail || ''} onChange={e => updateField('managerEmail', e.target.value)} />
-                </div>
+                {/* Email Responsable retiré */}
              </div>
              <div className="mb-4">
                 <label className="text-xs font-semibold text-stone-500 uppercase block mb-1">Équipe sur place (Liste complète)</label>
