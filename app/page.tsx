@@ -24,10 +24,18 @@ import {
   getStorage, ref, uploadBytes, getDownloadURL 
 } from 'firebase/storage';
 
+// --- Correction TypeScript pour Vercel ---
+// On déclare ces variables globales pour que TypeScript ne bloque pas la compilation
+declare const __firebase_config: string | undefined;
+declare const __initial_auth_token: string | undefined;
+declare const __app_id: string | undefined;
+
 const getFirebaseConfig = () => {
+  // Vérification sécurisée pour l'environnement Preview
   if (typeof __firebase_config !== 'undefined') {
     return JSON.parse(__firebase_config);
   }
+  // Configuration standard pour Vercel (Production)
   return {
     apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
     authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
