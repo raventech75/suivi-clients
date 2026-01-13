@@ -1097,4 +1097,4 @@ function ClientPortal({ projects, onBack }: { projects: Project[], onBack: () =>
         </div>
       </div>
     );
-  }
+  } }
