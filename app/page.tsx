@@ -351,7 +351,7 @@ function ArchiveView({ onBack }: { onBack: () => void }) {
   );
 }
 
-// --- Composant Chat ---
+// --- Composant Chat (Avec Notifications Email) ---
 function ChatBox({ project, userType }: { project: Project, userType: 'admin' | 'client' }) {
     const [msgText, setMsgText] = useState('');
     const [sending, setSending] = useState(false);
@@ -364,6 +364,7 @@ function ChatBox({ project, userType }: { project: Project, userType: 'admin' | 
         if(!msgText.trim()) return;
         setSending(true);
         const newMessage: Message = { id: Date.now().toString(), author: userType, text: msgText, date: new Date().toISOString() };
+        
         let docRef;
         if (typeof __app_id !== 'undefined') { docRef = doc(db, 'artifacts', typeof __app_id !== 'undefined' ? __app_id : 'default-app-id', 'public', 'data', COLLECTION_NAME, project.id); } 
         else { docRef = doc(db, COLLECTION_NAME, project.id); }
@@ -373,6 +374,30 @@ function ChatBox({ project, userType }: { project: Project, userType: 'admin' | 
         if (userType === 'admin') updates.hasUnreadMessage = false;
 
         await updateDoc(docRef, updates);
+
+        // --- NOUVEAU : Envoi de l'alerte Mail via Make ---
+        if (MAKE_WEBHOOK_URL && !MAKE_WEBHOOK_URL.includes('VOTRE_URL')) {
+            // Si c'est le client qui écrit -> On notifie le Responsable (ou l'admin par défaut)
+            // Si c'est l'admin qui écrit -> On notifie le Client
+            const targetEmail = userType === 'client' ? (project.managerEmail || 'admin@raventech.fr') : project.clientEmail;
+            
+            if (targetEmail) {
+                fetch(MAKE_WEBHOOK_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ 
+                        type: 'new_message', // Type pour filtrer dans Make
+                        author: userType,
+                        targetEmail: targetEmail, 
+                        clientName: project.clientNames, 
+                        msg: msgText,
+                        url: window.location.origin
+                    })
+                }).catch(err => console.error("Erreur notif mail chat", err));
+            }
+        }
+        // -----------------------------------------------
+
         setMsgText('');
         setSending(false);
     };
