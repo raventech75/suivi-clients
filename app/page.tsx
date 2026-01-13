@@ -9,7 +9,7 @@ import {
   UserCheck, Users as UsersIcon, ImagePlus, Hourglass,
   Upload, Loader2, AtSign, MessageSquare, Send,
   Copy, BookOpen, ArrowRight, HardDrive, ShieldCheck, History,
-  Euro, Eye, AlertTriangle, CreditCard, X, Phone, Rocket, Star, Mail, Settings, AlertOctagon, Music, Disc
+  Euro, Eye, AlertTriangle, CreditCard, X, Phone, Rocket, Star, Mail, Settings, AlertOctagon, Music
 } from 'lucide-react';
 
 // --- Configuration Firebase ---
@@ -55,7 +55,7 @@ const SUPER_ADMINS = ["admin@raventech.fr", "irzzenproductions@gmail.com"];
 const STRIPE_ARCHIVE_LINK = "https://buy.stripe.com/3cI3cv3jq2j37x9eFy5gc0b";
 const STRIPE_PRIORITY_LINK = "https://buy.stripe.com/VOTRE_LIEN_PRIORITE";
 
-// LISTE INITIALE (Sera complétée par la base de données)
+// LISTE INITIALE
 const DEFAULT_STAFF = ["Feridun", "Volkan", "Ali", "Steeven", "Taner", "Yunus", "Emir", "Serife"];
 const ALBUM_FORMATS = ["30x20", "30x30", "40x30", "40x30 + 2x 18x24", "Autre"];
 
@@ -74,44 +74,31 @@ interface Project {
   clientPhone?: string;
   weddingDate: string;
   code: string;
-  
-  // Status
   statusPhoto: 'waiting' | 'culling' | 'editing' | 'exporting' | 'delivered' | 'none';
   statusVideo: 'waiting' | 'cutting' | 'grading' | 'mixing' | 'delivered' | 'none';
   progressPhoto: number; 
   progressVideo: number;
-  
-  // Staff
   photographerName: string;
   videographerName: string;
   managerName?: string; 
-  managerEmail?: string; // NOUVEAU: Pour notif responsable
+  managerEmail?: string; 
   onSiteTeam?: string[]; 
-  
-  // Media & Dates
   coverImage?: string; 
   estimatedDelivery?: string;
   linkPhoto?: string;
   linkVideo?: string;
-  
-  // Interaction
   messages?: Message[]; 
   hasUnreadMessage?: boolean; 
-  clientNotes?: string; // Old notes
-  
-  // Music & Albums (NOUVEAU)
-  musicLinks?: string; // Liens Youtube/MP3
+  clientNotes?: string; 
+  musicLinks?: string; 
   musicInstructions?: string;
   albumFormat?: string;
   albumNotes?: string;
   hasAlbum?: boolean;
-
-  // Finance (NOUVEAU)
   totalPrice?: number;
   depositAmount?: number;
-  teamPayments?: Remuneration[]; // Qui a été payé quoi
+  teamPayments?: Remuneration[];
   financeNotes?: string;
-
   isPriority?: boolean; 
   createdAt: any;
   lastUpdated?: any;
@@ -171,7 +158,6 @@ export default function WeddingTracker() {
       setLoading(false);
     });
 
-    // Chargement Staff (avec fallback sur la liste par défaut)
     let settingsRef;
     if (typeof __app_id !== 'undefined') { settingsRef = doc(db, 'artifacts', appId, 'public', 'data', SETTINGS_COLLECTION, 'general'); } 
     else { settingsRef = doc(db, SETTINGS_COLLECTION, 'general'); }
@@ -200,6 +186,68 @@ export default function WeddingTracker() {
       {view === 'client' && <ClientPortal projects={projects} onBack={() => setView('landing')} />}
       {view === 'admin' && <AdminDashboard projects={projects} staffList={staffList} setStaffList={setStaffList} user={user} onLogout={() => { signOut(auth); setView('landing'); }} />}
       {view === 'archive' && <ArchiveView onBack={() => setView('landing')} />}
+    </div>
+  );
+}
+
+// --- Vue Accueil (Landing Page) ---
+function LandingView({ setView }: { setView: (v: any) => void }) {
+  return (
+    <div className="min-h-screen bg-white text-stone-900 font-sans selection:bg-amber-100 selection:text-amber-900">
+      <nav className="fixed top-0 w-full z-50 bg-white/80 backdrop-blur-md border-b border-stone-100">
+        <div className="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <div className="bg-stone-900 text-white p-2 rounded-lg"><Camera className="w-5 h-5" /></div>
+            <span className="font-serif text-xl font-bold tracking-tight">RavenTech</span>
+          </div>
+          <div className="flex items-center gap-2 md:gap-4">
+            <button onClick={() => setView('client')} className="hidden md:flex items-center gap-2 text-sm font-medium text-stone-600 hover:text-stone-900 transition-colors"><Search className="w-4 h-4"/> Espace Mariés</button>
+            <button onClick={() => setView('client')} className="md:hidden p-2 bg-stone-100 rounded-full"><Search className="w-5 h-5"/></button>
+            <button onClick={() => setView('admin')} className="bg-stone-900 text-white px-4 py-2 md:px-5 md:py-2.5 rounded-full text-xs md:text-sm font-medium hover:bg-stone-800 transition-all shadow-lg shadow-stone-200 flex items-center gap-2"><Lock className="w-3 h-3"/> <span className="hidden md:inline">Accès Studio</span><span className="md:hidden">Studio</span></button>
+          </div>
+        </div>
+      </nav>
+
+      <section className="relative pt-32 pb-12 lg:pt-48 lg:pb-32 overflow-hidden px-6">
+        <div className="max-w-7xl mx-auto grid lg:grid-cols-2 gap-12 items-center">
+          <div className="space-y-8 relative z-10 text-center lg:text-left">
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-amber-50 border border-amber-100 text-amber-800 text-xs font-bold uppercase tracking-wider">
+              <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse"></span> Nouvelle plateforme 2026
+            </div>
+            <h1 className="text-4xl md:text-5xl lg:text-7xl font-serif leading-[1.1]">
+              L'art de sublimer <br/>
+              <span className="text-transparent bg-clip-text bg-gradient-to-r from-stone-800 to-stone-500">vos souvenirs.</span>
+            </h1>
+            <p className="text-base md:text-lg text-stone-500 max-w-md mx-auto lg:mx-0 leading-relaxed">
+              Une expérience digitale complète pour suivre votre reportage, valider vos montages et sécuriser votre patrimoine visuel à vie.
+            </p>
+            <div className="flex flex-col sm:flex-row gap-4 justify-center lg:justify-start">
+              <button onClick={() => setView('client')} className="px-8 py-4 bg-stone-900 text-white rounded-full font-medium hover:bg-black transition-transform hover:scale-105 shadow-xl flex items-center justify-center gap-2">Accéder à mon mariage <ArrowRight className="w-4 h-4" /></button>
+              <button onClick={() => setView('archive')} className="px-8 py-4 bg-white border border-stone-200 text-stone-900 rounded-full font-medium hover:bg-stone-50 transition-colors flex items-center justify-center gap-2 group"><HardDrive className="w-4 h-4 text-stone-400 group-hover:text-stone-900 transition-colors" /> Vérifier mes archives</button>
+            </div>
+          </div>
+          <div className="relative mt-8 lg:mt-0">
+            <div className="relative rounded-[2rem] overflow-hidden shadow-2xl border border-white/20 aspect-[4/5] md:aspect-auto md:h-[600px]">
+               <img src="https://images.unsplash.com/photo-1519741497674-611481863552?auto=format&fit=crop&q=80" alt="Mariage Couple" className="w-full h-full object-cover" />
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section className="py-20 bg-stone-50 px-6">
+        <div className="max-w-7xl mx-auto">
+           <h2 className="text-3xl font-serif mb-12 text-center">Services Premium</h2>
+           <div className="grid md:grid-cols-3 gap-6">
+              <div className="bg-white p-6 rounded-2xl shadow-sm border border-stone-100"><h3 className="text-xl font-bold mb-3 flex gap-2 items-center"><Clock className="text-amber-500 w-5 h-5"/> Suivi Live</h3><p className="text-stone-500 text-sm">Suivez l'avancement en temps réel.</p></div>
+              <div className="bg-white p-6 rounded-2xl shadow-sm border border-stone-100"><h3 className="text-xl font-bold mb-3 flex gap-2 items-center"><Rocket className="text-amber-500 w-5 h-5"/> Fast Track</h3><p className="text-stone-500 text-sm">Option prioritaire pour les pressés.</p></div>
+              <div className="bg-white p-6 rounded-2xl shadow-sm border border-stone-100"><h3 className="text-xl font-bold mb-3 flex gap-2 items-center"><ShieldCheck className="text-amber-500 w-5 h-5"/> Cold Storage</h3><p className="text-stone-500 text-sm">Archivage sécurisé à vie.</p></div>
+           </div>
+        </div>
+      </section>
+      
+      <footer className="bg-white border-t border-stone-100 py-12 text-center text-sm text-stone-500">
+        © 2026 RavenTech Solutions.
+      </footer>
     </div>
   );
 }
@@ -271,7 +319,6 @@ function AdminDashboard({ projects, user, onLogout, staffList, setStaffList }: {
   const [showTeamModal, setShowTeamModal] = useState(false);
   const [newMember, setNewMember] = useState('');
   
-  // New Project State
   const [newProject, setNewProject] = useState({ 
     clientNames: '', clientEmail: '', clientPhone: '', weddingDate: '', 
     photographerName: '', videographerName: '', managerName: '', managerEmail: '',
@@ -312,10 +359,10 @@ function AdminDashboard({ projects, user, onLogout, staffList, setStaffList }: {
       <div className="bg-white p-6 rounded-xl shadow-lg max-w-sm w-full">
          <h2 className="text-xl font-bold mb-4 flex gap-2"><Lock className="w-5 h-5" /> Accès Production</h2>
          <form onSubmit={handleLogin} className="space-y-4">
-            <div><label className="text-xs font-bold text-stone-500 uppercase">Email</label><input type="email" required className="w-full p-3 border rounded-lg" value={emailInput} onChange={(e) => setEmailInput(e.target.value)} /></div>
-            <div><label className="text-xs font-bold text-stone-500 uppercase">Mot de passe</label><input type="password" required className="w-full p-3 border rounded-lg" value={passInput} onChange={(e) => setPassInput(e.target.value)} /></div>
+            <div><label className="text-xs font-bold text-stone-500 uppercase">Email</label><input type="email" required className="w-full p-3 border rounded-lg text-base" value={emailInput} onChange={(e) => setEmailInput(e.target.value)} /></div>
+            <div><label className="text-xs font-bold text-stone-500 uppercase">Mot de passe</label><input type="password" required className="w-full p-3 border rounded-lg text-base" value={passInput} onChange={(e) => setPassInput(e.target.value)} /></div>
             {errorMsg && <p className="text-red-500 text-sm">{errorMsg}</p>}
-            <button type="submit" className="w-full bg-blue-600 text-white p-4 rounded-xl font-bold hover:bg-blue-700">Se Connecter</button>
+            <button type="submit" className="w-full bg-blue-600 text-white p-4 rounded-xl font-bold hover:bg-blue-700 text-lg">Se Connecter</button>
          </form>
          <button onClick={onLogout} className="mt-4 text-sm w-full text-center text-stone-500 py-2">Retour Accueil</button>
       </div>
@@ -382,7 +429,6 @@ function AdminDashboard({ projects, user, onLogout, staffList, setStaffList }: {
         </div>
       </main>
       
-      {/* MODAL AJOUT PROJET */}
       {isAdding && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
           <div className="bg-white rounded-2xl p-6 w-full max-w-lg shadow-2xl max-h-[90vh] overflow-y-auto">
@@ -440,12 +486,13 @@ function AdminDashboard({ projects, user, onLogout, staffList, setStaffList }: {
       {showTeamModal && (
           <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
             <div className="bg-white rounded-2xl p-6 w-full max-w-md shadow-2xl">
-                <h3 className="text-lg font-bold mb-4">Gérer l'équipe</h3>
+                <h3 className="text-lg font-bold mb-4">Gérer l'équipe (Tags)</h3>
                 <div className="flex gap-2 mb-4">
                     <input className="flex-1 border rounded-lg p-3 text-base" placeholder="Nouveau membre..." value={newMember} onChange={e => setNewMember(e.target.value)} />
                     <button onClick={handleAddMember} className="bg-green-600 text-white px-4 rounded-lg"><Plus className="w-6 h-6"/></button>
                 </div>
                 <div className="space-y-2 max-h-60 overflow-y-auto">
+                    {staffList.length === 0 && <p className="text-stone-400 text-center italic">Aucun membre. Ajoutez-en un !</p>}
                     {staffList.map(member => (
                         <div key={member} className="flex justify-between items-center p-3 bg-stone-50 rounded-lg">
                             <span className="font-medium">{member}</span>
