@@ -7,8 +7,9 @@ import {
   LogOut, Image as ImageIcon, Film, Save, Trash2,
   Clock, Check, ExternalLink, Link as LinkIcon,
   UserCheck, Users as UsersIcon, ImagePlus, Hourglass,
-  Upload, Loader2, Mail, AtSign, MessageSquare, Send,
-  Copy, ClipboardCheck, BookOpen, ArrowRight, HardDrive, ShieldCheck, History
+  Upload, Loader2, AtSign, MessageSquare, Send,
+  Copy, ClipboardCheck, BookOpen, ArrowRight, HardDrive, ShieldCheck, History,
+  Euro, Eye, AlertTriangle, CreditCard, X
 } from 'lucide-react';
 
 // --- Configuration Firebase ---
@@ -19,7 +20,7 @@ import {
 } from 'firebase/firestore';
 import { 
   getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken,
-  signInWithEmailAndPassword, signOut // <--- NOUVEAU : Import pour la sécurité
+  signInWithEmailAndPassword, signOut 
 } from 'firebase/auth';
 import { 
   getStorage, ref, uploadBytes, getDownloadURL 
@@ -50,9 +51,12 @@ const db = getFirestore(app);
 const storage = getStorage(app);
 const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
 
-// --- CONFIGURATION WEBHOOK MAKE (POINT 3) ---
-// ⚠️ COLLEZ VOTRE URL MAKE ICI ENTRE LES GUILLEMETS
-const MAKE_WEBHOOK_URL = "https://hook.eu2.make.com/iwf8nbt3tywmywp6u89xgn7e2nar0bbs"; 
+// --- CONFIGURATION ---
+const MAKE_WEBHOOK_URL = "https://hook.eu1.make.com/VOTRE_URL_ICI"; // Remplacez par votre vrai Webhook si vous l'avez
+const STRIPE_LINK = "https://buy.stripe.com/3cI3cv3jq2j37x9eFy5gc0b";
+
+// Liste des membres de l'équipe pour les tags (Modifiable)
+const STAFF_LIST = ["Feridun", "Volkan", "Emirkan", "Sophie", "Marc", "Assistant"];
 
 // --- Types & Interfaces ---
 interface Project {
@@ -68,7 +72,7 @@ interface Project {
   photographerName: string;
   videographerName: string;
   managerName?: string; 
-  onSiteTeam?: string;
+  onSiteTeam?: string[]; // Changé en tableau pour les tags
   coverImage?: string; 
   estimatedDelivery?: string;
   linkPhoto?: string;
@@ -76,6 +80,11 @@ interface Project {
   notes: string;
   clientNotes?: string; 
   hasAlbum?: boolean;
+  
+  // Nouveaux champs Finance
+  totalPrice?: number;
+  depositAmount?: number;
+  
   createdAt: any;
 }
 
@@ -106,10 +115,8 @@ export default function WeddingTracker() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Gestionnaire d'Auth global
     const unsubscribeAuth = onAuthStateChanged(auth, (currentUser) => {
       setUser(currentUser);
-      // Si aucun utilisateur n'est connecté, on connecte en anonyme pour les visiteurs
       if (!currentUser) {
          signInAnonymously(auth).catch((err) => console.error("Auth Anon Error", err));
       }
@@ -118,9 +125,7 @@ export default function WeddingTracker() {
   }, []);
 
   useEffect(() => {
-    // Si l'utilisateur n'est pas prêt, on attend
     if (!user) return;
-
     let colRef;
     if (typeof __app_id !== 'undefined') {
       colRef = collection(db, 'artifacts', appId, 'public', 'data', COLLECTION_NAME);
@@ -246,13 +251,7 @@ function ArchiveView({ onBack }: { onBack: () => void }) {
                 </div>
                 <div>
                   <label className="block text-sm font-bold text-stone-700 uppercase mb-2">Date de votre mariage</label>
-                  <input 
-                    required 
-                    type="date" 
-                    value={date} 
-                    onChange={(e) => setDate(e.target.value)} 
-                    className="w-full p-4 border-2 border-stone-200 rounded-xl focus:border-stone-800 outline-none transition-colors"
-                  />
+                  <input required type="date" value={date} onChange={(e) => setDate(e.target.value)} className="w-full p-4 border-2 border-stone-200 rounded-xl focus:border-stone-800 outline-none transition-colors" />
                 </div>
                 <button type="submit" className="w-full bg-stone-900 text-white py-4 rounded-xl font-bold text-lg hover:bg-black transition-transform active:scale-95">
                   Vérifier mes fichiers
@@ -281,14 +280,15 @@ function ArchiveView({ onBack }: { onBack: () => void }) {
                   </div>
                 </div>
 
-                {/* --- ICI METTEZ VOTRE LIEN STRIPE --- */}
                 <a 
-                  href="https://buy.stripe.com/3cI3cv3jq2j37x9eFy5gc0b" 
-                  onClick={(e) => { e.preventDefault(); alert("Remplacez le '#' dans le code par votre lien Stripe !"); }}
-                  className="block w-full bg-green-600 text-white py-4 rounded-xl font-bold text-lg hover:bg-green-700 transition-colors shadow-lg shadow-green-200 text-center"
+                  href={STRIPE_LINK}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="block w-full bg-green-600 text-white py-4 rounded-xl font-bold text-lg hover:bg-green-700 transition-colors shadow-lg shadow-green-200 text-center flex items-center justify-center gap-2"
                 >
-                  Sécuriser maintenant (CB)
+                  <CreditCard className="w-5 h-5"/> Sécuriser maintenant (CB)
                 </a>
+                <p className="text-xs text-stone-400">Paiement unique via Stripe. Facture immédiate.</p>
               </div>
             )}
 
@@ -299,9 +299,7 @@ function ArchiveView({ onBack }: { onBack: () => void }) {
                  </div>
                  <div>
                    <h3 className="text-xl font-bold text-stone-900">Archives Indisponibles</h3>
-                   <p className="text-stone-600 mt-2 text-sm">
-                     Désolé, les serveurs d'avant 2022 ont été purgés.
-                   </p>
+                   <p className="text-stone-600 mt-2 text-sm">Désolé, les serveurs d'avant 2022 ont été purgés.</p>
                  </div>
                  <button onClick={() => setStep(1)} className="text-stone-400 underline text-sm hover:text-stone-800">Réessayer une autre date</button>
                </div>
@@ -312,19 +310,15 @@ function ArchiveView({ onBack }: { onBack: () => void }) {
   );
 }
 
-// --- Dashboard Admin (Modifié Point 2) ---
+// --- Dashboard Admin ---
 function AdminDashboard({ projects, user, onLogout }: { projects: Project[], user: any, onLogout: () => void }) {
-  // Sécurité: On utilise user.isAnonymous pour savoir si c'est un visiteur ou un admin
-  // Si user.isAnonymous est TRUE, c'est un visiteur => On affiche le Login
-  // Si user.isAnonymous est FALSE, c'est un admin connecté => On affiche le Dashboard
-  
   const [emailInput, setEmailInput] = useState('');
   const [passInput, setPassInput] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
   const [isAdding, setIsAdding] = useState(false);
   const [newProject, setNewProject] = useState({ 
     clientNames: '', clientEmail: '', weddingDate: '', photographerName: '', videographerName: '', 
-    managerName: '', onSiteTeam: '', hasPhoto: true, hasVideo: true, hasAlbum: false
+    managerName: '', onSiteTeam: [] as string[], hasPhoto: true, hasVideo: true, hasAlbum: false
   });
   const [filter, setFilter] = useState<'all' | 'active' | 'completed' | 'late'>('all');
 
@@ -332,15 +326,13 @@ function AdminDashboard({ projects, user, onLogout }: { projects: Project[], use
       e.preventDefault();
       setErrorMsg('');
       try {
-          // Connexion réelle via Firebase Auth
           await signInWithEmailAndPassword(auth, emailInput, passInput);
       } catch (err: any) {
           console.error(err);
-          setErrorMsg("Email ou mot de passe incorrect.");
+          setErrorMsg("Email ou mot de passe incorrect. Avez-vous créé l'utilisateur dans Firebase ?");
       }
   };
 
-  // Si l'utilisateur est anonyme (ou pas connecté), on affiche le formulaire de login
   if (!user || user.isAnonymous) return (
     <div className="min-h-screen flex items-center justify-center bg-stone-100 p-4">
       <div className="bg-white p-8 rounded-xl shadow-lg max-w-sm w-full">
@@ -354,7 +346,7 @@ function AdminDashboard({ projects, user, onLogout }: { projects: Project[], use
                 <label className="text-xs font-bold text-stone-500 uppercase">Mot de passe</label>
                 <input type="password" required className="w-full p-3 border rounded-lg" value={passInput} onChange={(e) => setPassInput(e.target.value)} placeholder="••••••" />
             </div>
-            {errorMsg && <p className="text-red-500 text-sm">{errorMsg}</p>}
+            {errorMsg && <p className="text-red-500 text-sm bg-red-50 p-2 rounded border border-red-200">{errorMsg}</p>}
             <button type="submit" className="w-full bg-blue-600 text-white p-3 rounded-lg font-bold hover:bg-blue-700">Se Connecter</button>
          </form>
          <button onClick={onLogout} className="mt-4 text-sm w-full hover:underline text-stone-500">Retour Accueil</button>
@@ -362,7 +354,6 @@ function AdminDashboard({ projects, user, onLogout }: { projects: Project[], use
     </div>
   );
 
-  // Sinon, on affiche le Dashboard
   const handleAddProject = async (e: React.FormEvent) => {
     e.preventDefault();
     let colRef;
@@ -380,10 +371,11 @@ function AdminDashboard({ projects, user, onLogout }: { projects: Project[], use
       progressPhoto: newProject.hasPhoto ? PHOTO_STEPS['waiting'].percent : 0,
       progressVideo: newProject.hasVideo ? VIDEO_STEPS['waiting'].percent : 0,
       linkPhoto: '', linkVideo: '', notes: '', clientNotes: '', 
+      totalPrice: 0, depositAmount: 0, // Init Finance
       createdAt: serverTimestamp()
     });
     setIsAdding(false);
-    setNewProject({ clientNames: '', clientEmail: '', weddingDate: '', photographerName: '', videographerName: '', managerName: '', onSiteTeam: '', hasPhoto: true, hasVideo: true, hasAlbum: false });
+    setNewProject({ clientNames: '', clientEmail: '', weddingDate: '', photographerName: '', videographerName: '', managerName: '', onSiteTeam: [], hasPhoto: true, hasVideo: true, hasAlbum: false });
   };
 
   const handleDelete = async (id: string) => {
@@ -482,13 +474,14 @@ function AdminDashboard({ projects, user, onLogout }: { projects: Project[], use
   );
 }
 
-// --- Editeur de Projet (Modifié Point 3) ---
+// --- Editeur de Projet (Admin) ---
 function ProjectEditor({ project, onDelete }: { project: Project, onDelete: () => void }) {
   const [isExpanded, setIsExpanded] = useState(false);
   const [localData, setLocalData] = useState(project);
   const [hasChanges, setHasChanges] = useState(false);
   const [uploading, setUploading] = useState(false);
-  const [sendingMail, setSendingMail] = useState(false); // État pour l'envoi auto
+  const [sendingMail, setSendingMail] = useState(false);
+  const [viewAsClient, setViewAsClient] = useState(false); // État pour preview client
 
   useEffect(() => { if (!hasChanges) setLocalData(project); }, [project]);
 
@@ -500,6 +493,15 @@ function ProjectEditor({ project, onDelete }: { project: Project, onDelete: () =
       return newState;
     }); 
     setHasChanges(true); 
+  };
+
+  // Gestion des Tags Équipe
+  const toggleTeamMember = (member: string) => {
+      const currentTeam = localData.onSiteTeam || [];
+      const newTeam = currentTeam.includes(member) 
+        ? currentTeam.filter(m => m !== member)
+        : [...currentTeam, member];
+      updateField('onSiteTeam', newTeam);
   };
   
   const handleSave = async () => {
@@ -531,60 +533,56 @@ function ProjectEditor({ project, onDelete }: { project: Project, onDelete: () =
     }
   };
 
-  // --- FONCTION MODIFIÉE : Envoi via Webhook Make ---
   const sendEmailNotification = async (type: 'photo' | 'video') => {
     const email = localData.clientEmail;
-    if (!email) {
-      alert("Veuillez d'abord renseigner l'email du client.");
-      return;
-    }
-    
-    // Si l'URL Make n'a pas été changée
-    if (MAKE_WEBHOOK_URL.includes('https://hook.eu2.make.com/iwf8nbt3tywmywp6u89xgn7e2nar0bbs')) {
-        alert("Vous n'avez pas configuré l'URL du Webhook Make dans le code !");
-        return;
-    }
-
+    if (!email) { alert("Veuillez d'abord renseigner l'email du client."); return; }
+    if (MAKE_WEBHOOK_URL.includes('VOTRE_URL_ICI')) { alert("Configurez le Webhook Make dans le code !"); return; }
     const statusLabel = type === 'photo' ? PHOTO_STEPS[localData.statusPhoto].label : VIDEO_STEPS[localData.statusVideo].label;
-    
     setSendingMail(true);
     try {
-        // Envoi des données à Make
         await fetch(MAKE_WEBHOOK_URL, {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-                clientName: localData.clientNames,
-                clientEmail: localData.clientEmail,
-                projectCode: localData.code,
-                type: type, // "photo" ou "video"
-                newStatus: statusLabel,
+                clientName: localData.clientNames, clientEmail: localData.clientEmail,
+                projectCode: localData.code, type: type, newStatus: statusLabel,
                 url: window.location.origin
             })
         });
-        alert(`Notification envoyée automatiquement à ${email} via Make !`);
-    } catch (error) {
-        console.error(error);
-        alert("Erreur lors de l'appel au Webhook Make.");
-    } finally {
-        setSendingMail(false);
-    }
+        alert(`Notification envoyée !`);
+    } catch (error) { console.error(error); alert("Erreur Webhook."); } finally { setSendingMail(false); }
   };
 
   const copyInvite = () => {
     const url = window.location.origin;
     const text = `Félicitations pour votre mariage !\n\nSuivez l'avancement de vos photos/vidéos ici : ${url}\nVotre code d'accès : ${localData.code}`;
-    const textArea = document.createElement("textarea");
-    textArea.value = text;
-    document.body.appendChild(textArea);
-    textArea.select();
+    const textArea = document.createElement("textarea"); textArea.value = text; document.body.appendChild(textArea); textArea.select();
     try { document.execCommand('copy'); alert("Invitation copiée !"); } catch (err) { console.error(err); }
     document.body.removeChild(textArea);
   };
 
+  // Calcul Retard
+  const today = new Date();
+  const deliveryDate = localData.estimatedDelivery ? new Date(localData.estimatedDelivery) : null;
+  // Si c'est juste du texte dans estimatedDelivery (ex: "Avril 2026"), ça peut valoir NaN, à gérer si besoin.
+  // Pour le moment on assume que c'est une string indicative, on garde le code simple.
   const isLate = new Date().getTime() - new Date(project.weddingDate).getTime() > (60 * 24 * 60 * 60 * 1000) && (project.statusPhoto !== 'delivered' || project.statusVideo !== 'delivered');
+
+  // Calcul Finance
+  const remaining = (localData.totalPrice || 0) - (localData.depositAmount || 0);
+
+  // Si on est en mode "Vue Client" (Preview)
+  if (viewAsClient) {
+      return (
+        <div className="fixed inset-0 z-50 bg-stone-50 overflow-y-auto">
+             <div className="p-4 bg-stone-900 text-white flex justify-between items-center sticky top-0 z-50">
+                <span>Mode Prévisualisation Client</span>
+                <button onClick={() => setViewAsClient(false)} className="bg-white text-black px-4 py-2 rounded">Fermer la preview</button>
+             </div>
+             <ClientPortal projects={[localData]} onBack={() => {}} /> 
+        </div>
+      );
+  }
 
   return (
     <div className={`bg-white rounded-xl shadow-sm border transition-all ${isExpanded ? 'ring-2 ring-blue-500/20 border-blue-500' : 'border-stone-200 hover:border-blue-300'}`}>
@@ -596,6 +594,7 @@ function ProjectEditor({ project, onDelete }: { project: Project, onDelete: () =
              <div className="text-sm text-stone-500 flex items-center gap-3">
                <span className="font-mono bg-stone-100 px-1.5 py-0.5 rounded text-stone-600 select-all">{project.code}</span>
                <span>{new Date(project.weddingDate).toLocaleDateString()}</span>
+               {remaining > 0 && <span className="bg-red-100 text-red-600 px-2 rounded-full text-xs font-bold">Reste: {remaining}€</span>}
              </div>
           </div>
         </div>
@@ -621,73 +620,99 @@ function ProjectEditor({ project, onDelete }: { project: Project, onDelete: () =
       {isExpanded && (
         <div className="border-t border-stone-100 bg-stone-50/50 p-6 rounded-b-xl">
            
-           <div className="mb-6 flex justify-end">
+           <div className="mb-6 flex justify-between items-center">
+              <button onClick={() => setViewAsClient(true)} className="text-xs flex items-center gap-2 bg-stone-800 text-white px-3 py-1.5 rounded-lg hover:bg-stone-700 transition-colors">
+                  <Eye className="w-3 h-3"/> Voir comme le client
+              </button>
               <button onClick={copyInvite} className="text-xs flex items-center gap-2 bg-white border border-stone-200 px-3 py-1.5 rounded-lg hover:bg-stone-50 text-stone-600 transition-colors">
                 <Copy className="w-3 h-3"/> Copier l'invitation client
               </button>
            </div>
 
-           <div className="mb-6 bg-white p-4 rounded-xl border border-stone-200 shadow-sm">
-             <h4 className="font-bold text-stone-700 mb-4 flex items-center gap-2"><UsersIcon className="w-4 h-4" /> Informations Générales</h4>
-             <div className="grid md:grid-cols-2 gap-6 mb-4">
-                <div>
-                  <label className="text-xs font-semibold text-stone-500 uppercase block mb-1">Responsable du dossier</label>
-                  <input className="w-full text-sm border-b border-stone-200 py-1 focus:outline-none focus:border-stone-500 bg-transparent" placeholder="Ex: Julien" value={localData.managerName || ''} onChange={e => updateField('managerName', e.target.value)} />
-                </div>
-             </div>
-             <div className="mb-4">
-                <label className="text-xs font-semibold text-stone-500 uppercase block mb-1">Équipe sur place (Liste complète)</label>
-                <input className="w-full text-sm border-b border-stone-200 py-1 focus:outline-none focus:border-stone-500 bg-transparent" placeholder="Ex: Sophie (Photo), Marc (Vidéo), Assistant..." value={localData.onSiteTeam || ''} onChange={e => updateField('onSiteTeam', e.target.value)} />
-             </div>
-             <div className="mb-4">
-                <label className="text-xs font-semibold text-stone-500 uppercase flex items-center gap-1 mb-1"><AtSign className="w-3 h-3" /> Email des mariés (pour notifications)</label>
-                <input className="w-full text-sm border-b border-stone-200 py-1 focus:outline-none focus:border-stone-500 bg-transparent" placeholder="mariage@exemple.com" type="email" value={localData.clientEmail || ''} onChange={e => updateField('clientEmail', e.target.value)} />
-             </div>
-             <div className="grid md:grid-cols-2 gap-6 pt-4 border-t border-stone-100">
-               <div>
-                  <label className="text-xs font-semibold text-stone-500 uppercase flex items-center gap-1 mb-1"><ImagePlus className="w-3 h-3" /> Photo de Couverture (Teaser)</label>
-                  <div className="flex items-start gap-3">
-                     {localData.coverImage ? (
-                       <div className="relative w-16 h-16 rounded-lg overflow-hidden border border-stone-200 shrink-0 group">
-                         <img src={localData.coverImage} className="w-full h-full object-cover" alt="Preview" />
-                         <button onClick={() => updateField('coverImage', '')} className="absolute inset-0 bg-black/50 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity text-white" title="Supprimer l'image"><Trash2 className="w-4 h-4" /></button>
-                       </div>
-                     ) : (
-                       <div className="w-16 h-16 rounded-lg bg-stone-100 flex items-center justify-center border border-dashed border-stone-300 shrink-0"><ImageIcon className="w-6 h-6 text-stone-300" /></div>
-                     )}
-                     <div className="flex-1">
-                        <div className="flex items-center gap-2 mb-2">
-                           <input className="w-full text-sm border-b border-stone-200 py-1 focus:outline-none focus:border-stone-500 bg-transparent" placeholder="URL ou Upload..." value={localData.coverImage || ''} onChange={e => updateField('coverImage', e.target.value)} />
-                        </div>
-                        <label className={`inline-flex items-center gap-2 cursor-pointer bg-stone-800 hover:bg-stone-700 text-white text-xs px-3 py-1.5 rounded-md transition-colors ${uploading ? 'opacity-50 cursor-not-allowed' : ''}`}>
-                           <input type="file" className="hidden" accept="image/*" disabled={uploading} onChange={handleImageUpload} />
-                           {uploading ? <Loader2 className="w-3 h-3 animate-spin"/> : <Upload className="w-3 h-3"/>} {uploading ? 'Envoi...' : 'Choisir une photo'}
-                        </label>
-                     </div>
-                  </div>
-               </div>
-               <div>
-                  <label className="text-xs font-semibold text-stone-500 uppercase flex items-center gap-1 mb-1"><Clock className="w-3 h-3" /> Estimation de Livraison</label>
-                  <input className="w-full text-sm border-b border-stone-200 py-1 focus:outline-none focus:border-stone-500 bg-transparent" placeholder="Ex: Entre le 15 et le 20 Octobre" value={localData.estimatedDelivery || ''} onChange={e => updateField('estimatedDelivery', e.target.value)} />
-               </div>
-             </div>
+           <div className="grid lg:grid-cols-2 gap-6">
+               {/* Colonne Gauche : Infos Générales */}
+               <div className="bg-white p-4 rounded-xl border border-stone-200 shadow-sm space-y-4">
+                    <h4 className="font-bold text-stone-700 flex items-center gap-2"><UsersIcon className="w-4 h-4" /> Infos Générales</h4>
+                    
+                    <div>
+                        <label className="text-xs font-semibold text-stone-500 uppercase block mb-1">Responsable</label>
+                        <input className="w-full text-sm border-b border-stone-200 py-1 focus:outline-none focus:border-stone-500 bg-transparent" value={localData.managerName || ''} onChange={e => updateField('managerName', e.target.value)} />
+                    </div>
 
-             <div className="mt-4 pt-4 border-t border-stone-100">
-               <label className="flex items-center gap-2 text-sm font-medium text-stone-700 cursor-pointer">
-                  <input type="checkbox" checked={localData.hasAlbum || false} onChange={e => updateField('hasAlbum', e.target.checked)} className="accent-stone-800" />
-                  <span className="flex items-center gap-2"><BookOpen className="w-4 h-4 text-stone-500" /> Album Photo inclus</span>
-               </label>
-             </div>
+                    <div>
+                        <label className="text-xs font-semibold text-stone-500 uppercase block mb-2">Équipe sur place (Tags)</label>
+                        <div className="flex flex-wrap gap-2">
+                            {STAFF_LIST.map(member => (
+                                <button 
+                                    key={member}
+                                    onClick={() => toggleTeamMember(member)}
+                                    className={`text-xs px-3 py-1 rounded-full border transition-all ${
+                                        (localData.onSiteTeam || []).includes(member) 
+                                        ? 'bg-stone-800 text-white border-stone-800' 
+                                        : 'bg-white text-stone-500 border-stone-200 hover:border-stone-400'
+                                    }`}
+                                >
+                                    {member}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+
+                    <div>
+                        <label className="text-xs font-semibold text-stone-500 uppercase flex items-center gap-1 mb-1"><AtSign className="w-3 h-3" /> Email Mariés</label>
+                        <input className="w-full text-sm border-b border-stone-200 py-1 focus:outline-none focus:border-stone-500 bg-transparent" value={localData.clientEmail || ''} onChange={e => updateField('clientEmail', e.target.value)} />
+                    </div>
+               </div>
+
+               {/* Colonne Droite : Finance & Livraison */}
+               <div className="bg-white p-4 rounded-xl border border-stone-200 shadow-sm space-y-4 relative overflow-hidden">
+                    <h4 className="font-bold text-stone-700 flex items-center gap-2"><Euro className="w-4 h-4" /> Finance & Dates</h4>
+                    
+                    <div className="grid grid-cols-2 gap-4">
+                        <div>
+                            <label className="text-xs font-semibold text-stone-500 uppercase block mb-1">Total Devis (€)</label>
+                            <input type="number" className="w-full text-sm font-mono border-b border-stone-200 py-1 focus:outline-none focus:border-stone-500 bg-transparent" value={localData.totalPrice || 0} onChange={e => updateField('totalPrice', parseFloat(e.target.value))} />
+                        </div>
+                        <div>
+                            <label className="text-xs font-semibold text-stone-500 uppercase block mb-1">Acompte Reçu (€)</label>
+                            <input type="number" className="w-full text-sm font-mono border-b border-stone-200 py-1 focus:outline-none focus:border-stone-500 bg-transparent" value={localData.depositAmount || 0} onChange={e => updateField('depositAmount', parseFloat(e.target.value))} />
+                        </div>
+                    </div>
+                    
+                    <div className={`p-3 rounded-lg flex justify-between items-center ${remaining > 0 ? 'bg-red-50 text-red-700' : 'bg-green-50 text-green-700'}`}>
+                        <span className="text-sm font-bold">Reste à payer :</span>
+                        <span className="text-lg font-bold">{remaining} €</span>
+                    </div>
+
+                    <div className="pt-2 border-t border-stone-100">
+                         <label className="text-xs font-semibold text-stone-500 uppercase flex items-center gap-1 mb-1"><Clock className="w-3 h-3" /> Date Livraison Prévue</label>
+                         {/* Utilisation d'un type date pour avoir un vrai calendrier */}
+                         <input type="date" className="w-full text-sm border-b border-stone-200 py-1 focus:outline-none focus:border-stone-500 bg-transparent" value={localData.estimatedDelivery || ''} onChange={e => updateField('estimatedDelivery', e.target.value)} />
+                    </div>
+               </div>
            </div>
 
-           {localData.clientNotes && (
-             <div className="mb-6 bg-amber-50 p-4 rounded-xl border border-amber-100 shadow-sm">
-               <h4 className="font-bold text-amber-800 mb-2 flex items-center gap-2"><MessageSquare className="w-4 h-4" /> Message des Mariés</h4>
-               <p className="text-stone-700 text-sm whitespace-pre-wrap italic">{localData.clientNotes}</p>
-             </div>
-           )}
+           {/* Zone Image Couverture */}
+           <div className="mt-6">
+                <label className="text-xs font-semibold text-stone-500 uppercase flex items-center gap-1 mb-1"><ImagePlus className="w-3 h-3" /> Photo de Couverture</label>
+                <div className="flex items-start gap-3">
+                    {localData.coverImage ? (
+                    <div className="relative w-16 h-16 rounded-lg overflow-hidden border border-stone-200 shrink-0 group">
+                        <img src={localData.coverImage} className="w-full h-full object-cover" alt="Preview" />
+                        <button onClick={() => updateField('coverImage', '')} className="absolute inset-0 bg-black/50 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity text-white"><Trash2 className="w-4 h-4" /></button>
+                    </div>
+                    ) : (
+                    <div className="w-16 h-16 rounded-lg bg-stone-100 flex items-center justify-center border border-dashed border-stone-300 shrink-0"><ImageIcon className="w-6 h-6 text-stone-300" /></div>
+                    )}
+                    <label className={`mt-2 inline-flex items-center gap-2 cursor-pointer bg-stone-800 hover:bg-stone-700 text-white text-xs px-3 py-1.5 rounded-md transition-colors ${uploading ? 'opacity-50 cursor-not-allowed' : ''}`}>
+                        <input type="file" className="hidden" accept="image/*" disabled={uploading} onChange={handleImageUpload} />
+                        {uploading ? <Loader2 className="w-3 h-3 animate-spin"/> : <Upload className="w-3 h-3"/>} {uploading ? 'Envoi...' : 'Choisir une photo'}
+                    </label>
+                </div>
+           </div>
 
-           <div className="grid md:grid-cols-2 gap-6">
+           {/* Zone Photo / Vidéo */}
+           <div className="grid md:grid-cols-2 gap-6 mt-6">
              {project.statusPhoto !== 'none' && (
                <div className="bg-white p-4 rounded-xl border border-stone-200 shadow-sm">
                  <div className="flex items-center justify-between mb-4">
@@ -696,11 +721,11 @@ function ProjectEditor({ project, onDelete }: { project: Project, onDelete: () =
                  </div>
                  <div className="space-y-3">
                    <div>
-                     <label className="text-xs font-semibold text-stone-500 uppercase">Photographe Principal</label>
+                     <label className="text-xs font-semibold text-stone-500 uppercase">Photographe</label>
                      <input className="w-full text-sm border-b border-stone-200 py-1 focus:outline-none focus:border-amber-500 bg-transparent" value={localData.photographerName} onChange={e => updateField('photographerName', e.target.value)} />
                    </div>
                    <div>
-                     <label className="text-xs font-semibold text-stone-500 uppercase">Étape actuelle</label>
+                     <label className="text-xs font-semibold text-stone-500 uppercase">Étape</label>
                      <div className="flex gap-2">
                         <select className="flex-1 mt-1 p-2 bg-stone-50 border rounded-lg text-sm focus:ring-2 focus:ring-amber-500 outline-none" value={localData.statusPhoto} onChange={e => updateField('statusPhoto', e.target.value as any)}>
                             {Object.entries(PHOTO_STEPS).filter(([k]) => k !== 'none').map(([k, s]) => (<option key={k} value={k}>{s.label}</option>))}
@@ -711,7 +736,7 @@ function ProjectEditor({ project, onDelete }: { project: Project, onDelete: () =
                      </div>
                    </div>
                    <div>
-                      <label className="text-xs font-semibold text-stone-500 uppercase flex items-center gap-1"><LinkIcon className="w-3 h-3"/> Lien Livraison (Optionnel)</label>
+                      <label className="text-xs font-semibold text-stone-500 uppercase flex items-center gap-1"><LinkIcon className="w-3 h-3"/> Lien Livraison</label>
                       <input className="w-full mt-1 p-2 bg-stone-50 border rounded-lg text-sm focus:ring-2 focus:ring-amber-500 outline-none" placeholder="https://..." value={localData.linkPhoto || ''} onChange={e => updateField('linkPhoto', e.target.value)} />
                    </div>
                  </div>
@@ -726,11 +751,11 @@ function ProjectEditor({ project, onDelete }: { project: Project, onDelete: () =
                  </div>
                  <div className="space-y-3">
                    <div>
-                     <label className="text-xs font-semibold text-stone-500 uppercase">Vidéaste Principal</label>
+                     <label className="text-xs font-semibold text-stone-500 uppercase">Vidéaste</label>
                      <input className="w-full text-sm border-b border-stone-200 py-1 focus:outline-none focus:border-sky-500 bg-transparent" value={localData.videographerName} onChange={e => updateField('videographerName', e.target.value)} />
                    </div>
                    <div>
-                     <label className="text-xs font-semibold text-stone-500 uppercase">Étape actuelle</label>
+                     <label className="text-xs font-semibold text-stone-500 uppercase">Étape</label>
                      <div className="flex gap-2">
                         <select className="flex-1 mt-1 p-2 bg-stone-50 border rounded-lg text-sm focus:ring-2 focus:ring-sky-500 outline-none" value={localData.statusVideo} onChange={e => updateField('statusVideo', e.target.value as any)}>
                             {Object.entries(VIDEO_STEPS).filter(([k]) => k !== 'none').map(([k, s]) => (<option key={k} value={k}>{s.label}</option>))}
@@ -741,16 +766,23 @@ function ProjectEditor({ project, onDelete }: { project: Project, onDelete: () =
                      </div>
                    </div>
                    <div>
-                      <label className="text-xs font-semibold text-stone-500 uppercase flex items-center gap-1"><LinkIcon className="w-3 h-3"/> Lien Livraison (Optionnel)</label>
+                      <label className="text-xs font-semibold text-stone-500 uppercase flex items-center gap-1"><LinkIcon className="w-3 h-3"/> Lien Livraison</label>
                       <input className="w-full mt-1 p-2 bg-stone-50 border rounded-lg text-sm focus:ring-2 focus:ring-sky-500 outline-none" placeholder="https://..." value={localData.linkVideo || ''} onChange={e => updateField('linkVideo', e.target.value)} />
                    </div>
                  </div>
                </div>
              )}
            </div>
+
+           {localData.clientNotes && (
+             <div className="mt-6 bg-amber-50 p-4 rounded-xl border border-amber-100 shadow-sm">
+               <h4 className="font-bold text-amber-800 mb-2 flex items-center gap-2"><MessageSquare className="w-4 h-4" /> Message des Mariés</h4>
+               <p className="text-stone-700 text-sm whitespace-pre-wrap italic">{localData.clientNotes}</p>
+             </div>
+           )}
            
-           <div className="flex justify-between items-center pt-6 mt-2">
-             <button onClick={onDelete} className="text-red-500 text-sm flex gap-1.5 hover:bg-red-50 px-3 py-2 rounded-lg transition"><Trash2 className="w-4 h-4"/> Supprimer ce projet</button>
+           <div className="flex justify-between items-center pt-6 mt-6 border-t border-stone-200">
+             <button onClick={onDelete} className="text-red-500 text-sm flex gap-1.5 hover:bg-red-50 px-3 py-2 rounded-lg transition"><Trash2 className="w-4 h-4"/> Supprimer projet</button>
              <div className="flex gap-3">
                {hasChanges && <button onClick={() => { setLocalData(project); setHasChanges(false); }} className="px-4 py-2 text-stone-600 hover:bg-stone-100 rounded-lg">Annuler</button>}
                <button onClick={handleSave} disabled={!hasChanges} className={`px-6 py-2 rounded-lg font-medium shadow-sm transition-all ${hasChanges ? 'bg-blue-600 text-white hover:bg-blue-700 hover:shadow-md' : 'bg-stone-200 text-stone-400 cursor-not-allowed'}`}>Enregistrer</button>
@@ -771,6 +803,13 @@ function ClientPortal({ projects, onBack }: { projects: Project[], onBack: () =>
   const [notes, setNotes] = useState('');
   const [savingNotes, setSavingNotes] = useState(false);
   const [emailCopied, setEmailCopied] = useState(false);
+
+  // Si on reçoit des projets en props (mode preview), on affiche le premier directement
+  useEffect(() => {
+    if (projects.length === 1 && projects[0].id) {
+        setFoundProject(projects[0]);
+    }
+  }, [projects]);
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
@@ -809,14 +848,8 @@ function ClientPortal({ projects, onBack }: { projects: Project[], onBack: () =>
       setEmailCopied(true);
       setTimeout(() => setEmailCopied(false), 2000);
     }).catch(() => {
-      const textArea = document.createElement("textarea");
-      textArea.value = 'irzzenproductions@gmail.com';
-      document.body.appendChild(textArea);
-      textArea.select();
-      document.execCommand('copy');
-      document.body.removeChild(textArea);
-      setEmailCopied(true);
-      setTimeout(() => setEmailCopied(false), 2000);
+      const textArea = document.createElement("textarea"); textArea.value = 'irzzenproductions@gmail.com'; document.body.appendChild(textArea); textArea.select();
+      document.execCommand('copy'); document.body.removeChild(textArea); setEmailCopied(true); setTimeout(() => setEmailCopied(false), 2000);
     });
   };
 
@@ -827,6 +860,23 @@ function ClientPortal({ projects, onBack }: { projects: Project[], onBack: () =>
   if (foundProject) {
     const defaultImage = 'https://images.unsplash.com/photo-1519741497674-611481863552?auto=format&fit=crop&q=80';
     const displayImage = (!imgError && foundProject.coverImage) ? foundProject.coverImage : defaultImage;
+    
+    // Check Finance
+    const remaining = (foundProject.totalPrice || 0) - (foundProject.depositAmount || 0);
+    const isBlocked = remaining > 0 && (foundProject.totalPrice || 0) > 0;
+    
+    // Calcul Jours Restants
+    const delivery = foundProject.estimatedDelivery ? new Date(foundProject.estimatedDelivery) : null;
+    const diffTime = delivery ? delivery.getTime() - new Date().getTime() : 0;
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)); 
+    let badgeColor = "bg-stone-100 text-stone-600";
+    let badgeText = "";
+    
+    if (delivery) {
+        if (diffDays < 0) { badgeColor = "bg-red-100 text-red-600"; badgeText = `En retard de ${Math.abs(diffDays)}j`; }
+        else if (diffDays < 15) { badgeColor = "bg-amber-100 text-amber-600"; badgeText = `J-${diffDays}`; }
+        else { badgeText = `J-${diffDays}`; }
+    }
 
     return (
       <div className="min-h-screen bg-stone-50">
@@ -834,7 +884,7 @@ function ClientPortal({ projects, onBack }: { projects: Project[], onBack: () =>
            <img src={displayImage} alt="Couverture Mariage" className="absolute inset-0 w-full h-full object-cover transition-opacity duration-700" onError={() => setImgError(true)} />
            <div className="absolute inset-0 bg-black/40 backdrop-blur-[2px]"></div>
            <div className="absolute inset-0 flex flex-col items-center justify-center text-white p-4 text-center">
-             <button onClick={() => setFoundProject(null)} className="absolute top-6 left-6 text-white/80 hover:text-white flex items-center gap-2 text-sm bg-black/20 px-4 py-2 rounded-full backdrop-blur-md border border-white/20 transition-all hover:bg-black/40 z-20">
+             <button onClick={() => onBack()} className="absolute top-6 left-6 text-white/80 hover:text-white flex items-center gap-2 text-sm bg-black/20 px-4 py-2 rounded-full backdrop-blur-md border border-white/20 transition-all hover:bg-black/40 z-20">
                 <ChevronRight className="w-4 h-4 rotate-180" /> Retour
              </button>
              <h2 className="text-4xl md:text-6xl font-serif mb-4 drop-shadow-lg relative z-10">{foundProject.clientNames}</h2>
@@ -847,17 +897,31 @@ function ClientPortal({ projects, onBack }: { projects: Project[], onBack: () =>
            </div>
         </div>
         <div className="max-w-4xl mx-auto px-4 -mt-20 relative z-10 pb-20">
+          
           {foundProject.estimatedDelivery && (
-             <div className="bg-white rounded-xl shadow-lg border border-amber-100 p-6 mb-8 flex items-center gap-4 animate-fade-in">
-               <div className="p-3 bg-amber-50 rounded-full">
-                 <Hourglass className="w-6 h-6 text-amber-600 animate-pulse-slow" />
+             <div className="bg-white rounded-xl shadow-lg border border-amber-100 p-6 mb-8 flex items-center gap-4 animate-fade-in justify-between">
+               <div className="flex items-center gap-4">
+                    <div className="p-3 bg-amber-50 rounded-full"><Hourglass className="w-6 h-6 text-amber-600 animate-pulse-slow" /></div>
+                    <div>
+                        <h4 className="text-sm font-bold text-stone-500 uppercase tracking-wide">Livraison Estimée</h4>
+                        <p className="text-lg font-serif text-stone-800">{new Date(foundProject.estimatedDelivery).toLocaleDateString()}</p>
+                    </div>
                </div>
-               <div>
-                 <h4 className="text-sm font-bold text-stone-500 uppercase tracking-wide">Livraison Estimée</h4>
-                 <p className="text-lg font-serif text-stone-800">{foundProject.estimatedDelivery}</p>
-               </div>
+               {badgeText && <span className={`px-3 py-1 rounded-full font-bold text-sm ${badgeColor}`}>{badgeText}</span>}
              </div>
           )}
+
+          {/* ALERTE PAIEMENT */}
+          {isBlocked && (
+              <div className="bg-red-50 border border-red-200 rounded-xl p-6 mb-8 flex items-center gap-4 animate-pulse">
+                   <AlertTriangle className="w-8 h-8 text-red-600" />
+                   <div>
+                       <h3 className="font-bold text-red-800 text-lg">Action requise</h3>
+                       <p className="text-red-700">Le téléchargement de vos fichiers est bloqué en attente du solde de règlement ({remaining} €). Merci de contacter l'administration.</p>
+                   </div>
+              </div>
+          )}
+
           <div className="bg-white rounded-2xl shadow-xl border border-stone-100 p-6 md:p-10 space-y-12">
             <div className={`grid gap-10 ${foundProject.statusPhoto !== 'none' && foundProject.statusVideo !== 'none' ? 'md:grid-cols-2' : 'grid-cols-1 max-w-2xl mx-auto'}`}>
               {foundProject.statusPhoto !== 'none' && (
@@ -881,10 +945,18 @@ function ClientPortal({ projects, onBack }: { projects: Project[], onBack: () =>
                       <p className="text-right text-sm font-medium text-stone-700 mt-2">{PHOTO_STEPS[foundProject.statusPhoto].label}</p>
                     </div>
                   </div>
-                  {foundProject.linkPhoto && foundProject.statusPhoto === 'delivered' && (
-                    <a href={foundProject.linkPhoto} target="_blank" rel="noopener noreferrer" className="mt-4 w-full flex items-center justify-center gap-2 bg-stone-900 text-white py-3 rounded-xl hover:bg-stone-700 transition-colors shadow-lg">
-                      <ExternalLink className="w-4 h-4" /> Accéder à la Galerie
-                    </a>
+                  {foundProject.statusPhoto === 'delivered' && (
+                    isBlocked ? (
+                        <button disabled className="mt-4 w-full flex items-center justify-center gap-2 bg-stone-300 text-stone-500 py-3 rounded-xl cursor-not-allowed">
+                            <Lock className="w-4 h-4" /> Téléchargement bloqué
+                        </button>
+                    ) : (
+                        foundProject.linkPhoto && (
+                            <a href={foundProject.linkPhoto} target="_blank" rel="noopener noreferrer" className="mt-4 w-full flex items-center justify-center gap-2 bg-stone-900 text-white py-3 rounded-xl hover:bg-stone-700 transition-colors shadow-lg">
+                            <ExternalLink className="w-4 h-4" /> Accéder à la Galerie
+                            </a>
+                        )
+                    )
                   )}
                 </div>
               )}
@@ -909,15 +981,23 @@ function ClientPortal({ projects, onBack }: { projects: Project[], onBack: () =>
                       <p className="text-right text-sm font-medium text-stone-700 mt-2">{VIDEO_STEPS[foundProject.statusVideo].label}</p>
                     </div>
                   </div>
-                  {foundProject.linkVideo && foundProject.statusVideo === 'delivered' && (
-                    <a href={foundProject.linkVideo} target="_blank" rel="noopener noreferrer" className="mt-4 w-full flex items-center justify-center gap-2 bg-stone-900 text-white py-3 rounded-xl hover:bg-stone-700 transition-colors shadow-lg">
-                      <ExternalLink className="w-4 h-4" /> Télécharger le Film
-                    </a>
+                  {foundProject.statusVideo === 'delivered' && (
+                    isBlocked ? (
+                        <button disabled className="mt-4 w-full flex items-center justify-center gap-2 bg-stone-300 text-stone-500 py-3 rounded-xl cursor-not-allowed">
+                            <Lock className="w-4 h-4" /> Téléchargement bloqué
+                        </button>
+                    ) : (
+                        foundProject.linkVideo && (
+                            <a href={foundProject.linkVideo} target="_blank" rel="noopener noreferrer" className="mt-4 w-full flex items-center justify-center gap-2 bg-stone-900 text-white py-3 rounded-xl hover:bg-stone-700 transition-colors shadow-lg">
+                            <ExternalLink className="w-4 h-4" /> Télécharger le Film
+                            </a>
+                        )
+                    )
                   )}
                 </div>
               )}
             </div>
-            {foundProject.hasAlbum && foundProject.statusPhoto === 'delivered' && (
+            {foundProject.hasAlbum && foundProject.statusPhoto === 'delivered' && !isBlocked && (
               <div className="mt-12 bg-stone-800 rounded-2xl p-8 text-white relative overflow-hidden">
                 <div className="absolute top-0 right-0 w-64 h-64 bg-stone-700 rounded-full mix-blend-overlay filter blur-3xl opacity-20 -translate-y-1/2 translate-x-1/2"></div>
                 <div className="relative z-10">
@@ -963,7 +1043,7 @@ function ClientPortal({ projects, onBack }: { projects: Project[], onBack: () =>
   }
   return (
     <div className="min-h-screen flex flex-col items-center justify-center p-6 relative">
-      <button onClick={onBack} className="absolute top-6 left-6 text-stone-400 hover:text-stone-800 flex gap-2 transition-colors"><LogOut className="w-4 h-4" /> Accueil</button>
+      <button onClick={() => onBack()} className="absolute top-6 left-6 text-stone-400 hover:text-stone-800 flex gap-2 transition-colors"><LogOut className="w-4 h-4" /> Accueil</button>
       <div className="w-full max-w-md bg-white p-8 rounded-2xl shadow-xl text-center">
         <div className="bg-stone-100 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-6"><Search className="w-8 h-8 text-stone-400" /></div>
         <h2 className="text-2xl font-serif text-stone-900 mb-2">Accès Mariés</h2>
