@@ -512,8 +512,12 @@ function ProjectEditor({ project, onDelete }: { project: Project, onDelete: () =
   const handleSave = async () => {
     const { id, ...data } = localData;
     let docRef;
-    if (typeof __app_id !== 'undefined') { colRef = doc(db, 'artifacts', typeof __app_id !== 'undefined' ? __app_id : 'default-app-id', 'public', 'data', COLLECTION_NAME, project.id); } 
-    else { docRef = doc(db, COLLECTION_NAME, project.id); }
+    // CORRECTION ICI : Remplacement de colRef par docRef
+    if (typeof __app_id !== 'undefined') { 
+       docRef = doc(db, 'artifacts', typeof __app_id !== 'undefined' ? __app_id : 'default-app-id', 'public', 'data', COLLECTION_NAME, project.id); 
+    } else { 
+       docRef = doc(db, COLLECTION_NAME, project.id); 
+    }
     await updateDoc(docRef, data);
     setHasChanges(false); setIsExpanded(false);
   };
