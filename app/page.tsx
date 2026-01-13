@@ -9,7 +9,7 @@ import {
   UserCheck, Users as UsersIcon, ImagePlus, Hourglass,
   Upload, Loader2, AtSign, MessageSquare, Send,
   Copy, BookOpen, ArrowRight, HardDrive, ShieldCheck, History,
-  Euro, Eye, AlertTriangle, CreditCard, X, Phone, Rocket, Star, Mail, Settings, AlertOctagon, Music
+  Euro, Eye, AlertTriangle, CreditCard, X, Phone, Rocket, Star, Mail, Settings, AlertOctagon, Music, Disc
 } from 'lucide-react';
 
 // --- Configuration Firebase ---
@@ -51,7 +51,9 @@ const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
 
 // --- CONFIGURATION ---
 const MAKE_WEBHOOK_URL = "https://hook.eu1.make.com/VOTRE_URL_ICI"; 
+// ⚠️ AJOUTEZ ICI LES EMAILS DES PATRONS (Finance + Suppression)
 const SUPER_ADMINS = ["admin@raventech.fr", "irzzenproductions@gmail.com"]; 
+
 const STRIPE_ARCHIVE_LINK = "https://buy.stripe.com/3cI3cv3jq2j37x9eFy5gc0b";
 const STRIPE_PRIORITY_LINK = "https://buy.stripe.com/VOTRE_LIEN_PRIORITE";
 
@@ -190,7 +192,7 @@ export default function WeddingTracker() {
   );
 }
 
-// --- Vue Accueil (Landing Page) ---
+// --- Vue Accueil ---
 function LandingView({ setView }: { setView: (v: any) => void }) {
   return (
     <div className="min-h-screen bg-white text-stone-900 font-sans selection:bg-amber-100 selection:text-amber-900">
@@ -248,6 +250,101 @@ function LandingView({ setView }: { setView: (v: any) => void }) {
       <footer className="bg-white border-t border-stone-100 py-12 text-center text-sm text-stone-500">
         © 2026 RavenTech Solutions.
       </footer>
+    </div>
+  );
+}
+
+// --- Vue Archive (Lead Capture) ---
+function ArchiveView({ onBack }: { onBack: () => void }) {
+  const [step, setStep] = useState(1);
+  const [date, setDate] = useState('');
+  const [leadName, setLeadName] = useState('');
+  const [leadEmail, setLeadEmail] = useState('');
+  const [leadPhone, setLeadPhone] = useState('');
+  const [loading, setLoading] = useState(false);
+  
+  const handleCheck = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!date) return;
+    setStep(1.5);
+  };
+
+  const handleCaptureLead = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    let colRef;
+    if (typeof __app_id !== 'undefined') { colRef = collection(db, 'artifacts', typeof __app_id !== 'undefined' ? __app_id : 'default-app-id', 'public', 'data', LEADS_COLLECTION); } 
+    else { colRef = collection(db, LEADS_COLLECTION); }
+    try {
+        await addDoc(colRef, {
+            name: leadName, email: leadEmail, phone: leadPhone, weddingDate: date,
+            createdAt: serverTimestamp(), source: 'archive_check'
+        });
+    } catch (err) { console.error("Erreur sauvegarde lead", err); }
+    setLoading(false);
+    
+    const year = new Date(date).getFullYear();
+    if (year < 2022) { setStep(3); } else { setStep(2); }
+  };
+
+  return (
+    <div className="min-h-screen bg-stone-900 flex items-center justify-center p-4 relative">
+       <button onClick={onBack} className="absolute top-6 left-6 text-stone-400 hover:text-white flex gap-2 transition-colors"><LogOut className="w-4 h-4" /> Retour</button>
+       
+       <div className="w-full max-w-md bg-white rounded-2xl shadow-2xl overflow-hidden">
+         <div className="bg-stone-100 p-6 text-center border-b border-stone-200">
+            <div className="w-16 h-16 bg-stone-800 rounded-full flex items-center justify-center mx-auto mb-4 text-amber-400 shadow-lg"><ShieldCheck className="w-8 h-8" /></div>
+            <h2 className="text-2xl font-serif text-stone-900">Vérification des Archives</h2>
+         </div>
+
+         <div className="p-8">
+            {step === 1 && (
+              <form onSubmit={handleCheck} className="space-y-6 animate-fade-in">
+                <div className="bg-amber-50 border border-amber-200 p-4 rounded-lg flex gap-3 text-sm text-amber-800">
+                  <AlertCircle className="w-5 h-5 shrink-0" />
+                  <p>Suite à une maintenance serveur, certaines archives anciennes ne sont plus accessibles. Vérifiez votre éligibilité.</p>
+                </div>
+                <div>
+                  <label className="block text-sm font-bold text-stone-700 uppercase mb-2">Date de votre mariage</label>
+                  <input required type="date" value={date} onChange={(e) => setDate(e.target.value)} className="w-full p-4 border-2 border-stone-200 rounded-xl focus:border-stone-800 outline-none transition-colors text-lg" />
+                </div>
+                <button type="submit" className="w-full bg-stone-900 text-white py-4 rounded-xl font-bold text-lg hover:bg-black transition-transform active:scale-95">Vérifier mes fichiers</button>
+              </form>
+            )}
+
+            {step === 1.5 && (
+               <form onSubmit={handleCaptureLead} className="space-y-4 animate-fade-in">
+                  <div className="text-center mb-6"><h3 className="font-bold text-lg text-stone-900">Sécurisation de la requête</h3><p className="text-sm text-stone-500">Pour accéder au résultat, confirmez vos coordonnées.</p></div>
+                  <div><label className="block text-xs font-bold text-stone-500 uppercase mb-1">Nom & Prénom</label><input required type="text" value={leadName} onChange={(e) => setLeadName(e.target.value)} className="w-full p-3 border rounded-lg" /></div>
+                  <div><label className="block text-xs font-bold text-stone-500 uppercase mb-1">Email</label><input required type="email" value={leadEmail} onChange={(e) => setLeadEmail(e.target.value)} className="w-full p-3 border rounded-lg" /></div>
+                  <div><label className="block text-xs font-bold text-stone-500 uppercase mb-1">Téléphone</label><input required type="tel" value={leadPhone} onChange={(e) => setLeadPhone(e.target.value)} className="w-full p-3 border rounded-lg" /></div>
+                  <button disabled={loading} type="submit" className="w-full bg-stone-900 text-white py-4 rounded-xl font-bold text-lg hover:bg-black flex items-center justify-center gap-2">{loading ? <Loader2 className="w-5 h-5 animate-spin"/> : 'Accéder au résultat'}</button>
+               </form>
+            )}
+
+            {step === 2 && (
+              <div className="text-center space-y-6 animate-fade-in">
+                <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto text-green-600"><CheckCircle className="w-8 h-8" /></div>
+                <div><h3 className="text-2xl font-bold text-stone-900">Bonne nouvelle !</h3><p className="text-stone-600 mt-2">Vos fichiers sont présents.</p></div>
+                <div className="bg-stone-50 p-6 rounded-xl border border-stone-200 text-left space-y-4">
+                  <div className="flex justify-between items-center"><span className="font-bold text-stone-700">Taille estimée</span><span className="font-mono text-stone-500">~450 Go</span></div>
+                  <div className="flex justify-between items-center"><span className="font-bold text-stone-900">Pack Sécurité à vie</span><span className="text-2xl font-bold text-green-600">199 €</span></div>
+                </div>
+                <a href={STRIPE_ARCHIVE_LINK} target="_blank" rel="noopener noreferrer" className="block w-full bg-green-600 text-white py-4 rounded-xl font-bold text-lg hover:bg-green-700 transition-colors shadow-lg shadow-green-200 text-center flex items-center justify-center gap-2">
+                  <CreditCard className="w-5 h-5"/> Sécuriser maintenant (CB)
+                </a>
+              </div>
+            )}
+
+            {step === 3 && (
+               <div className="text-center space-y-6 animate-fade-in">
+                 <div className="w-16 h-16 bg-red-50 rounded-full flex items-center justify-center mx-auto text-red-500"><History className="w-8 h-8" /></div>
+                 <div><h3 className="text-xl font-bold text-stone-900">Archives Indisponibles</h3><p className="text-stone-600 mt-2 text-sm">Désolé, les serveurs d'avant 2022 ont été purgés.</p></div>
+                 <button onClick={() => setStep(1)} className="text-stone-400 underline text-sm hover:text-stone-800">Réessayer une autre date</button>
+               </div>
+            )}
+         </div>
+       </div>
     </div>
   );
 }
@@ -789,8 +886,9 @@ function ProjectEditor({ project, isSuperAdmin, staffList }: { project: Project,
              )}
            </div>
 
-           {/* --- CHAT ADMIN --- */}
+           {/* --- CHAT ADMIN LIVE --- */}
            <div className="mt-8">
+               {/* Important: On passe le projet LIVE pour que les messages soient synchronisés */}
                <ChatBox project={project} userType="admin" />
            </div>
            
