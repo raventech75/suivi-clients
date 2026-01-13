@@ -57,7 +57,7 @@ const SUPER_ADMINS = ["admin@raventech.fr", "irzzenproductions@gmail.com"];
 const STRIPE_ARCHIVE_LINK = "https://buy.stripe.com/3cI3cv3jq2j37x9eFy5gc0b";
 const STRIPE_PRIORITY_LINK = "https://buy.stripe.com/VOTRE_LIEN_PRIORITE";
 
-// LISTE INITIALE
+// LISTE INITIALE (Apparaitra par défaut)
 const DEFAULT_STAFF = ["Feridun", "Volkan", "Ali", "Steeven", "Taner", "Yunus", "Emir", "Serife"];
 const ALBUM_FORMATS = ["30x20", "30x30", "40x30", "40x30 + 2x 18x24", "Autre"];
 
@@ -124,12 +124,12 @@ const VIDEO_STEPS = {
   'none': { label: 'Non inclus', percent: 0 }
 };
 
-// --- COMPOSANT PRINCIPAL (LE DEMARREUR) ---
 export default function WeddingTracker() {
   const [user, setUser] = useState<any>(null);
   const [view, setView] = useState<'landing' | 'client' | 'admin' | 'archive'>('landing');
   const [projects, setProjects] = useState<Project[]>([]);
-  const [staffList, setStaffList] = useState<string[]>([]);
+  // CORRECTION : On initialise avec la liste par défaut pour qu'elle soit là tout de suite
+  const [staffList, setStaffList] = useState<string[]>(DEFAULT_STAFF);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -161,6 +161,7 @@ export default function WeddingTracker() {
       setLoading(false);
     });
 
+    // Chargement Staff depuis la base de données (écrase le défaut si existe)
     let settingsRef;
     if (typeof __app_id !== 'undefined') { settingsRef = doc(db, 'artifacts', appId, 'public', 'data', SETTINGS_COLLECTION, 'general'); } 
     else { settingsRef = doc(db, SETTINGS_COLLECTION, 'general'); }
@@ -169,8 +170,8 @@ export default function WeddingTracker() {
         if(docSnap.exists() && docSnap.data().staff && docSnap.data().staff.length > 0) {
             setStaffList(docSnap.data().staff);
         } else {
-            setDoc(settingsRef, { staff: DEFAULT_STAFF });
-            setStaffList(DEFAULT_STAFF);
+            // Si pas de données, on sauvegarde la liste par défaut dans la DB
+            setDoc(settingsRef, { staff: DEFAULT_STAFF }, { merge: true });
         }
     });
 
@@ -193,7 +194,7 @@ export default function WeddingTracker() {
   );
 }
 
-// --- Vue Accueil (Landing Page) ---
+// --- Vue Accueil ---
 function LandingView({ setView }: { setView: (v: any) => void }) {
   return (
     <div className="min-h-screen bg-white text-stone-900 font-sans selection:bg-amber-100 selection:text-amber-900">
@@ -255,7 +256,7 @@ function LandingView({ setView }: { setView: (v: any) => void }) {
   );
 }
 
-// --- Vue Archive (Lead Capture) ---
+// --- Vue Archive ---
 function ArchiveView({ onBack }: { onBack: () => void }) {
   const [step, setStep] = useState(1);
   const [date, setDate] = useState('');
@@ -776,7 +777,7 @@ function ProjectEditor({ project, isSuperAdmin, staffList }: { project: Project,
                         <label className="text-xs font-semibold text-stone-500 uppercase block mb-1">Responsable</label>
                         <div className="flex gap-2">
                             <select className="w-full text-sm border-b border-stone-200 py-1 bg-transparent" value={localData.managerName} onChange={e => updateField('managerName', e.target.value)}>
-                                <option value="">Sélectionner...</option>
+                                <option value="" disabled>-- Choisir dans la liste --</option>
                                 {staffList.map(s => <option key={s} value={s}>{s}</option>)}
                             </select>
                             <input className="w-full text-sm border-b border-stone-200 py-1 bg-transparent" placeholder="Email notif" value={localData.managerEmail || ''} onChange={e => updateField('managerEmail', e.target.value)} />
@@ -1097,4 +1098,19 @@ function ClientPortal({ projects, onBack }: { projects: Project[], onBack: () =>
         </div>
       </div>
     );
-  } }
+  }
+  return (
+    <div className="min-h-screen flex flex-col items-center justify-center p-6 relative">
+      <button onClick={() => onBack()} className="absolute top-6 left-6 text-stone-400 hover:text-stone-800 flex gap-2 transition-colors"><LogOut className="w-4 h-4" /> Accueil</button>
+      <div className="w-full max-w-md bg-white p-8 rounded-2xl shadow-xl text-center">
+        <div className="bg-stone-100 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-6"><Search className="w-8 h-8 text-stone-400" /></div>
+        <h2 className="text-2xl font-serif text-stone-900 mb-2">Accès Mariés</h2>
+        <form onSubmit={handleSearch} className="space-y-4 mt-8">
+          <input type="text" placeholder="CODE..." value={searchCode} onChange={(e) => setSearchCode(e.target.value)} className="w-full p-4 border rounded-xl text-center text-lg tracking-widest uppercase focus:ring-2 focus:ring-stone-800 outline-none" />
+          <button type="submit" className="w-full bg-stone-900 text-white py-4 rounded-xl font-medium hover:bg-stone-800 transition-colors">Voir l'avancement</button>
+        </form>
+        {error && <div className="mt-4 text-red-500 text-sm bg-red-50 p-3 rounded-lg flex items-center justify-center gap-2"><AlertCircle className="w-4 h-4"/> {error}</div>}
+      </div>
+    </div>
+  );
+}
