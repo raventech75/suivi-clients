@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   Camera, Video, Search, Lock, CheckCircle, 
   AlertCircle, Plus, Users, Calendar, ChevronRight, 
@@ -9,14 +9,14 @@ import {
   UserCheck, Users as UsersIcon, ImagePlus, Hourglass,
   Upload, Loader2, AtSign, MessageSquare, Send,
   Copy, ClipboardCheck, BookOpen, ArrowRight, HardDrive, ShieldCheck, History,
-  Euro, Eye, AlertTriangle, CreditCard, X, Phone, Rocket, Star
+  Euro, Eye, AlertTriangle, CreditCard, X, Phone, Rocket, Star, Mail, Settings
 } from 'lucide-react';
 
 // --- Configuration Firebase ---
 import { initializeApp, getApps, getApp } from 'firebase/app';
 import { 
   getFirestore, collection, addDoc, updateDoc, deleteDoc, 
-  doc, onSnapshot, query, serverTimestamp 
+  doc, onSnapshot, query, serverTimestamp, setDoc, getDoc, arrayUnion
 } from 'firebase/firestore';
 import { 
   getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken,
@@ -26,7 +26,6 @@ import {
   getStorage, ref, uploadBytes, getDownloadURL 
 } from 'firebase/storage';
 
-// --- Correction TypeScript pour Vercel ---
 declare const __firebase_config: string | undefined;
 declare const __initial_auth_token: string | undefined;
 declare const __app_id: string | undefined;
@@ -54,11 +53,22 @@ const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
 // --- CONFIGURATION ---
 const MAKE_WEBHOOK_URL = "https://hook.eu1.make.com/VOTRE_URL_ICI"; 
 const STRIPE_ARCHIVE_LINK = "https://buy.stripe.com/3cI3cv3jq2j37x9eFy5gc0b";
-const STRIPE_PRIORITY_LINK = "https://buy.stripe.com/VOTRE_LIEN_OPTION_PRIORITE"; // Créez un lien Stripe à 150€ pour l'option "Fast Track"
+const STRIPE_PRIORITY_LINK = "https://buy.stripe.com/VOTRE_LIEN_PRIORITE";
 
-const STAFF_LIST = ["Feridun", "Volkan", "Emirkan", "Sophie", "Marc", "Assistant"];
+// ⚠️ LISTE DES EMAILS ADMINS (Qui ont le droit de voir la finance et supprimer)
+const SUPER_ADMINS = ["raventech75@gmail.com", "irzzenproductions@gmail.com"]; 
+
+const COLLECTION_NAME = 'wedding_projects';
+const LEADS_COLLECTION = 'leads';
+const SETTINGS_COLLECTION = 'settings'; // Pour stocker la liste du staff
 
 // --- Types & Interfaces ---
+interface Message {
+  author: 'client' | 'admin';
+  text: string;
+  date: any; // Timestamp
+}
+
 interface Project {
   id: string;
   clientNames: string;
@@ -78,17 +88,15 @@ interface Project {
   estimatedDelivery?: string;
   linkPhoto?: string;
   linkVideo?: string;
-  notes: string;
-  clientNotes?: string; 
+  clientNotes?: string; // Legacy
+  messages?: Message[]; // Nouveau système de chat
+  hasUnreadMessage?: boolean; // Pour notification Admin
   hasAlbum?: boolean;
   totalPrice?: number;
   depositAmount?: number;
-  isPriority?: boolean; // NOUVEAU : Option Fast-Track
+  isPriority?: boolean; 
   createdAt: any;
 }
-
-const COLLECTION_NAME = 'wedding_projects';
-const LEADS_COLLECTION = 'leads';
 
 const PHOTO_STEPS = {
   'waiting': { label: 'En attente', percent: 5 },
@@ -112,53 +120,57 @@ export default function WeddingTracker() {
   const [user, setUser] = useState<any>(null);
   const [view, setView] = useState<'landing' | 'client' | 'admin' | 'archive'>('landing');
   const [projects, setProjects] = useState<Project[]>([]);
+  const [staffList, setStaffList] = useState<string[]>([]); // Liste dynamique
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const unsubscribeAuth = onAuthStateChanged(auth, (currentUser) => {
       setUser(currentUser);
-      if (!currentUser) {
-         signInAnonymously(auth).catch((err) => console.error("Auth Anon Error", err));
-      }
+      if (!currentUser) signInAnonymously(auth).catch((err) => console.error("Auth Anon Error", err));
     });
     return () => unsubscribeAuth();
   }, []);
 
+  // Chargement Projets & Staff
   useEffect(() => {
     if (!user) return;
+    
+    // 1. Projets
     let colRef;
-    if (typeof __app_id !== 'undefined') {
-      colRef = collection(db, 'artifacts', appId, 'public', 'data', COLLECTION_NAME);
-    } else {
-      colRef = collection(db, COLLECTION_NAME);
-    }
+    if (typeof __app_id !== 'undefined') { colRef = collection(db, 'artifacts', appId, 'public', 'data', COLLECTION_NAME); } 
+    else { colRef = collection(db, COLLECTION_NAME); }
     const q = query(colRef);
     const unsubscribeData = onSnapshot(q, (snapshot) => {
       const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as Project[];
-      
-      // LOGIQUE DE TRI : Prioritaires d'abord, puis par date
+      // Tri : Unread Messages > Priority > Date
       const sortedData = data.sort((a, b) => {
-          if (a.isPriority && !b.isPriority) return -1; // a avant b
-          if (!a.isPriority && b.isPriority) return 1;  // b avant a
-          // Si égalité de priorité, on trie par date de mariage (plus récent en haut)
+          if (a.hasUnreadMessage && !b.hasUnreadMessage) return -1;
+          if (!a.hasUnreadMessage && b.hasUnreadMessage) return 1;
+          if (a.isPriority && !b.isPriority) return -1;
+          if (!a.isPriority && b.isPriority) return 1;
           return new Date(b.weddingDate).getTime() - new Date(a.weddingDate).getTime();
       });
-
       setProjects(sortedData);
       setLoading(false);
-    }, (error) => {
-      console.error("Erreur lecture:", error);
-      setLoading(false);
     });
+
+    // 2. Staff List (Settings)
+    let settingsRef;
+    if (typeof __app_id !== 'undefined') { settingsRef = doc(db, 'artifacts', appId, 'public', 'data', SETTINGS_COLLECTION, 'general'); } 
+    else { settingsRef = doc(db, SETTINGS_COLLECTION, 'general'); }
+    
+    // On écoute le document settings
+    getDoc(settingsRef).then(docSnap => {
+        if(docSnap.exists()) setStaffList(docSnap.data().staff || []);
+        else setDoc(settingsRef, { staff: ["Feridun", "Volkan"] }); // Init par défaut
+    });
+
     return () => unsubscribeData();
   }, [user]);
 
   if (loading) return (
     <div className="min-h-screen flex items-center justify-center bg-stone-50 text-stone-600">
-      <div className="animate-pulse flex flex-col items-center">
-        <Camera className="w-10 h-10 mb-4 text-stone-400" />
-        Chargement...
-      </div>
+      <div className="animate-pulse flex flex-col items-center"><Camera className="w-10 h-10 mb-4 text-stone-400" />Chargement...</div>
     </div>
   );
 
@@ -166,202 +178,150 @@ export default function WeddingTracker() {
     <div className="min-h-screen bg-stone-50 font-sans text-stone-800">
       {view === 'landing' && <LandingView setView={setView} />}
       {view === 'client' && <ClientPortal projects={projects} onBack={() => setView('landing')} />}
-      {view === 'admin' && <AdminDashboard projects={projects} user={user} onLogout={() => { signOut(auth); setView('landing'); }} />}
+      {view === 'admin' && <AdminDashboard projects={projects} staffList={staffList} setStaffList={setStaffList} user={user} onLogout={() => { signOut(auth); setView('landing'); }} />}
       {view === 'archive' && <ArchiveView onBack={() => setView('landing')} />}
     </div>
   );
 }
 
-// --- Vue Accueil (Landing Page Marketing) ---
+// --- Vue Accueil ---
 function LandingView({ setView }: { setView: (v: any) => void }) {
   return (
     <div className="min-h-screen bg-white text-stone-900 font-sans selection:bg-amber-100 selection:text-amber-900">
       <nav className="fixed top-0 w-full z-50 bg-white/80 backdrop-blur-md border-b border-stone-100">
         <div className="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <div className="bg-stone-900 text-white p-2 rounded-lg">
-              <Camera className="w-5 h-5" />
-            </div>
+            <div className="bg-stone-900 text-white p-2 rounded-lg"><Camera className="w-5 h-5" /></div>
             <span className="font-serif text-xl font-bold tracking-tight">RavenTech</span>
           </div>
           <div className="flex items-center gap-4">
-            <button onClick={() => setView('client')} className="hidden md:flex items-center gap-2 text-sm font-medium text-stone-600 hover:text-stone-900 transition-colors">
-              <Search className="w-4 h-4"/> Espace Mariés
-            </button>
-            <button onClick={() => setView('admin')} className="bg-stone-900 text-white px-5 py-2.5 rounded-full text-sm font-medium hover:bg-stone-800 transition-all shadow-lg shadow-stone-200 flex items-center gap-2">
-              <Lock className="w-3 h-3"/> Accès Studio
-            </button>
+            <button onClick={() => setView('client')} className="hidden md:flex items-center gap-2 text-sm font-medium text-stone-600 hover:text-stone-900 transition-colors"><Search className="w-4 h-4"/> Espace Mariés</button>
+            <button onClick={() => setView('admin')} className="bg-stone-900 text-white px-5 py-2.5 rounded-full text-sm font-medium hover:bg-stone-800 transition-all shadow-lg shadow-stone-200 flex items-center gap-2"><Lock className="w-3 h-3"/> Accès Studio</button>
           </div>
         </div>
       </nav>
-
-      <section className="relative pt-32 pb-20 lg:pt-48 lg:pb-32 overflow-hidden">
-        <div className="max-w-7xl mx-auto px-6 grid lg:grid-cols-2 gap-12 items-center">
-          <div className="space-y-8 relative z-10">
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-amber-50 border border-amber-100 text-amber-800 text-xs font-bold uppercase tracking-wider">
-              <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse"></span>
-              Nouvelle plateforme 2026
-            </div>
-            <h1 className="text-5xl lg:text-7xl font-serif leading-[1.1]">
-              L'art de sublimer <br/>
-              <span className="text-transparent bg-clip-text bg-gradient-to-r from-stone-800 to-stone-500">vos souvenirs.</span>
-            </h1>
-            <p className="text-lg text-stone-500 max-w-md leading-relaxed">
-              Bien plus que des photos. Une expérience digitale complète pour suivre votre reportage, valider vos montages et sécuriser votre patrimoine visuel à vie.
-            </p>
-            <div className="flex flex-col sm:flex-row gap-4">
-              <button onClick={() => setView('client')} className="px-8 py-4 bg-stone-900 text-white rounded-full font-medium hover:bg-black transition-transform hover:scale-105 shadow-xl flex items-center justify-center gap-2">
-                Accéder à mon mariage <ArrowRight className="w-4 h-4" />
-              </button>
-              <button onClick={() => setView('archive')} className="px-8 py-4 bg-white border border-stone-200 text-stone-900 rounded-full font-medium hover:bg-stone-50 transition-colors flex items-center justify-center gap-2 group">
-                <HardDrive className="w-4 h-4 text-stone-400 group-hover:text-stone-900 transition-colors" />
-                Vérifier mes archives
-              </button>
-            </div>
-          </div>
-          <div className="relative">
-            <div className="absolute -inset-4 bg-gradient-to-tr from-amber-100 to-stone-100 rounded-[2rem] blur-2xl opacity-50"></div>
-            <div className="relative rounded-[2rem] overflow-hidden shadow-2xl border border-white/20">
-               <img src="https://images.unsplash.com/photo-1519741497674-611481863552?auto=format&fit=crop&q=80" alt="Mariage Couple" className="w-full h-[600px] object-cover hover:scale-105 transition-transform duration-1000" />
-            </div>
-          </div>
-        </div>
+      {/* Hero simple pour le code */}
+      <section className="pt-48 pb-32 px-6 max-w-7xl mx-auto text-center">
+         <h1 className="text-6xl font-serif mb-6">L'excellence visuelle.</h1>
+         <div className="flex justify-center gap-4">
+            <button onClick={() => setView('client')} className="px-8 py-4 bg-stone-900 text-white rounded-full font-medium">Espace Mariés</button>
+            <button onClick={() => setView('archive')} className="px-8 py-4 border rounded-full font-medium">Archives</button>
+         </div>
       </section>
-
-      <section className="py-24 bg-stone-50">
-        <div className="max-w-7xl mx-auto px-6">
-           <h2 className="text-3xl font-serif mb-12 text-center">Services Premium</h2>
-           <div className="grid md:grid-cols-3 gap-8">
-              <div className="bg-white p-8 rounded-2xl shadow-sm border border-stone-100"><h3 className="text-xl font-bold mb-3 flex gap-2"><Clock className="text-amber-500"/> Suivi Live</h3><p className="text-stone-500">Suivez l'avancement en temps réel.</p></div>
-              <div className="bg-white p-8 rounded-2xl shadow-sm border border-stone-100"><h3 className="text-xl font-bold mb-3 flex gap-2"><Rocket className="text-amber-500"/> Fast Track</h3><p className="text-stone-500">Option prioritaire pour les pressés.</p></div>
-              <div className="bg-white p-8 rounded-2xl shadow-sm border border-stone-100"><h3 className="text-xl font-bold mb-3 flex gap-2"><ShieldCheck className="text-amber-500"/> Cold Storage</h3><p className="text-stone-500">Archivage sécurisé à vie.</p></div>
-           </div>
-        </div>
-      </section>
-      
-      <footer className="bg-white border-t border-stone-100 py-12 text-center text-sm text-stone-500">
-        © 2026 RavenTech Solutions.
-      </footer>
     </div>
   );
 }
 
-// --- Vue Archive (Lead Capture) ---
-function ArchiveView({ onBack }: { onBack: () => void }) {
-  const [step, setStep] = useState(1);
-  const [date, setDate] = useState('');
-  const [leadName, setLeadName] = useState('');
-  const [leadEmail, setLeadEmail] = useState('');
-  const [leadPhone, setLeadPhone] = useState('');
-  const [loading, setLoading] = useState(false);
-  
-  const handleCheck = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!date) return;
-    setStep(1.5);
-  };
+// --- Composant Chat (Réutilisable) ---
+function ChatBox({ project, userType }: { project: Project, userType: 'admin' | 'client' }) {
+    const [msgText, setMsgText] = useState('');
+    const [sending, setSending] = useState(false);
+    const scrollRef = useRef<HTMLDivElement>(null);
 
-  const handleCaptureLead = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
-    let colRef;
-    if (typeof __app_id !== 'undefined') {
-       colRef = collection(db, 'artifacts', typeof __app_id !== 'undefined' ? __app_id : 'default-app-id', 'public', 'data', LEADS_COLLECTION);
-    } else {
-       colRef = collection(db, LEADS_COLLECTION);
-    }
-    try {
-        await addDoc(colRef, {
-            name: leadName, email: leadEmail, phone: leadPhone, weddingDate: date,
-            createdAt: serverTimestamp(), source: 'archive_check'
-        });
-    } catch (err) { console.error("Erreur sauvegarde lead", err); }
-    setLoading(false);
-    
-    const year = new Date(date).getFullYear();
-    if (year < 2022) { setStep(3); } else { setStep(2); }
-  };
+    const messages = project.messages || [];
 
-  return (
-    <div className="min-h-screen bg-stone-900 flex items-center justify-center p-4 relative">
-       <button onClick={onBack} className="absolute top-6 left-6 text-stone-400 hover:text-white flex gap-2 transition-colors"><LogOut className="w-4 h-4" /> Retour</button>
-       
-       <div className="w-full max-w-md bg-white rounded-2xl shadow-2xl overflow-hidden">
-         <div className="bg-stone-100 p-6 text-center border-b border-stone-200">
-            <div className="w-16 h-16 bg-stone-800 rounded-full flex items-center justify-center mx-auto mb-4 text-amber-400 shadow-lg"><ShieldCheck className="w-8 h-8" /></div>
-            <h2 className="text-2xl font-serif text-stone-900">Vérification des Archives</h2>
-         </div>
+    useEffect(() => {
+        if(scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    }, [messages]);
 
-         <div className="p-8">
-            {step === 1 && (
-              <form onSubmit={handleCheck} className="space-y-6 animate-fade-in">
-                <div className="bg-amber-50 border border-amber-200 p-4 rounded-lg flex gap-3 text-sm text-amber-800">
-                  <AlertCircle className="w-5 h-5 shrink-0" />
-                  <p>Suite à une maintenance serveur, certaines archives anciennes ne sont plus accessibles. Vérifiez votre éligibilité.</p>
-                </div>
-                <div>
-                  <label className="block text-sm font-bold text-stone-700 uppercase mb-2">Date de votre mariage</label>
-                  <input required type="date" value={date} onChange={(e) => setDate(e.target.value)} className="w-full p-4 border-2 border-stone-200 rounded-xl focus:border-stone-800 outline-none transition-colors" />
-                </div>
-                <button type="submit" className="w-full bg-stone-900 text-white py-4 rounded-xl font-bold text-lg hover:bg-black transition-transform active:scale-95">Vérifier mes fichiers</button>
-              </form>
-            )}
+    const handleSend = async () => {
+        if(!msgText.trim()) return;
+        setSending(true);
+        const newMessage: Message = {
+            author: userType,
+            text: msgText,
+            date: new Date().toISOString()
+        };
 
-            {step === 1.5 && (
-               <form onSubmit={handleCaptureLead} className="space-y-4 animate-fade-in">
-                  <div className="text-center mb-6"><h3 className="font-bold text-lg text-stone-900">Sécurisation de la requête</h3><p className="text-sm text-stone-500">Pour accéder au résultat, confirmez vos coordonnées.</p></div>
-                  <div><label className="block text-xs font-bold text-stone-500 uppercase mb-1">Nom & Prénom</label><input required type="text" value={leadName} onChange={(e) => setLeadName(e.target.value)} className="w-full p-3 border rounded-lg" /></div>
-                  <div><label className="block text-xs font-bold text-stone-500 uppercase mb-1">Email</label><input required type="email" value={leadEmail} onChange={(e) => setLeadEmail(e.target.value)} className="w-full p-3 border rounded-lg" /></div>
-                  <div><label className="block text-xs font-bold text-stone-500 uppercase mb-1">Téléphone</label><input required type="tel" value={leadPhone} onChange={(e) => setLeadPhone(e.target.value)} className="w-full p-3 border rounded-lg" /></div>
-                  <button disabled={loading} type="submit" className="w-full bg-stone-900 text-white py-4 rounded-xl font-bold text-lg hover:bg-black flex items-center justify-center gap-2">{loading ? <Loader2 className="w-5 h-5 animate-spin"/> : 'Accéder au résultat'}</button>
-               </form>
-            )}
+        let docRef;
+        if (typeof __app_id !== 'undefined') { docRef = doc(db, 'artifacts', typeof __app_id !== 'undefined' ? __app_id : 'default-app-id', 'public', 'data', COLLECTION_NAME, project.id); } 
+        else { docRef = doc(db, COLLECTION_NAME, project.id); }
 
-            {step === 2 && (
-              <div className="text-center space-y-6 animate-fade-in">
-                <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto text-green-600"><CheckCircle className="w-8 h-8" /></div>
-                <div><h3 className="text-2xl font-bold text-stone-900">Bonne nouvelle !</h3><p className="text-stone-600 mt-2">Vos fichiers sont présents.</p></div>
-                <div className="bg-stone-50 p-6 rounded-xl border border-stone-200 text-left space-y-4">
-                  <div className="flex justify-between items-center"><span className="font-bold text-stone-700">Taille estimée</span><span className="font-mono text-stone-500">~450 Go</span></div>
-                  <div className="flex justify-between items-center"><span className="font-bold text-stone-900">Pack Sécurité à vie</span><span className="text-2xl font-bold text-green-600">199 €</span></div>
-                </div>
-                <a href={STRIPE_ARCHIVE_LINK} target="_blank" rel="noopener noreferrer" className="block w-full bg-green-600 text-white py-4 rounded-xl font-bold text-lg hover:bg-green-700 transition-colors shadow-lg shadow-green-200 text-center flex items-center justify-center gap-2">
-                  <CreditCard className="w-5 h-5"/> Sécuriser maintenant (CB)
-                </a>
-              </div>
-            )}
+        // Si le client écrit, on met hasUnreadMessage à TRUE. Si c'est l'admin, FALSE.
+        const updates: any = { messages: arrayUnion(newMessage) };
+        if (userType === 'client') updates.hasUnreadMessage = true;
+        if (userType === 'admin') updates.hasUnreadMessage = false;
 
-            {step === 3 && (
-               <div className="text-center space-y-6 animate-fade-in">
-                 <div className="w-16 h-16 bg-red-50 rounded-full flex items-center justify-center mx-auto text-red-500"><History className="w-8 h-8" /></div>
-                 <div><h3 className="text-xl font-bold text-stone-900">Archives Indisponibles</h3><p className="text-stone-600 mt-2 text-sm">Désolé, les serveurs d'avant 2022 ont été purgés.</p></div>
-                 <button onClick={() => setStep(1)} className="text-stone-400 underline text-sm hover:text-stone-800">Réessayer une autre date</button>
-               </div>
-            )}
-         </div>
-       </div>
-    </div>
-  );
+        await updateDoc(docRef, updates);
+        setMsgText('');
+        setSending(false);
+    };
+
+    return (
+        <div className="flex flex-col h-[400px] border border-stone-200 rounded-xl bg-stone-50 overflow-hidden">
+            <div className="bg-white p-4 border-b border-stone-100 flex justify-between items-center">
+                <h4 className="font-bold text-stone-700 flex items-center gap-2"><MessageSquare className="w-4 h-4"/> Conversation {userType === 'admin' ? 'avec les mariés' : 'avec le studio'}</h4>
+            </div>
+            <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 space-y-4">
+                {messages.length === 0 && <p className="text-center text-stone-400 text-sm mt-10">Aucun message pour le moment.</p>}
+                {messages.map((m, idx) => (
+                    <div key={idx} className={`flex ${m.author === userType ? 'justify-end' : 'justify-start'}`}>
+                        <div className={`max-w-[80%] p-3 rounded-xl text-sm ${m.author === userType ? 'bg-stone-800 text-white rounded-tr-none' : 'bg-white border border-stone-200 rounded-tl-none'}`}>
+                            <p>{m.text}</p>
+                            <span className={`text-[10px] block mt-1 ${m.author === userType ? 'text-stone-400' : 'text-stone-400'}`}>{new Date(m.date).toLocaleString()}</span>
+                        </div>
+                    </div>
+                ))}
+            </div>
+            <div className="p-3 bg-white border-t border-stone-100 flex gap-2">
+                <input 
+                    className="flex-1 bg-stone-100 rounded-lg px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-stone-200" 
+                    placeholder="Votre message..." 
+                    value={msgText} 
+                    onChange={e => setMsgText(e.target.value)}
+                    onKeyDown={e => e.key === 'Enter' && handleSend()}
+                />
+                <button onClick={handleSend} disabled={sending} className="bg-stone-800 text-white p-2 rounded-lg hover:bg-stone-700 transition-colors disabled:opacity-50">
+                    {sending ? <Loader2 className="w-4 h-4 animate-spin"/> : <Send className="w-4 h-4"/>}
+                </button>
+            </div>
+        </div>
+    );
 }
 
 // --- Dashboard Admin ---
-function AdminDashboard({ projects, user, onLogout }: { projects: Project[], user: any, onLogout: () => void }) {
+function AdminDashboard({ projects, user, onLogout, staffList, setStaffList }: { projects: Project[], user: any, onLogout: () => void, staffList: string[], setStaffList: any }) {
   const [emailInput, setEmailInput] = useState('');
   const [passInput, setPassInput] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
   const [isAdding, setIsAdding] = useState(false);
+  const [showTeamModal, setShowTeamModal] = useState(false);
+  const [newMember, setNewMember] = useState('');
   const [newProject, setNewProject] = useState({ 
     clientNames: '', clientEmail: '', clientPhone: '', weddingDate: '', photographerName: '', videographerName: '', 
     managerName: '', onSiteTeam: [] as string[], hasPhoto: true, hasVideo: true, hasAlbum: false, isPriority: false
   });
   const [filter, setFilter] = useState<'all' | 'active' | 'completed' | 'late'>('all');
 
+  const isSuperAdmin = SUPER_ADMINS.includes(user?.email);
+
   const handleLogin = async (e: React.FormEvent) => {
       e.preventDefault();
-      setErrorMsg('');
       try { await signInWithEmailAndPassword(auth, emailInput, passInput); } 
-      catch (err: any) { setErrorMsg("Erreur connexion."); }
+      catch (err: any) { setErrorMsg("Email ou mot de passe incorrect."); }
   };
+
+  const handleAddMember = async () => {
+      if(!newMember.trim()) return;
+      const updatedList = [...staffList, newMember];
+      setStaffList(updatedList);
+      
+      let settingsRef;
+      if (typeof __app_id !== 'undefined') { settingsRef = doc(db, 'artifacts', typeof __app_id !== 'undefined' ? __app_id : 'default-app-id', 'public', 'data', SETTINGS_COLLECTION, 'general'); } 
+      else { settingsRef = doc(db, SETTINGS_COLLECTION, 'general'); }
+      
+      await setDoc(settingsRef, { staff: updatedList }, { merge: true });
+      setNewMember('');
+  };
+
+  const handleRemoveMember = async (member: string) => {
+      const updatedList = staffList.filter(m => m !== member);
+      setStaffList(updatedList);
+      let settingsRef;
+      if (typeof __app_id !== 'undefined') { settingsRef = doc(db, 'artifacts', typeof __app_id !== 'undefined' ? __app_id : 'default-app-id', 'public', 'data', SETTINGS_COLLECTION, 'general'); } 
+      else { settingsRef = doc(db, SETTINGS_COLLECTION, 'general'); }
+      await setDoc(settingsRef, { staff: updatedList }, { merge: true });
+  }
 
   if (!user || user.isAnonymous) return (
     <div className="min-h-screen flex items-center justify-center bg-stone-100 p-4">
@@ -381,34 +341,19 @@ function AdminDashboard({ projects, user, onLogout }: { projects: Project[], use
   const handleAddProject = async (e: React.FormEvent) => {
     e.preventDefault();
     let colRef;
-    if (typeof __app_id !== 'undefined') {
-       colRef = collection(db, 'artifacts', typeof __app_id !== 'undefined' ? __app_id : 'default-app-id', 'public', 'data', COLLECTION_NAME);
-    } else {
-       colRef = collection(db, COLLECTION_NAME);
-    }
+    if (typeof __app_id !== 'undefined') { colRef = collection(db, 'artifacts', typeof __app_id !== 'undefined' ? __app_id : 'default-app-id', 'public', 'data', COLLECTION_NAME); } 
+    else { colRef = collection(db, COLLECTION_NAME); }
+    
     const code = (newProject.clientNames.split(' ')[0] + '-' + Math.floor(Math.random() * 1000)).toUpperCase().replace(/[^A-Z0-9-]/g, '');
     await addDoc(colRef, {
       ...newProject, code,
-      statusPhoto: newProject.hasPhoto ? 'waiting' : 'none',
-      statusVideo: newProject.hasVideo ? 'waiting' : 'none',
-      progressPhoto: newProject.hasPhoto ? PHOTO_STEPS['waiting'].percent : 0,
-      progressVideo: newProject.hasVideo ? VIDEO_STEPS['waiting'].percent : 0,
-      linkPhoto: '', linkVideo: '', notes: '', clientNotes: '', 
+      statusPhoto: newProject.hasPhoto ? 'waiting' : 'none', statusVideo: newProject.hasVideo ? 'waiting' : 'none',
+      progressPhoto: 0, progressVideo: 0,
+      linkPhoto: '', linkVideo: '', clientNotes: '', messages: [], hasUnreadMessage: false,
       totalPrice: 0, depositAmount: 0,
       createdAt: serverTimestamp()
     });
     setIsAdding(false);
-    setNewProject({ clientNames: '', clientEmail: '', clientPhone: '', weddingDate: '', photographerName: '', videographerName: '', managerName: '', onSiteTeam: [], hasPhoto: true, hasVideo: true, hasAlbum: false, isPriority: false });
-  };
-
-  const handleDelete = async (id: string) => {
-    let docRef;
-    if (typeof __app_id !== 'undefined') {
-       docRef = doc(db, 'artifacts', typeof __app_id !== 'undefined' ? __app_id : 'default-app-id', 'public', 'data', COLLECTION_NAME, id);
-    } else {
-       docRef = doc(db, COLLECTION_NAME, id);
-    }
-    if (confirm('Supprimer définitivement ce projet ?')) await deleteDoc(docRef);
   };
 
   const filteredProjects = projects.filter(p => {
@@ -426,9 +371,10 @@ function AdminDashboard({ projects, user, onLogout }: { projects: Project[], use
         <div className="max-w-7xl mx-auto flex flex-wrap justify-between items-center gap-4">
           <div className="flex items-center gap-3">
             <div className="bg-stone-900 text-white p-2 rounded-lg"><Users className="w-5 h-5" /></div>
-            <div><h1 className="font-bold text-stone-900">Dashboard</h1><p className="text-xs text-stone-500">Gestion des projets</p></div>
+            <div><h1 className="font-bold text-stone-900">Dashboard</h1><p className="text-xs text-stone-500">Connecté en tant que {user.email}</p></div>
           </div>
           <div className="flex items-center gap-2">
+            <button onClick={() => setShowTeamModal(true)} className="text-stone-500 hover:text-stone-800 px-3 py-2 text-sm font-medium transition flex items-center gap-1 border rounded-lg mr-2"><Settings className="w-4 h-4"/> Gérer l'équipe</button>
             <button onClick={onLogout} className="text-stone-500 hover:text-stone-800 px-3 py-2 text-sm font-medium transition flex items-center gap-1"><LogOut className="w-4 h-4"/> <span className="hidden sm:inline">Déconnexion</span></button>
             <button onClick={() => setIsAdding(true)} className="bg-blue-600 text-white px-4 py-2 rounded-lg flex gap-2 text-sm font-medium hover:bg-blue-700 transition"><Plus className="w-4 h-4" /> Nouveau</button>
           </div>
@@ -437,17 +383,17 @@ function AdminDashboard({ projects, user, onLogout }: { projects: Project[], use
       
       <main className="max-w-6xl mx-auto px-4 py-8">
         <div className="flex gap-2 mb-6 overflow-x-auto pb-2">
-          <button onClick={() => setFilter('all')} className={`px-4 py-2 rounded-full text-sm font-medium transition whitespace-nowrap ${filter === 'all' ? 'bg-stone-800 text-white' : 'bg-white text-stone-600 hover:bg-stone-100'}`}>Tous ({projects.length})</button>
-          <button onClick={() => setFilter('active')} className={`px-4 py-2 rounded-full text-sm font-medium transition whitespace-nowrap ${filter === 'active' ? 'bg-blue-600 text-white' : 'bg-white text-stone-600 hover:bg-stone-100'}`}>En cours</button>
-          <button onClick={() => setFilter('late')} className={`px-4 py-2 rounded-full text-sm font-medium transition whitespace-nowrap ${filter === 'late' ? 'bg-red-500 text-white' : 'bg-white text-stone-600 hover:bg-stone-100'}`}>En retard</button>
+          <button onClick={() => setFilter('all')} className={`px-4 py-2 rounded-full text-sm font-medium ${filter === 'all' ? 'bg-stone-800 text-white' : 'bg-white text-stone-600'}`}>Tous ({projects.length})</button>
+          <button onClick={() => setFilter('active')} className={`px-4 py-2 rounded-full text-sm font-medium ${filter === 'active' ? 'bg-blue-600 text-white' : 'bg-white text-stone-600'}`}>En cours</button>
+          <button onClick={() => setFilter('late')} className={`px-4 py-2 rounded-full text-sm font-medium ${filter === 'late' ? 'bg-red-500 text-white' : 'bg-white text-stone-600'}`}>En retard</button>
         </div>
 
         <div className="grid gap-6">
-          {filteredProjects.map(p => <ProjectEditor key={p.id} project={p} onDelete={() => handleDelete(p.id)} />)}
-          {filteredProjects.length === 0 && <div className="text-center py-20 text-stone-400 bg-white rounded-xl border border-dashed border-stone-300"><p>Aucun projet.</p></div>}
+          {filteredProjects.map(p => <ProjectEditor key={p.id} project={p} isSuperAdmin={isSuperAdmin} staffList={staffList} />)}
         </div>
       </main>
       
+      {/* MODAL AJOUT PROJET */}
       {isAdding && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
           <div className="bg-white rounded-2xl p-6 w-full max-w-lg shadow-2xl">
@@ -458,37 +404,68 @@ function AdminDashboard({ projects, user, onLogout }: { projects: Project[], use
                  <div><label className="text-sm font-medium text-stone-600 block mb-1">Email</label><input type="email" placeholder="mariage@exemple.com" className="w-full border rounded-lg p-2.5" value={newProject.clientEmail} onChange={e => setNewProject({...newProject, clientEmail: e.target.value})} /></div>
                  <div><label className="text-sm font-medium text-stone-600 block mb-1">Téléphone</label><input type="tel" placeholder="06..." className="w-full border rounded-lg p-2.5" value={newProject.clientPhone} onChange={e => setNewProject({...newProject, clientPhone: e.target.value})} /></div>
               </div>
-              <div className="grid grid-cols-2 gap-4">
-                 <div><label className="text-sm font-medium text-stone-600 block mb-1">Date</label><input required type="date" className="w-full border rounded-lg p-2.5" value={newProject.weddingDate} onChange={e => setNewProject({...newProject, weddingDate: e.target.value})} /></div>
-                 <div><label className="text-sm font-medium text-stone-600 block mb-1">Responsable</label><input placeholder="Ex: Julien" className="w-full border rounded-lg p-2.5" value={newProject.managerName} onChange={e => setNewProject({...newProject, managerName: e.target.value})} /></div>
-              </div>
+              <div><label className="text-sm font-medium text-stone-600 block mb-1">Date</label><input required type="date" className="w-full border rounded-lg p-2.5" value={newProject.weddingDate} onChange={e => setNewProject({...newProject, weddingDate: e.target.value})} /></div>
               
-              <div className="pt-2">
-                 <label className="flex items-center gap-2 text-sm font-medium text-stone-700 cursor-pointer p-3 bg-stone-50 rounded-lg border border-stone-100">
-                    <input type="checkbox" checked={newProject.isPriority} onChange={e => setNewProject({...newProject, isPriority: e.target.checked})} className="accent-amber-500" />
-                    <span className="flex items-center gap-2"><Rocket className="w-4 h-4 text-amber-500" /> Dossier Prioritaire (Fast Track)</span>
-                 </label>
+              <div className="grid grid-cols-2 gap-4 pt-2">
+                <div className="p-3 bg-stone-50 rounded-lg border border-stone-100">
+                  <label className="flex items-center gap-2 mb-2 font-medium text-sm"><input type="checkbox" checked={newProject.hasPhoto} onChange={e => setNewProject({...newProject, hasPhoto: e.target.checked})} className="accent-amber-600" /> Photo</label>
+                  {newProject.hasPhoto && (
+                      <select className="w-full text-sm border rounded p-1.5" value={newProject.photographerName} onChange={e => setNewProject({...newProject, photographerName: e.target.value})}>
+                          <option value="">Choisir...</option>
+                          {staffList.map(s => <option key={s} value={s}>{s}</option>)}
+                      </select>
+                  )}
+                </div>
+                <div className="p-3 bg-stone-50 rounded-lg border border-stone-100">
+                  <label className="flex items-center gap-2 mb-2 font-medium text-sm"><input type="checkbox" checked={newProject.hasVideo} onChange={e => setNewProject({...newProject, hasVideo: e.target.checked})} className="accent-sky-600" /> Vidéo</label>
+                  {newProject.hasVideo && (
+                      <select className="w-full text-sm border rounded p-1.5" value={newProject.videographerName} onChange={e => setNewProject({...newProject, videographerName: e.target.value})}>
+                          <option value="">Choisir...</option>
+                          {staffList.map(s => <option key={s} value={s}>{s}</option>)}
+                      </select>
+                  )}
+                </div>
               </div>
-
               <div className="flex gap-3 mt-8 pt-4">
-                <button type="button" onClick={() => setIsAdding(false)} className="flex-1 py-2.5 bg-gray-100 hover:bg-gray-200 rounded-lg font-medium transition">Annuler</button>
-                <button type="submit" className="flex-1 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium transition">Créer le projet</button>
+                <button type="button" onClick={() => setIsAdding(false)} className="flex-1 py-2.5 bg-gray-100 rounded-lg">Annuler</button>
+                <button type="submit" className="flex-1 py-2.5 bg-blue-600 text-white rounded-lg">Créer</button>
               </div>
             </form>
           </div>
         </div>
+      )}
+
+      {/* MODAL EQUIPE */}
+      {showTeamModal && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
+            <div className="bg-white rounded-2xl p-6 w-full max-w-md shadow-2xl">
+                <h3 className="text-lg font-bold mb-4">Gérer l'équipe</h3>
+                <div className="flex gap-2 mb-4">
+                    <input className="flex-1 border rounded-lg p-2" placeholder="Nouveau membre..." value={newMember} onChange={e => setNewMember(e.target.value)} />
+                    <button onClick={handleAddMember} className="bg-green-600 text-white px-4 rounded-lg"><Plus className="w-4 h-4"/></button>
+                </div>
+                <div className="space-y-2 max-h-60 overflow-y-auto">
+                    {staffList.map(member => (
+                        <div key={member} className="flex justify-between items-center p-2 bg-stone-50 rounded-lg">
+                            <span>{member}</span>
+                            <button onClick={() => handleRemoveMember(member)} className="text-red-500 hover:bg-red-50 p-1 rounded"><Trash2 className="w-4 h-4"/></button>
+                        </div>
+                    ))}
+                </div>
+                <button onClick={() => setShowTeamModal(false)} className="w-full mt-4 py-2 text-stone-500 hover:bg-stone-100 rounded-lg">Fermer</button>
+            </div>
+          </div>
       )}
     </div>
   );
 }
 
 // --- Editeur de Projet (Admin) ---
-function ProjectEditor({ project, onDelete }: { project: Project, onDelete: () => void }) {
+function ProjectEditor({ project, isSuperAdmin, staffList }: { project: Project, isSuperAdmin: boolean, staffList: string[] }) {
   const [isExpanded, setIsExpanded] = useState(false);
   const [localData, setLocalData] = useState(project);
   const [hasChanges, setHasChanges] = useState(false);
   const [uploading, setUploading] = useState(false);
-  const [sendingMail, setSendingMail] = useState(false);
   const [viewAsClient, setViewAsClient] = useState(false); 
 
   useEffect(() => { if (!hasChanges) setLocalData(project); }, [project]);
@@ -512,14 +489,18 @@ function ProjectEditor({ project, onDelete }: { project: Project, onDelete: () =
   const handleSave = async () => {
     const { id, ...data } = localData;
     let docRef;
-    // CORRECTION ICI : Remplacement de colRef par docRef
-    if (typeof __app_id !== 'undefined') { 
-       docRef = doc(db, 'artifacts', typeof __app_id !== 'undefined' ? __app_id : 'default-app-id', 'public', 'data', COLLECTION_NAME, project.id); 
-    } else { 
-       docRef = doc(db, COLLECTION_NAME, project.id); 
-    }
+    if (typeof __app_id !== 'undefined') { docRef = doc(db, 'artifacts', typeof __app_id !== 'undefined' ? __app_id : 'default-app-id', 'public', 'data', COLLECTION_NAME, project.id); } 
+    else { docRef = doc(db, COLLECTION_NAME, project.id); }
     await updateDoc(docRef, data);
     setHasChanges(false); setIsExpanded(false);
+  };
+
+  const handleDelete = async () => {
+    if(!isSuperAdmin) return;
+    let docRef;
+    if (typeof __app_id !== 'undefined') { docRef = doc(db, 'artifacts', typeof __app_id !== 'undefined' ? __app_id : 'default-app-id', 'public', 'data', COLLECTION_NAME, project.id); } 
+    else { docRef = doc(db, COLLECTION_NAME, project.id); }
+    if (confirm('Supprimer définitivement ce projet ?')) await deleteDoc(docRef);
   };
 
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -533,17 +514,10 @@ function ProjectEditor({ project, onDelete }: { project: Project, onDelete: () =
     } catch (error: any) { alert(`Erreur: ${error.message}`); } finally { setUploading(false); }
   };
 
-  const sendEmailNotification = async (type: 'photo' | 'video') => {
-    if (!localData.clientEmail) { alert("Email manquant."); return; }
-    if (MAKE_WEBHOOK_URL.includes('VOTRE_URL_ICI')) { alert("Configurez le Webhook Make !"); return; }
-    setSendingMail(true);
-    try {
-        await fetch(MAKE_WEBHOOK_URL, {
-            method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ clientName: localData.clientNames, clientEmail: localData.clientEmail, projectCode: localData.code, type: type, newStatus: "Mise à jour", url: window.location.origin })
-        });
-        alert(`Notification envoyée !`);
-    } catch (error) { alert("Erreur Webhook."); } finally { setSendingMail(false); }
+  const sendEmailInvite = () => {
+      const subject = `Votre Espace Mariage - ${localData.clientNames}`;
+      const body = `Félicitations pour votre mariage !\n\nSuivez l'avancement de vos photos et vidéos sur votre espace dédié.\n\nLien : ${window.location.origin}\nVotre Code d'accès : ${localData.code}\n\nÀ très vite,\nL'équipe.`;
+      window.open(`mailto:${localData.clientEmail}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`);
   };
 
   const copyInvite = () => {
@@ -577,11 +551,12 @@ function ProjectEditor({ project, onDelete }: { project: Project, onDelete: () =
              <div className="flex items-center gap-2">
                  <h3 className="font-bold text-lg text-stone-900">{project.clientNames}</h3>
                  {project.isPriority && <span className="bg-amber-100 text-amber-700 text-xs px-2 py-0.5 rounded-full font-bold flex items-center gap-1"><Rocket className="w-3 h-3"/> PRIO</span>}
+                 {project.hasUnreadMessage && <span className="bg-red-500 text-white text-xs px-2 py-0.5 rounded-full font-bold animate-bounce">Nouveau Message</span>}
              </div>
              <div className="text-sm text-stone-500 flex items-center gap-3">
                <span className="font-mono bg-stone-100 px-1.5 py-0.5 rounded text-stone-600 select-all">{project.code}</span>
                <span>{new Date(project.weddingDate).toLocaleDateString()}</span>
-               {remaining > 0 && <span className="bg-red-100 text-red-600 px-2 rounded-full text-xs font-bold">Reste: {remaining}€</span>}
+               {isSuperAdmin && remaining > 0 && <span className="bg-red-100 text-red-600 px-2 rounded-full text-xs font-bold">Reste: {remaining}€</span>}
              </div>
           </div>
         </div>
@@ -603,9 +578,12 @@ function ProjectEditor({ project, onDelete }: { project: Project, onDelete: () =
            <div className="mb-6 flex justify-between items-center">
               <div className="flex gap-2">
                   <button onClick={() => setViewAsClient(true)} className="text-xs flex items-center gap-2 bg-stone-800 text-white px-3 py-1.5 rounded-lg hover:bg-stone-700 transition-colors"><Eye className="w-3 h-3"/> Voir comme le client</button>
-                  <label className="flex items-center gap-2 text-xs font-bold text-amber-700 cursor-pointer bg-amber-50 border border-amber-200 px-3 py-1.5 rounded-lg hover:bg-amber-100"><input type="checkbox" checked={localData.isPriority || false} onChange={e => updateField('isPriority', e.target.checked)} className="accent-amber-600" /> <Rocket className="w-3 h-3"/> Mode Priority (Fast Track)</label>
+                  <label className="flex items-center gap-2 text-xs font-bold text-amber-700 cursor-pointer bg-amber-50 border border-amber-200 px-3 py-1.5 rounded-lg hover:bg-amber-100"><input type="checkbox" checked={localData.isPriority || false} onChange={e => updateField('isPriority', e.target.checked)} className="accent-amber-600" /> <Rocket className="w-3 h-3"/> Mode Priority</label>
               </div>
-              <button onClick={copyInvite} className="text-xs flex items-center gap-2 bg-white border border-stone-200 px-3 py-1.5 rounded-lg hover:bg-stone-50 text-stone-600 transition-colors"><Copy className="w-3 h-3"/> Copier invitation</button>
+              <div className="flex gap-2">
+                  <button onClick={sendEmailInvite} className="text-xs flex items-center gap-2 bg-blue-600 text-white px-3 py-1.5 rounded-lg hover:bg-blue-700 transition-colors"><Mail className="w-3 h-3"/> Envoyer Email</button>
+                  <button onClick={copyInvite} className="text-xs flex items-center gap-2 bg-white border border-stone-200 px-3 py-1.5 rounded-lg hover:bg-stone-50 text-stone-600 transition-colors"><Copy className="w-3 h-3"/> Copier invitation</button>
+              </div>
            </div>
 
            <div className="grid lg:grid-cols-2 gap-6">
@@ -614,7 +592,7 @@ function ProjectEditor({ project, onDelete }: { project: Project, onDelete: () =
                     <div><label className="text-xs font-semibold text-stone-500 uppercase block mb-1">Responsable</label><input className="w-full text-sm border-b border-stone-200 py-1 focus:outline-none focus:border-stone-500 bg-transparent" value={localData.managerName || ''} onChange={e => updateField('managerName', e.target.value)} /></div>
                     <div>
                         <label className="text-xs font-semibold text-stone-500 uppercase block mb-2">Équipe sur place (Tags)</label>
-                        <div className="flex flex-wrap gap-2">{STAFF_LIST.map(member => (<button key={member} onClick={() => toggleTeamMember(member)} className={`text-xs px-3 py-1 rounded-full border transition-all ${(localData.onSiteTeam || []).includes(member) ? 'bg-stone-800 text-white border-stone-800' : 'bg-white text-stone-500 border-stone-200 hover:border-stone-400'}`}>{member}</button>))}</div>
+                        <div className="flex flex-wrap gap-2">{staffList.map(member => (<button key={member} onClick={() => toggleTeamMember(member)} className={`text-xs px-3 py-1 rounded-full border transition-all ${(localData.onSiteTeam || []).includes(member) ? 'bg-stone-800 text-white border-stone-800' : 'bg-white text-stone-500 border-stone-200 hover:border-stone-400'}`}>{member}</button>))}</div>
                     </div>
                     <div className="grid grid-cols-2 gap-4">
                         <div><label className="text-xs font-semibold text-stone-500 uppercase flex items-center gap-1 mb-1"><AtSign className="w-3 h-3" /> Email Mariés</label><input className="w-full text-sm border-b border-stone-200 py-1 focus:outline-none focus:border-stone-500 bg-transparent" value={localData.clientEmail || ''} onChange={e => updateField('clientEmail', e.target.value)} /></div>
@@ -622,15 +600,16 @@ function ProjectEditor({ project, onDelete }: { project: Project, onDelete: () =
                     </div>
                </div>
 
-               <div className="bg-white p-4 rounded-xl border border-stone-200 shadow-sm space-y-4 relative overflow-hidden">
-                    <h4 className="font-bold text-stone-700 flex items-center gap-2"><Euro className="w-4 h-4" /> Finance & Dates</h4>
-                    <div className="grid grid-cols-2 gap-4">
-                        <div><label className="text-xs font-semibold text-stone-500 uppercase block mb-1">Total Devis (€)</label><input type="number" className="w-full text-sm font-mono border-b border-stone-200 py-1 focus:outline-none focus:border-stone-500 bg-transparent" value={localData.totalPrice || 0} onChange={e => updateField('totalPrice', parseFloat(e.target.value))} /></div>
-                        <div><label className="text-xs font-semibold text-stone-500 uppercase block mb-1">Acompte Reçu (€)</label><input type="number" className="w-full text-sm font-mono border-b border-stone-200 py-1 focus:outline-none focus:border-stone-500 bg-transparent" value={localData.depositAmount || 0} onChange={e => updateField('depositAmount', parseFloat(e.target.value))} /></div>
-                    </div>
-                    <div className={`p-3 rounded-lg flex justify-between items-center ${remaining > 0 ? 'bg-red-50 text-red-700' : 'bg-green-50 text-green-700'}`}><span className="text-sm font-bold">Reste à payer :</span><span className="text-lg font-bold">{remaining} €</span></div>
-                    <div className="pt-2 border-t border-stone-100"><label className="text-xs font-semibold text-stone-500 uppercase flex items-center gap-1 mb-1"><Clock className="w-3 h-3" /> Date Livraison Prévue</label><input type="date" className="w-full text-sm border-b border-stone-200 py-1 focus:outline-none focus:border-stone-500 bg-transparent" value={localData.estimatedDelivery || ''} onChange={e => updateField('estimatedDelivery', e.target.value)} /></div>
-               </div>
+               {isSuperAdmin && (
+                   <div className="bg-white p-4 rounded-xl border border-stone-200 shadow-sm space-y-4 relative overflow-hidden">
+                        <h4 className="font-bold text-stone-700 flex items-center gap-2"><Euro className="w-4 h-4" /> Finance (Super Admin)</h4>
+                        <div className="grid grid-cols-2 gap-4">
+                            <div><label className="text-xs font-semibold text-stone-500 uppercase block mb-1">Total Devis (€)</label><input type="number" className="w-full text-sm font-mono border-b border-stone-200 py-1 focus:outline-none focus:border-stone-500 bg-transparent" value={localData.totalPrice || 0} onChange={e => updateField('totalPrice', parseFloat(e.target.value))} /></div>
+                            <div><label className="text-xs font-semibold text-stone-500 uppercase block mb-1">Acompte Reçu (€)</label><input type="number" className="w-full text-sm font-mono border-b border-stone-200 py-1 focus:outline-none focus:border-stone-500 bg-transparent" value={localData.depositAmount || 0} onChange={e => updateField('depositAmount', parseFloat(e.target.value))} /></div>
+                        </div>
+                        <div className={`p-3 rounded-lg flex justify-between items-center ${remaining > 0 ? 'bg-red-50 text-red-700' : 'bg-green-50 text-green-700'}`}><span className="text-sm font-bold">Reste à payer :</span><span className="text-lg font-bold">{remaining} €</span></div>
+                   </div>
+               )}
            </div>
 
            <div className="mt-6">
@@ -648,8 +627,13 @@ function ProjectEditor({ project, onDelete }: { project: Project, onDelete: () =
                <div className="bg-white p-4 rounded-xl border border-stone-200 shadow-sm">
                  <div className="flex items-center justify-between mb-4"><h4 className="font-bold text-stone-700 flex items-center gap-2"><Camera className="w-4 h-4 text-amber-500"/> Photo</h4><span className="text-xs font-bold bg-amber-100 text-amber-700 px-2 py-1 rounded-full">{localData.progressPhoto}%</span></div>
                  <div className="space-y-3">
-                   <div><label className="text-xs font-semibold text-stone-500 uppercase">Photographe</label><input className="w-full text-sm border-b border-stone-200 py-1 focus:outline-none focus:border-amber-500 bg-transparent" value={localData.photographerName} onChange={e => updateField('photographerName', e.target.value)} /></div>
-                   <div><label className="text-xs font-semibold text-stone-500 uppercase">Étape</label><div className="flex gap-2"><select className="flex-1 mt-1 p-2 bg-stone-50 border rounded-lg text-sm focus:ring-2 focus:ring-amber-500 outline-none" value={localData.statusPhoto} onChange={e => updateField('statusPhoto', e.target.value as any)}>{Object.entries(PHOTO_STEPS).filter(([k]) => k !== 'none').map(([k, s]) => (<option key={k} value={k}>{s.label}</option>))}</select><button onClick={() => sendEmailNotification('photo')} disabled={sendingMail} title="Notifier le client" className="mt-1 p-2 text-stone-500 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition-colors border border-stone-200 disabled:opacity-50">{sendingMail ? <Loader2 className="w-4 h-4 animate-spin"/> : <Send className="w-4 h-4" />}</button></div></div>
+                   <div><label className="text-xs font-semibold text-stone-500 uppercase">Photographe</label>
+                   <select className="w-full text-sm border-b border-stone-200 py-1 focus:outline-none focus:border-amber-500 bg-transparent" value={localData.photographerName} onChange={e => updateField('photographerName', e.target.value)}>
+                        <option value="">Choisir...</option>
+                        {staffList.map(s => <option key={s} value={s}>{s}</option>)}
+                   </select>
+                   </div>
+                   <div><label className="text-xs font-semibold text-stone-500 uppercase">Étape</label><div className="flex gap-2"><select className="flex-1 mt-1 p-2 bg-stone-50 border rounded-lg text-sm focus:ring-2 focus:ring-amber-500 outline-none" value={localData.statusPhoto} onChange={e => updateField('statusPhoto', e.target.value as any)}>{Object.entries(PHOTO_STEPS).filter(([k]) => k !== 'none').map(([k, s]) => (<option key={k} value={k}>{s.label}</option>))}</select></div></div>
                    <div><label className="text-xs font-semibold text-stone-500 uppercase flex items-center gap-1"><LinkIcon className="w-3 h-3"/> Lien Livraison</label><input className="w-full mt-1 p-2 bg-stone-50 border rounded-lg text-sm focus:ring-2 focus:ring-amber-500 outline-none" placeholder="https://..." value={localData.linkPhoto || ''} onChange={e => updateField('linkPhoto', e.target.value)} /></div>
                  </div>
                </div>
@@ -658,23 +642,28 @@ function ProjectEditor({ project, onDelete }: { project: Project, onDelete: () =
                <div className="bg-white p-4 rounded-xl border border-stone-200 shadow-sm">
                  <div className="flex items-center justify-between mb-4"><h4 className="font-bold text-stone-700 flex items-center gap-2"><Video className="w-4 h-4 text-sky-500"/> Vidéo</h4><span className="text-xs font-bold bg-sky-100 text-sky-700 px-2 py-1 rounded-full">{localData.progressVideo}%</span></div>
                  <div className="space-y-3">
-                   <div><label className="text-xs font-semibold text-stone-500 uppercase">Vidéaste</label><input className="w-full text-sm border-b border-stone-200 py-1 focus:outline-none focus:border-sky-500 bg-transparent" value={localData.videographerName} onChange={e => updateField('videographerName', e.target.value)} /></div>
-                   <div><label className="text-xs font-semibold text-stone-500 uppercase">Étape</label><div className="flex gap-2"><select className="flex-1 mt-1 p-2 bg-stone-50 border rounded-lg text-sm focus:ring-2 focus:ring-sky-500 outline-none" value={localData.statusVideo} onChange={e => updateField('statusVideo', e.target.value as any)}>{Object.entries(VIDEO_STEPS).filter(([k]) => k !== 'none').map(([k, s]) => (<option key={k} value={k}>{s.label}</option>))}</select><button onClick={() => sendEmailNotification('video')} disabled={sendingMail} title="Notifier le client" className="mt-1 p-2 text-stone-500 hover:text-sky-600 hover:bg-sky-50 rounded-lg transition-colors border border-stone-200 disabled:opacity-50">{sendingMail ? <Loader2 className="w-4 h-4 animate-spin"/> : <Send className="w-4 h-4" />}</button></div></div>
+                   <div><label className="text-xs font-semibold text-stone-500 uppercase">Vidéaste</label>
+                   <select className="w-full text-sm border-b border-stone-200 py-1 focus:outline-none focus:border-sky-500 bg-transparent" value={localData.videographerName} onChange={e => updateField('videographerName', e.target.value)}>
+                        <option value="">Choisir...</option>
+                        {staffList.map(s => <option key={s} value={s}>{s}</option>)}
+                   </select>
+                   </div>
+                   <div><label className="text-xs font-semibold text-stone-500 uppercase">Étape</label><div className="flex gap-2"><select className="flex-1 mt-1 p-2 bg-stone-50 border rounded-lg text-sm focus:ring-2 focus:ring-sky-500 outline-none" value={localData.statusVideo} onChange={e => updateField('statusVideo', e.target.value as any)}>{Object.entries(VIDEO_STEPS).filter(([k]) => k !== 'none').map(([k, s]) => (<option key={k} value={k}>{s.label}</option>))}</select></div></div>
                    <div><label className="text-xs font-semibold text-stone-500 uppercase flex items-center gap-1"><LinkIcon className="w-3 h-3"/> Lien Livraison</label><input className="w-full mt-1 p-2 bg-stone-50 border rounded-lg text-sm focus:ring-2 focus:ring-sky-500 outline-none" placeholder="https://..." value={localData.linkVideo || ''} onChange={e => updateField('linkVideo', e.target.value)} /></div>
                  </div>
                </div>
              )}
            </div>
 
-           {localData.clientNotes && (
-             <div className="mt-6 bg-amber-50 p-4 rounded-xl border border-amber-100 shadow-sm">
-               <h4 className="font-bold text-amber-800 mb-2 flex items-center gap-2"><MessageSquare className="w-4 h-4" /> Message des Mariés (Demandes de retouches)</h4>
-               <p className="text-stone-700 text-sm whitespace-pre-wrap italic">{localData.clientNotes}</p>
-             </div>
-           )}
+           {/* --- CHAT ADMIN --- */}
+           <div className="mt-8">
+               <ChatBox project={localData} userType="admin" />
+           </div>
            
            <div className="flex justify-between items-center pt-6 mt-6 border-t border-stone-200">
-             <button onClick={onDelete} className="text-red-500 text-sm flex gap-1.5 hover:bg-red-50 px-3 py-2 rounded-lg transition"><Trash2 className="w-4 h-4"/> Supprimer projet</button>
+             {isSuperAdmin ? (
+                 <button onClick={handleDelete} className="text-red-500 text-sm flex gap-1.5 hover:bg-red-50 px-3 py-2 rounded-lg transition"><Trash2 className="w-4 h-4"/> Supprimer projet</button>
+             ) : <div></div>}
              <div className="flex gap-3">
                {hasChanges && <button onClick={() => { setLocalData(project); setHasChanges(false); }} className="px-4 py-2 text-stone-600 hover:bg-stone-100 rounded-lg">Annuler</button>}
                <button onClick={handleSave} disabled={!hasChanges} className={`px-6 py-2 rounded-lg font-medium shadow-sm transition-all ${hasChanges ? 'bg-blue-600 text-white hover:bg-blue-700 hover:shadow-md' : 'bg-stone-200 text-stone-400 cursor-not-allowed'}`}>Enregistrer</button>
@@ -692,8 +681,6 @@ function ClientPortal({ projects, onBack }: { projects: Project[], onBack: () =>
   const [foundProject, setFoundProject] = useState<Project | null>(null);
   const [error, setError] = useState('');
   const [imgError, setImgError] = useState(false);
-  const [notes, setNotes] = useState('');
-  const [savingNotes, setSavingNotes] = useState(false);
   const [emailCopied, setEmailCopied] = useState(false);
 
   useEffect(() => {
@@ -708,31 +695,10 @@ function ClientPortal({ projects, onBack }: { projects: Project[], onBack: () =>
     const project = projects.find(p => p.code === cleanCode);
     if (project) { 
       setFoundProject(project); 
-      setNotes(project.clientNotes || ''); 
       setError(''); 
       setImgError(false);
     } 
     else { setError('Code introuvable.'); setFoundProject(null); }
-  };
-
-  const handleSaveNotes = async () => {
-    if (!foundProject) return;
-    setSavingNotes(true);
-    try {
-      let docRef;
-      // CORRECTION ICI : Remplacement de colRef par docRef
-      if (typeof __app_id !== 'undefined') { 
-         docRef = doc(db, 'artifacts', typeof __app_id !== 'undefined' ? __app_id : 'default-app-id', 'public', 'data', COLLECTION_NAME, foundProject.id); 
-      } else { 
-         docRef = doc(db, COLLECTION_NAME, foundProject.id); 
-      }
-      await updateDoc(docRef, { clientNotes: notes });
-      alert('Votre demande de retouche a bien été transmise à l\'équipe !');
-    } catch (err) { 
-      alert('Erreur lors de la sauvegarde.'); 
-    } finally { 
-      setSavingNotes(false); 
-    }
   };
 
   const copyProdEmail = () => {
@@ -846,16 +812,12 @@ function ClientPortal({ projects, onBack }: { projects: Project[], onBack: () =>
                 </div>
               </div>
             )}
-            <div className="border-t border-stone-100 pt-8 mt-8">
-              <h4 className="font-serif text-xl text-stone-800 mb-4 flex items-center gap-2"><MessageSquare className="w-5 h-5 text-stone-400" /> Espace Échanges & Modifications</h4>
-              <p className="text-stone-500 text-sm mb-4">Utilisez cet espace pour lister vos demandes de retouches précises (ex: "Video 04:12 - Couper le plan flou"). L'équipe validera ici.</p>
-              <textarea className="w-full border border-stone-200 rounded-xl p-4 text-stone-700 focus:ring-2 focus:ring-stone-800 outline-none resize-none bg-stone-50" rows={6} placeholder="Vos demandes..." value={notes} onChange={(e) => setNotes(e.target.value)} />
-              <div className="flex justify-end mt-3">
-                <button onClick={handleSaveNotes} disabled={savingNotes} className="bg-stone-800 text-white px-6 py-2 rounded-lg font-medium hover:bg-stone-700 transition-colors flex items-center gap-2 disabled:opacity-50">
-                  {savingNotes ? <Loader2 className="w-4 h-4 animate-spin"/> : <Save className="w-4 h-4"/>} Envoyer ma demande
-                </button>
-              </div>
+            
+            {/* --- CHAT CLIENT --- */}
+            <div className="mt-8">
+               <ChatBox project={foundProject} userType="client" />
             </div>
+
           </div>
         </div>
       </div>
@@ -873,6 +835,101 @@ function ClientPortal({ projects, onBack }: { projects: Project[], onBack: () =>
         </form>
         {error && <div className="mt-4 text-red-500 text-sm bg-red-50 p-3 rounded-lg flex items-center justify-center gap-2"><AlertCircle className="w-4 h-4"/> {error}</div>}
       </div>
+    </div>
+  );
+}
+
+// --- Vue Archive (Lead Capture) ---
+function ArchiveView({ onBack }: { onBack: () => void }) {
+  const [step, setStep] = useState(1);
+  const [date, setDate] = useState('');
+  const [leadName, setLeadName] = useState('');
+  const [leadEmail, setLeadEmail] = useState('');
+  const [leadPhone, setLeadPhone] = useState('');
+  const [loading, setLoading] = useState(false);
+  
+  const handleCheck = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!date) return;
+    setStep(1.5);
+  };
+
+  const handleCaptureLead = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    let colRef;
+    if (typeof __app_id !== 'undefined') { colRef = collection(db, 'artifacts', typeof __app_id !== 'undefined' ? __app_id : 'default-app-id', 'public', 'data', LEADS_COLLECTION); } 
+    else { colRef = collection(db, LEADS_COLLECTION); }
+    try {
+        await addDoc(colRef, {
+            name: leadName, email: leadEmail, phone: leadPhone, weddingDate: date,
+            createdAt: serverTimestamp(), source: 'archive_check'
+        });
+    } catch (err) { console.error("Erreur sauvegarde lead", err); }
+    setLoading(false);
+    
+    const year = new Date(date).getFullYear();
+    if (year < 2022) { setStep(3); } else { setStep(2); }
+  };
+
+  return (
+    <div className="min-h-screen bg-stone-900 flex items-center justify-center p-4 relative">
+       <button onClick={onBack} className="absolute top-6 left-6 text-stone-400 hover:text-white flex gap-2 transition-colors"><LogOut className="w-4 h-4" /> Retour</button>
+       
+       <div className="w-full max-w-md bg-white rounded-2xl shadow-2xl overflow-hidden">
+         <div className="bg-stone-100 p-6 text-center border-b border-stone-200">
+            <div className="w-16 h-16 bg-stone-800 rounded-full flex items-center justify-center mx-auto mb-4 text-amber-400 shadow-lg"><ShieldCheck className="w-8 h-8" /></div>
+            <h2 className="text-2xl font-serif text-stone-900">Vérification des Archives</h2>
+         </div>
+
+         <div className="p-8">
+            {step === 1 && (
+              <form onSubmit={handleCheck} className="space-y-6 animate-fade-in">
+                <div className="bg-amber-50 border border-amber-200 p-4 rounded-lg flex gap-3 text-sm text-amber-800">
+                  <AlertCircle className="w-5 h-5 shrink-0" />
+                  <p>Suite à une maintenance serveur, certaines archives anciennes ne sont plus accessibles. Vérifiez votre éligibilité.</p>
+                </div>
+                <div>
+                  <label className="block text-sm font-bold text-stone-700 uppercase mb-2">Date de votre mariage</label>
+                  <input required type="date" value={date} onChange={(e) => setDate(e.target.value)} className="w-full p-4 border-2 border-stone-200 rounded-xl focus:border-stone-800 outline-none transition-colors" />
+                </div>
+                <button type="submit" className="w-full bg-stone-900 text-white py-4 rounded-xl font-bold text-lg hover:bg-black transition-transform active:scale-95">Vérifier mes fichiers</button>
+              </form>
+            )}
+
+            {step === 1.5 && (
+               <form onSubmit={handleCaptureLead} className="space-y-4 animate-fade-in">
+                  <div className="text-center mb-6"><h3 className="font-bold text-lg text-stone-900">Sécurisation de la requête</h3><p className="text-sm text-stone-500">Pour accéder au résultat, confirmez vos coordonnées.</p></div>
+                  <div><label className="block text-xs font-bold text-stone-500 uppercase mb-1">Nom & Prénom</label><input required type="text" value={leadName} onChange={(e) => setLeadName(e.target.value)} className="w-full p-3 border rounded-lg" /></div>
+                  <div><label className="block text-xs font-bold text-stone-500 uppercase mb-1">Email</label><input required type="email" value={leadEmail} onChange={(e) => setLeadEmail(e.target.value)} className="w-full p-3 border rounded-lg" /></div>
+                  <div><label className="block text-xs font-bold text-stone-500 uppercase mb-1">Téléphone</label><input required type="tel" value={leadPhone} onChange={(e) => setLeadPhone(e.target.value)} className="w-full p-3 border rounded-lg" /></div>
+                  <button disabled={loading} type="submit" className="w-full bg-stone-900 text-white py-4 rounded-xl font-bold text-lg hover:bg-black flex items-center justify-center gap-2">{loading ? <Loader2 className="w-5 h-5 animate-spin"/> : 'Accéder au résultat'}</button>
+               </form>
+            )}
+
+            {step === 2 && (
+              <div className="text-center space-y-6 animate-fade-in">
+                <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto text-green-600"><CheckCircle className="w-8 h-8" /></div>
+                <div><h3 className="text-2xl font-bold text-stone-900">Bonne nouvelle !</h3><p className="text-stone-600 mt-2">Vos fichiers sont présents.</p></div>
+                <div className="bg-stone-50 p-6 rounded-xl border border-stone-200 text-left space-y-4">
+                  <div className="flex justify-between items-center"><span className="font-bold text-stone-700">Taille estimée</span><span className="font-mono text-stone-500">~450 Go</span></div>
+                  <div className="flex justify-between items-center"><span className="font-bold text-stone-900">Pack Sécurité à vie</span><span className="text-2xl font-bold text-green-600">199 €</span></div>
+                </div>
+                <a href={STRIPE_ARCHIVE_LINK} target="_blank" rel="noopener noreferrer" className="block w-full bg-green-600 text-white py-4 rounded-xl font-bold text-lg hover:bg-green-700 transition-colors shadow-lg shadow-green-200 text-center flex items-center justify-center gap-2">
+                  <CreditCard className="w-5 h-5"/> Sécuriser maintenant (CB)
+                </a>
+              </div>
+            )}
+
+            {step === 3 && (
+               <div className="text-center space-y-6 animate-fade-in">
+                 <div className="w-16 h-16 bg-red-50 rounded-full flex items-center justify-center mx-auto text-red-500"><History className="w-8 h-8" /></div>
+                 <div><h3 className="text-xl font-bold text-stone-900">Archives Indisponibles</h3><p className="text-stone-600 mt-2 text-sm">Désolé, les serveurs d'avant 2022 ont été purgés.</p></div>
+                 <button onClick={() => setStep(1)} className="text-stone-400 underline text-sm hover:text-stone-800">Réessayer une autre date</button>
+               </div>
+            )}
+         </div>
+       </div>
     </div>
   );
 }
