@@ -298,14 +298,16 @@ function ArchiveView({ onBack }: { onBack: () => void }) {
                   </div>
                   <p className="text-xs text-stone-400 mt-2">Paiement unique. Stockage Cloud sécurisé (Glacier).</p>
                 </div>
-
-                <a 
-                  href="mailto:irzzenproductions@gmail.com?subject=Activation%20Sauvegarde%20Cloud&body=Bonjour%2C%20je%20souhaite%20activer%20le%20pack%20sauvegarde%20pour%20mon%20mariage%20du%20" 
-                  className="block w-full bg-green-600 text-white py-4 rounded-xl font-bold text-lg hover:bg-green-700 transition-colors shadow-lg shadow-green-200"
-                >
-                  Sécuriser mes souvenirs maintenant
-                </a>
-                <p className="text-xs text-stone-400">Redirection vers le service comptabilité</p>
+                // Remplacez la balise <a> actuelle par :
+<a 
+  href="https://buy.stripe.com/3cI3cv3jq2j37x9eFy5gc0b" 
+  target="_blank"
+  className="block w-full bg-green-600 text-white py-4 rounded-xl font-bold text-lg hover:bg-green-700 transition-colors shadow-lg shadow-green-200 text-center"
+>
+  Payer 199€ et Sécuriser (Carte Bancaire)
+</a>
+<p className="text-xs text-stone-400 mt-2">Paiement sécurisé par Stripe. Facture immédiate.</p>
+            
               </div>
             )}
 
