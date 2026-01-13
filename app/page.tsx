@@ -720,11 +720,19 @@ function ClientPortal({ projects, onBack }: { projects: Project[], onBack: () =>
     setSavingNotes(true);
     try {
       let docRef;
-      if (typeof __app_id !== 'undefined') { colRef = doc(db, 'artifacts', typeof __app_id !== 'undefined' ? __app_id : 'default-app-id', 'public', 'data', COLLECTION_NAME, foundProject.id); } 
-      else { docRef = doc(db, COLLECTION_NAME, foundProject.id); }
+      // CORRECTION ICI : Remplacement de colRef par docRef
+      if (typeof __app_id !== 'undefined') { 
+         docRef = doc(db, 'artifacts', typeof __app_id !== 'undefined' ? __app_id : 'default-app-id', 'public', 'data', COLLECTION_NAME, foundProject.id); 
+      } else { 
+         docRef = doc(db, COLLECTION_NAME, foundProject.id); 
+      }
       await updateDoc(docRef, { clientNotes: notes });
       alert('Votre demande de retouche a bien été transmise à l\'équipe !');
-    } catch (err) { alert('Erreur lors de la sauvegarde.'); } finally { setSavingNotes(false); }
+    } catch (err) { 
+      alert('Erreur lors de la sauvegarde.'); 
+    } finally { 
+      setSavingNotes(false); 
+    }
   };
 
   const copyProdEmail = () => {
