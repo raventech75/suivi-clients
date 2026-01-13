@@ -9,7 +9,7 @@ import {
   UserCheck, Users as UsersIcon, ImagePlus, Hourglass,
   Upload, Loader2, AtSign, MessageSquare, Send,
   Copy, ClipboardCheck, BookOpen, ArrowRight, HardDrive, ShieldCheck, History,
-  Euro, Eye, AlertTriangle, CreditCard, X, Phone, Rocket, Star, Mail, Settings, Menu
+  Euro, Eye, AlertTriangle, CreditCard, X, Phone, Rocket, Star, Mail, Settings, Menu, AlertOctagon
 } from 'lucide-react';
 
 // --- Configuration Firebase ---
@@ -51,10 +51,9 @@ const storage = getStorage(app);
 const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
 
 // --- CONFIGURATION ---
-// ⚠️ VOTRE WEBHOOK MAKE (Integromat)
-const MAKE_WEBHOOK_URL = "https://hook.eu2.make.com/iwf8nbt3tywmywp6u89xgn7e2nar0bbs"; 
+const MAKE_WEBHOOK_URL = "https://hook.eu1.make.com/VOTRE_URL_ICI"; 
 
-// ⚠️ EMAILS ADMINS (Qui voient la finance et peuvent supprimer)
+// ⚠️ AJOUTEZ ICI LES EMAILS DES PATRONS (Finance + Suppression)
 const SUPER_ADMINS = ["admin@raventech.fr", "irzzenproductions@gmail.com"]; 
 
 const STRIPE_ARCHIVE_LINK = "https://buy.stripe.com/3cI3cv3jq2j37x9eFy5gc0b";
@@ -64,9 +63,9 @@ const COLLECTION_NAME = 'wedding_projects';
 const LEADS_COLLECTION = 'leads';
 const SETTINGS_COLLECTION = 'settings'; 
 
-// --- Types & Interfaces ---
+// --- Types ---
 interface Message {
-  id: string; // Pour suppression
+  id: string;
   author: 'client' | 'admin';
   text: string;
   date: any; 
@@ -98,12 +97,13 @@ interface Project {
   depositAmount?: number;
   isPriority?: boolean; 
   createdAt: any;
+  lastUpdated?: any; // Pour alerte 7 jours
 }
 
 const PHOTO_STEPS = {
   'waiting': { label: 'En attente', percent: 5 },
   'culling': { label: 'Tri & Sélection', percent: 30 },
-  'editing': { label: 'Retouches & Colo', percent: 65 }, // Raccourci pour mobile
+  'editing': { label: 'Retouches & Colo', percent: 65 },
   'exporting': { label: 'Export HD', percent: 90 },
   'delivered': { label: 'Livré', percent: 100 },
   'none': { label: 'Non inclus', percent: 0 }
@@ -133,28 +133,35 @@ export default function WeddingTracker() {
     return () => unsubscribeAuth();
   }, []);
 
+  // Chargement des données Live
   useEffect(() => {
     if (!user) return;
     
-    // 1. Projets
+    // 1. Projets (Écoute Temps Réel)
     let colRef;
     if (typeof __app_id !== 'undefined') { colRef = collection(db, 'artifacts', appId, 'public', 'data', COLLECTION_NAME); } 
     else { colRef = collection(db, COLLECTION_NAME); }
+    
     const q = query(colRef);
     const unsubscribeData = onSnapshot(q, (snapshot) => {
       const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as Project[];
+      
+      // Tri Intelligent
       const sortedData = data.sort((a, b) => {
+          // Priorité aux messages non lus
           if (a.hasUnreadMessage && !b.hasUnreadMessage) return -1;
           if (!a.hasUnreadMessage && b.hasUnreadMessage) return 1;
+          // Puis Priorité payante
           if (a.isPriority && !b.isPriority) return -1;
           if (!a.isPriority && b.isPriority) return 1;
+          // Enfin par date
           return new Date(b.weddingDate).getTime() - new Date(a.weddingDate).getTime();
       });
       setProjects(sortedData);
       setLoading(false);
     });
 
-    // 2. Staff List (Settings)
+    // 2. Liste Staff (Settings)
     let settingsRef;
     if (typeof __app_id !== 'undefined') { settingsRef = doc(db, 'artifacts', appId, 'public', 'data', SETTINGS_COLLECTION, 'general'); } 
     else { settingsRef = doc(db, SETTINGS_COLLECTION, 'general'); }
@@ -162,8 +169,7 @@ export default function WeddingTracker() {
     getDoc(settingsRef).then(docSnap => {
         if(docSnap.exists()) setStaffList(docSnap.data().staff || []);
         else {
-            // Initialisation si vide
-            const defaultStaff = ["Photographe 1", "Vidéaste 1"];
+            const defaultStaff = ["Photographe 1", "Vidéaste 1"]; // Valeur par défaut
             setDoc(settingsRef, { staff: defaultStaff });
             setStaffList(defaultStaff);
         }
@@ -188,12 +194,13 @@ export default function WeddingTracker() {
   );
 }
 
-// --- Composant Chat (Optimisé Instantané + Suppression) ---
+// --- Composant Chat Live (Fixé) ---
 function ChatBox({ project, userType }: { project: Project, userType: 'admin' | 'client' }) {
     const [msgText, setMsgText] = useState('');
     const [sending, setSending] = useState(false);
     const scrollRef = useRef<HTMLDivElement>(null);
 
+    // On utilise les messages DIRECTEMENT du projet live (pas de copie locale)
     const messages = project.messages || [];
 
     useEffect(() => {
@@ -204,18 +211,21 @@ function ChatBox({ project, userType }: { project: Project, userType: 'admin' | 
         if(!msgText.trim()) return;
         setSending(true);
         const newMessage: Message = {
-            id: Date.now().toString(), // ID unique pour suppression
+            id: Date.now().toString(),
             author: userType,
             text: msgText,
             date: new Date().toISOString()
         };
 
-        // Optimistic UI : On pourrait l'ajouter localement mais le snapshot est rapide.
         let docRef;
         if (typeof __app_id !== 'undefined') { docRef = doc(db, 'artifacts', typeof __app_id !== 'undefined' ? __app_id : 'default-app-id', 'public', 'data', COLLECTION_NAME, project.id); } 
         else { docRef = doc(db, COLLECTION_NAME, project.id); }
 
-        const updates: any = { messages: arrayUnion(newMessage) };
+        const updates: any = { 
+            messages: arrayUnion(newMessage),
+            lastUpdated: serverTimestamp() // Reset le compteur 7 jours
+        };
+        // Gestion des notifications de lecture
         if (userType === 'client') updates.hasUnreadMessage = true;
         if (userType === 'admin') updates.hasUnreadMessage = false;
 
@@ -226,55 +236,35 @@ function ChatBox({ project, userType }: { project: Project, userType: 'admin' | 
 
     const handleDeleteMessage = async (msgToDelete: Message) => {
         if (!confirm("Supprimer ce message ?")) return;
-        
-        // Firestore ne permet pas de supprimer un objet spécifique d'un tableau facilement sans l'objet exact.
-        // On va filtrer le tableau complet et le réécrire.
         const updatedMessages = messages.filter(m => m.id !== msgToDelete.id);
-        
         let docRef;
         if (typeof __app_id !== 'undefined') { docRef = doc(db, 'artifacts', typeof __app_id !== 'undefined' ? __app_id : 'default-app-id', 'public', 'data', COLLECTION_NAME, project.id); } 
         else { docRef = doc(db, COLLECTION_NAME, project.id); }
-
         await updateDoc(docRef, { messages: updatedMessages });
     };
 
     return (
         <div className="flex flex-col h-[400px] border border-stone-200 rounded-xl bg-stone-50 overflow-hidden shadow-sm">
             <div className="bg-white p-3 border-b border-stone-100 flex justify-between items-center">
-                <h4 className="font-bold text-stone-700 text-sm flex items-center gap-2"><MessageSquare className="w-4 h-4"/> Chat {userType === 'admin' ? 'Mariés' : 'Studio'}</h4>
+                <h4 className="font-bold text-stone-700 text-sm flex items-center gap-2"><MessageSquare className="w-4 h-4"/> Messagerie {userType === 'admin' ? 'Mariés' : 'Studio'}</h4>
             </div>
             <div ref={scrollRef} className="flex-1 overflow-y-auto p-3 space-y-3">
-                {messages.length === 0 && <p className="text-center text-stone-400 text-xs mt-10">Démarrez la conversation...</p>}
+                {messages.length === 0 && <p className="text-center text-stone-400 text-xs mt-10">Aucun message. Démarrez la conversation !</p>}
                 {messages.map((m, idx) => (
                     <div key={idx} className={`flex ${m.author === userType ? 'justify-end' : 'justify-start'}`}>
                         <div className={`max-w-[85%] p-3 rounded-2xl text-sm relative group ${m.author === userType ? 'bg-stone-800 text-white rounded-tr-none' : 'bg-white border border-stone-200 rounded-tl-none text-stone-800 shadow-sm'}`}>
                             <p className="whitespace-pre-wrap">{m.text}</p>
-                            <span className={`text-[9px] block mt-1 opacity-60 text-right`}>{new Date(m.date).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
-                            
-                            {/* Bouton Supprimer (Uniquement pour Admin sur tous les messages, ou Client sur ses messages ? Ici Admin All) */}
+                            <span className="text-[9px] block mt-1 opacity-60 text-right">{new Date(m.date).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
                             {userType === 'admin' && (
-                                <button 
-                                    onClick={() => handleDeleteMessage(m)}
-                                    className="absolute -top-2 -right-2 bg-red-100 text-red-500 p-1 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
-                                >
-                                    <X className="w-3 h-3" />
-                                </button>
+                                <button onClick={() => handleDeleteMessage(m)} className="absolute -top-2 -right-2 bg-red-100 text-red-500 p-1 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"><X className="w-3 h-3" /></button>
                             )}
                         </div>
                     </div>
                 ))}
             </div>
             <div className="p-2 bg-white border-t border-stone-100 flex gap-2">
-                <input 
-                    className="flex-1 bg-stone-100 rounded-full px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-stone-200" 
-                    placeholder="Écrivez ici..." 
-                    value={msgText} 
-                    onChange={e => setMsgText(e.target.value)}
-                    onKeyDown={e => e.key === 'Enter' && handleSend()}
-                />
-                <button onClick={handleSend} disabled={sending} className="bg-stone-800 text-white p-3 rounded-full hover:bg-stone-700 transition-colors disabled:opacity-50">
-                    {sending ? <Loader2 className="w-4 h-4 animate-spin"/> : <Send className="w-4 h-4"/>}
-                </button>
+                <input className="flex-1 bg-stone-100 rounded-full px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-stone-200" placeholder="Votre message..." value={msgText} onChange={e => setMsgText(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleSend()} />
+                <button onClick={handleSend} disabled={sending} className="bg-stone-800 text-white p-3 rounded-full hover:bg-stone-700 transition-colors disabled:opacity-50">{sending ? <Loader2 className="w-4 h-4 animate-spin"/> : <Send className="w-4 h-4"/>}</button>
             </div>
         </div>
     );
@@ -299,18 +289,17 @@ function AdminDashboard({ projects, user, onLogout, staffList, setStaffList }: {
   const handleLogin = async (e: React.FormEvent) => {
       e.preventDefault();
       try { await signInWithEmailAndPassword(auth, emailInput, passInput); } 
-      catch (err: any) { setErrorMsg("Email ou mot de passe incorrect."); }
+      catch (err: any) { setErrorMsg("Identifiants incorrects."); }
   };
 
+  // Gestion Staff
   const handleAddMember = async () => {
       if(!newMember.trim()) return;
       const updatedList = [...staffList, newMember];
       setStaffList(updatedList);
-      
       let settingsRef;
       if (typeof __app_id !== 'undefined') { settingsRef = doc(db, 'artifacts', typeof __app_id !== 'undefined' ? __app_id : 'default-app-id', 'public', 'data', SETTINGS_COLLECTION, 'general'); } 
       else { settingsRef = doc(db, SETTINGS_COLLECTION, 'general'); }
-      
       await setDoc(settingsRef, { staff: updatedList }, { merge: true });
       setNewMember('');
   };
@@ -329,8 +318,8 @@ function AdminDashboard({ projects, user, onLogout, staffList, setStaffList }: {
       <div className="bg-white p-6 rounded-xl shadow-lg max-w-sm w-full">
          <h2 className="text-xl font-bold mb-4 flex gap-2"><Lock className="w-5 h-5" /> Accès Production</h2>
          <form onSubmit={handleLogin} className="space-y-4">
-            <div><label className="text-xs font-bold text-stone-500 uppercase">Email</label><input type="email" required className="w-full p-3 border rounded-lg text-base" value={emailInput} onChange={(e) => setEmailInput(e.target.value)} /></div>
-            <div><label className="text-xs font-bold text-stone-500 uppercase">Mot de passe</label><input type="password" required className="w-full p-3 border rounded-lg text-base" value={passInput} onChange={(e) => setPassInput(e.target.value)} /></div>
+            <div><label className="text-xs font-bold text-stone-500 uppercase">Email</label><input type="email" required className="w-full p-3 border rounded-lg" value={emailInput} onChange={(e) => setEmailInput(e.target.value)} /></div>
+            <div><label className="text-xs font-bold text-stone-500 uppercase">Mot de passe</label><input type="password" required className="w-full p-3 border rounded-lg" value={passInput} onChange={(e) => setPassInput(e.target.value)} /></div>
             {errorMsg && <p className="text-red-500 text-sm">{errorMsg}</p>}
             <button type="submit" className="w-full bg-blue-600 text-white p-4 rounded-xl font-bold hover:bg-blue-700 text-lg">Se Connecter</button>
          </form>
@@ -350,9 +339,10 @@ function AdminDashboard({ projects, user, onLogout, staffList, setStaffList }: {
       ...newProject, code,
       statusPhoto: newProject.hasPhoto ? 'waiting' : 'none', statusVideo: newProject.hasVideo ? 'waiting' : 'none',
       progressPhoto: 0, progressVideo: 0,
-      linkPhoto: '', linkVideo: '', clientNotes: '', messages: [], hasUnreadMessage: false,
+      linkPhoto: '', linkVideo: '', messages: [], hasUnreadMessage: false,
       totalPrice: 0, depositAmount: 0,
-      createdAt: serverTimestamp()
+      createdAt: serverTimestamp(),
+      lastUpdated: serverTimestamp()
     });
     setIsAdding(false);
   };
@@ -375,7 +365,6 @@ function AdminDashboard({ projects, user, onLogout, staffList, setStaffList }: {
                 <div className="bg-stone-900 text-white p-2 rounded-lg"><Users className="w-5 h-5" /></div>
                 <div><h1 className="font-bold text-stone-900 text-lg">Dashboard</h1><p className="text-xs text-stone-500 truncate max-w-[150px]">{user.email}</p></div>
             </div>
-            {/* Mobile Actions */}
             <div className="flex items-center gap-2 md:hidden">
                 <button onClick={() => setShowTeamModal(true)} className="p-2 border rounded-lg bg-stone-100"><Settings className="w-5 h-5 text-stone-600"/></button>
                 <button onClick={() => setIsAdding(true)} className="p-2 bg-blue-600 text-white rounded-lg"><Plus className="w-5 h-5"/></button>
@@ -504,7 +493,10 @@ function ProjectEditor({ project, isSuperAdmin, staffList }: { project: Project,
     let docRef;
     if (typeof __app_id !== 'undefined') { docRef = doc(db, 'artifacts', typeof __app_id !== 'undefined' ? __app_id : 'default-app-id', 'public', 'data', COLLECTION_NAME, project.id); } 
     else { docRef = doc(db, COLLECTION_NAME, project.id); }
-    await updateDoc(docRef, data);
+    
+    // Update lastUpdated & Activity
+    const finalData = { ...data, lastUpdated: serverTimestamp() };
+    await updateDoc(docRef, finalData);
     setHasChanges(false); setIsExpanded(false);
   };
 
@@ -527,25 +519,16 @@ function ProjectEditor({ project, isSuperAdmin, staffList }: { project: Project,
     } catch (error: any) { alert(`Erreur: ${error.message}`); } finally { setUploading(false); }
   };
 
-  // --- NOUVEAU : Envoi Invitation via Webhook (Plus de mailto) ---
   const sendInviteViaWebhook = async () => {
       if (!localData.clientEmail) { alert("Veuillez renseigner l'email du client."); return; }
-      if (MAKE_WEBHOOK_URL.includes('https://hook.eu2.make.com/iwf8nbt3tywmywp6u89xgn7e2nar0bbs')) { alert("Configurez le Webhook Make dans le code !"); return; }
-      
+      if (MAKE_WEBHOOK_URL.includes('VOTRE_URL_ICI')) { alert("Configurez le Webhook Make dans le code !"); return; }
       setSendingInvite(true);
       try {
           await fetch(MAKE_WEBHOOK_URL, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                  type: 'invite', // Pour que Make sache que c'est une invit
-                  clientName: localData.clientNames,
-                  clientEmail: localData.clientEmail,
-                  projectCode: localData.code,
-                  url: window.location.origin
-              })
+              method: 'POST', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ type: 'invite', clientName: localData.clientNames, clientEmail: localData.clientEmail, projectCode: localData.code, url: window.location.origin })
           });
-          alert(`Invitation envoyée à ${localData.clientEmail} !`);
+          alert(`Invitation envoyée !`);
       } catch (error) { console.error(error); alert("Erreur envoi."); } 
       finally { setSendingInvite(false); }
   };
@@ -557,31 +540,36 @@ function ProjectEditor({ project, isSuperAdmin, staffList }: { project: Project,
     document.body.removeChild(textArea);
   };
 
+  // Alerte Inactivité > 7 jours
+  const now = Date.now();
+  // On récupère le timestamp (soit lastUpdated, soit createdAt, soit maintenant)
+  const lastUpdate = project.lastUpdated?.toMillis() || project.createdAt?.toMillis() || now;
+  const diffDays = (now - lastUpdate) / (1000 * 60 * 60 * 24);
+  const isInactive = diffDays > 7 && (project.statusPhoto !== 'delivered' || project.statusVideo !== 'delivered');
+
   const isLate = new Date().getTime() - new Date(project.weddingDate).getTime() > (60 * 24 * 60 * 60 * 1000) && (project.statusPhoto !== 'delivered' || project.statusVideo !== 'delivered');
   const remaining = (localData.totalPrice || 0) - (localData.depositAmount || 0);
 
   if (viewAsClient) {
       return (
         <div className="fixed inset-0 z-50 bg-stone-50 overflow-y-auto">
-             <div className="p-4 bg-stone-900 text-white flex justify-between items-center sticky top-0 z-50">
-                <span>Preview Client</span>
-                <button onClick={() => setViewAsClient(false)} className="bg-white text-black px-4 py-2 rounded">Fermer</button>
-             </div>
-             <ClientPortal projects={[localData]} onBack={() => {}} /> 
+             <div className="p-4 bg-stone-900 text-white flex justify-between items-center sticky top-0 z-50"><span>Preview Client</span><button onClick={() => setViewAsClient(false)} className="bg-white text-black px-4 py-2 rounded">Fermer</button></div>
+             <ClientPortal projects={[project]} onBack={() => {}} /> 
         </div>
       );
   }
 
   return (
-    <div className={`bg-white rounded-xl shadow-sm border transition-all ${isExpanded ? 'ring-2 ring-blue-500/20 border-blue-500' : 'border-stone-200 hover:border-blue-300'}`}>
+    <div className={`bg-white rounded-xl shadow-sm border transition-all ${isInactive ? 'border-red-500 border-2' : 'border-stone-200'} hover:border-blue-300`}>
       <div className="p-4 flex flex-col md:flex-row md:items-center justify-between cursor-pointer gap-4" onClick={() => setIsExpanded(!isExpanded)}>
         <div className="flex items-center gap-4">
           <div className={`w-1.5 h-12 rounded-full flex-shrink-0 ${project.isPriority ? 'bg-amber-500 animate-pulse' : (isLate ? 'bg-red-500' : 'bg-green-500')}`}></div>
           <div>
              <div className="flex flex-wrap items-center gap-2">
                  <h3 className="font-bold text-lg text-stone-900">{project.clientNames}</h3>
+                 {isInactive && <span className="bg-red-100 text-red-600 text-[10px] px-2 py-0.5 rounded-full font-bold flex items-center gap-1 border border-red-200 animate-pulse"><AlertOctagon className="w-3 h-3"/> Inactif +7j</span>}
                  {project.isPriority && <span className="bg-amber-100 text-amber-700 text-[10px] px-2 py-0.5 rounded-full font-bold flex items-center gap-1"><Rocket className="w-3 h-3"/> PRIO</span>}
-                 {project.hasUnreadMessage && <span className="bg-red-500 text-white text-[10px] px-2 py-0.5 rounded-full font-bold animate-pulse">MSG</span>}
+                 {project.hasUnreadMessage && <span className="bg-red-500 text-white text-[10px] px-2 py-0.5 rounded-full font-bold animate-bounce">MSG</span>}
              </div>
              <div className="text-sm text-stone-500 flex flex-wrap items-center gap-3 mt-1">
                <span className="font-mono bg-stone-100 px-1.5 py-0.5 rounded text-stone-600 select-all">{project.code}</span>
@@ -592,12 +580,8 @@ function ProjectEditor({ project, isSuperAdmin, staffList }: { project: Project,
         </div>
         <div className="flex items-center justify-between md:justify-end gap-6 w-full md:w-auto pl-6 md:pl-0">
            <div className="flex gap-4 text-right">
-             {project.statusPhoto !== 'none' && (
-               <div><div className="text-[10px] uppercase text-stone-400 font-bold tracking-wider">Photo</div><div className={`text-sm font-bold ${project.statusPhoto === 'delivered' ? 'text-green-600' : 'text-amber-600'}`}>{project.progressPhoto}%</div></div>
-             )}
-             {project.statusVideo !== 'none' && (
-               <div><div className="text-[10px] uppercase text-stone-400 font-bold tracking-wider">Vidéo</div><div className={`text-sm font-bold ${project.statusVideo === 'delivered' ? 'text-green-600' : 'text-sky-600'}`}>{project.progressVideo}%</div></div>
-             )}
+             {project.statusPhoto !== 'none' && (<div><div className="text-[10px] uppercase text-stone-400 font-bold tracking-wider">Photo</div><div className={`text-sm font-bold ${project.statusPhoto === 'delivered' ? 'text-green-600' : 'text-amber-600'}`}>{project.progressPhoto}%</div></div>)}
+             {project.statusVideo !== 'none' && (<div><div className="text-[10px] uppercase text-stone-400 font-bold tracking-wider">Vidéo</div><div className={`text-sm font-bold ${project.statusVideo === 'delivered' ? 'text-green-600' : 'text-sky-600'}`}>{project.progressVideo}%</div></div>)}
            </div>
            <ChevronRight className={`w-5 h-5 text-stone-400 transition-transform ${isExpanded ? 'rotate-90' : ''}`} />
         </div>
@@ -611,9 +595,7 @@ function ProjectEditor({ project, isSuperAdmin, staffList }: { project: Project,
                   <label className="flex-1 md:flex-none justify-center flex items-center gap-2 text-xs font-bold text-amber-700 cursor-pointer bg-amber-50 border border-amber-200 px-3 py-2 rounded-lg hover:bg-amber-100"><input type="checkbox" checked={localData.isPriority || false} onChange={e => updateField('isPriority', e.target.checked)} className="accent-amber-600" /> <Rocket className="w-3 h-3"/> Fast Track</label>
               </div>
               <div className="flex gap-2 w-full md:w-auto">
-                  <button onClick={sendInviteViaWebhook} disabled={sendingInvite} className="flex-1 md:flex-none justify-center text-xs flex items-center gap-2 bg-blue-600 text-white px-3 py-2 rounded-lg hover:bg-blue-700 transition-colors">
-                      {sendingInvite ? <Loader2 className="w-3 h-3 animate-spin"/> : <Mail className="w-3 h-3"/>} Inviter (Email)
-                  </button>
+                  <button onClick={sendInviteViaWebhook} disabled={sendingInvite} className="flex-1 md:flex-none justify-center text-xs flex items-center gap-2 bg-blue-600 text-white px-3 py-2 rounded-lg hover:bg-blue-700 transition-colors">{sendingInvite ? <Loader2 className="w-3 h-3 animate-spin"/> : <Mail className="w-3 h-3"/>} Inviter (Email)</button>
                   <button onClick={copyInvite} className="text-xs flex items-center gap-2 bg-white border border-stone-200 px-3 py-2 rounded-lg hover:bg-stone-50 text-stone-600 transition-colors"><Copy className="w-3 h-3"/></button>
               </div>
            </div>
@@ -687,9 +669,10 @@ function ProjectEditor({ project, isSuperAdmin, staffList }: { project: Project,
              )}
            </div>
 
-           {/* --- CHAT ADMIN --- */}
+           {/* --- CHAT ADMIN LIVE --- */}
            <div className="mt-8">
-               <ChatBox project={localData} userType="admin" />
+               {/* Important: On passe le projet LIVE pour que les messages soient synchronisés */}
+               <ChatBox project={project} userType="admin" />
            </div>
            
            <div className="flex justify-between items-center pt-6 mt-6 border-t border-stone-200">
@@ -707,7 +690,7 @@ function ProjectEditor({ project, isSuperAdmin, staffList }: { project: Project,
   );
 }
 
-// --- Vue Accueil (Landing Page Marketing) ---
+// --- Vue Client (Landing Page Rich) ---
 function LandingView({ setView }: { setView: (v: any) => void }) {
   return (
     <div className="min-h-screen bg-white text-stone-900 font-sans selection:bg-amber-100 selection:text-amber-900">
@@ -769,102 +752,7 @@ function LandingView({ setView }: { setView: (v: any) => void }) {
   );
 }
 
-// --- Vue Archive (Lead Capture) ---
-function ArchiveView({ onBack }: { onBack: () => void }) {
-  const [step, setStep] = useState(1);
-  const [date, setDate] = useState('');
-  const [leadName, setLeadName] = useState('');
-  const [leadEmail, setLeadEmail] = useState('');
-  const [leadPhone, setLeadPhone] = useState('');
-  const [loading, setLoading] = useState(false);
-  
-  const handleCheck = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!date) return;
-    setStep(1.5);
-  };
-
-  const handleCaptureLead = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
-    let colRef;
-    if (typeof __app_id !== 'undefined') { colRef = collection(db, 'artifacts', typeof __app_id !== 'undefined' ? __app_id : 'default-app-id', 'public', 'data', LEADS_COLLECTION); } 
-    else { colRef = collection(db, LEADS_COLLECTION); }
-    try {
-        await addDoc(colRef, {
-            name: leadName, email: leadEmail, phone: leadPhone, weddingDate: date,
-            createdAt: serverTimestamp(), source: 'archive_check'
-        });
-    } catch (err) { console.error("Erreur sauvegarde lead", err); }
-    setLoading(false);
-    
-    const year = new Date(date).getFullYear();
-    if (year < 2022) { setStep(3); } else { setStep(2); }
-  };
-
-  return (
-    <div className="min-h-screen bg-stone-900 flex items-center justify-center p-4 relative">
-       <button onClick={onBack} className="absolute top-6 left-6 text-stone-400 hover:text-white flex gap-2 transition-colors"><LogOut className="w-4 h-4" /> Retour</button>
-       
-       <div className="w-full max-w-md bg-white rounded-2xl shadow-2xl overflow-hidden">
-         <div className="bg-stone-100 p-6 text-center border-b border-stone-200">
-            <div className="w-16 h-16 bg-stone-800 rounded-full flex items-center justify-center mx-auto mb-4 text-amber-400 shadow-lg"><ShieldCheck className="w-8 h-8" /></div>
-            <h2 className="text-2xl font-serif text-stone-900">Vérification des Archives</h2>
-         </div>
-
-         <div className="p-8">
-            {step === 1 && (
-              <form onSubmit={handleCheck} className="space-y-6 animate-fade-in">
-                <div className="bg-amber-50 border border-amber-200 p-4 rounded-lg flex gap-3 text-sm text-amber-800">
-                  <AlertCircle className="w-5 h-5 shrink-0" />
-                  <p>Suite à une maintenance serveur, certaines archives anciennes ne sont plus accessibles. Vérifiez votre éligibilité.</p>
-                </div>
-                <div>
-                  <label className="block text-sm font-bold text-stone-700 uppercase mb-2">Date de votre mariage</label>
-                  <input required type="date" value={date} onChange={(e) => setDate(e.target.value)} className="w-full p-4 border-2 border-stone-200 rounded-xl focus:border-stone-800 outline-none transition-colors text-lg" />
-                </div>
-                <button type="submit" className="w-full bg-stone-900 text-white py-4 rounded-xl font-bold text-lg hover:bg-black transition-transform active:scale-95">Vérifier mes fichiers</button>
-              </form>
-            )}
-
-            {step === 1.5 && (
-               <form onSubmit={handleCaptureLead} className="space-y-4 animate-fade-in">
-                  <div className="text-center mb-6"><h3 className="font-bold text-lg text-stone-900">Sécurisation de la requête</h3><p className="text-sm text-stone-500">Pour accéder au résultat, confirmez vos coordonnées.</p></div>
-                  <div><label className="block text-xs font-bold text-stone-500 uppercase mb-1">Nom & Prénom</label><input required type="text" value={leadName} onChange={(e) => setLeadName(e.target.value)} className="w-full p-3 border rounded-lg" /></div>
-                  <div><label className="block text-xs font-bold text-stone-500 uppercase mb-1">Email</label><input required type="email" value={leadEmail} onChange={(e) => setLeadEmail(e.target.value)} className="w-full p-3 border rounded-lg" /></div>
-                  <div><label className="block text-xs font-bold text-stone-500 uppercase mb-1">Téléphone</label><input required type="tel" value={leadPhone} onChange={(e) => setLeadPhone(e.target.value)} className="w-full p-3 border rounded-lg" /></div>
-                  <button disabled={loading} type="submit" className="w-full bg-stone-900 text-white py-4 rounded-xl font-bold text-lg hover:bg-black flex items-center justify-center gap-2">{loading ? <Loader2 className="w-5 h-5 animate-spin"/> : 'Accéder au résultat'}</button>
-               </form>
-            )}
-
-            {step === 2 && (
-              <div className="text-center space-y-6 animate-fade-in">
-                <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto text-green-600"><CheckCircle className="w-8 h-8" /></div>
-                <div><h3 className="text-2xl font-bold text-stone-900">Bonne nouvelle !</h3><p className="text-stone-600 mt-2">Vos fichiers sont présents.</p></div>
-                <div className="bg-stone-50 p-6 rounded-xl border border-stone-200 text-left space-y-4">
-                  <div className="flex justify-between items-center"><span className="font-bold text-stone-700">Taille estimée</span><span className="font-mono text-stone-500">~450 Go</span></div>
-                  <div className="flex justify-between items-center"><span className="font-bold text-stone-900">Pack Sécurité à vie</span><span className="text-2xl font-bold text-green-600">199 €</span></div>
-                </div>
-                <a href={STRIPE_ARCHIVE_LINK} target="_blank" rel="noopener noreferrer" className="block w-full bg-green-600 text-white py-4 rounded-xl font-bold text-lg hover:bg-green-700 transition-colors shadow-lg shadow-green-200 text-center flex items-center justify-center gap-2">
-                  <CreditCard className="w-5 h-5"/> Sécuriser maintenant (CB)
-                </a>
-              </div>
-            )}
-
-            {step === 3 && (
-               <div className="text-center space-y-6 animate-fade-in">
-                 <div className="w-16 h-16 bg-red-50 rounded-full flex items-center justify-center mx-auto text-red-500"><History className="w-8 h-8" /></div>
-                 <div><h3 className="text-xl font-bold text-stone-900">Archives Indisponibles</h3><p className="text-stone-600 mt-2 text-sm">Désolé, les serveurs d'avant 2022 ont été purgés.</p></div>
-                 <button onClick={() => setStep(1)} className="text-stone-400 underline text-sm hover:text-stone-800">Réessayer une autre date</button>
-               </div>
-            )}
-         </div>
-       </div>
-    </div>
-  );
-}
-
-// --- Vue Client (Existante) ---
+// --- Vue Client (Existante + Chat Sync) ---
 function ClientPortal({ projects, onBack }: { projects: Project[], onBack: () => void }) {
   const [searchCode, setSearchCode] = useState('');
   const [foundProject, setFoundProject] = useState<Project | null>(null);
@@ -873,20 +761,21 @@ function ClientPortal({ projects, onBack }: { projects: Project[], onBack: () =>
   const [emailCopied, setEmailCopied] = useState(false);
 
   useEffect(() => {
+    // Si on est en preview admin
     if (projects.length === 1 && projects[0].id) {
         setFoundProject(projects[0]);
+    } else if (foundProject) {
+        // SYNC LIVE : Si on a déjà un projet affiché, on le met à jour avec la version live de Firestore
+        const liveVersion = projects.find(p => p.id === foundProject.id);
+        if (liveVersion) setFoundProject(liveVersion);
     }
-  }, [projects]);
+  }, [projects, foundProject]); // Dépendance cruciale
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
     const cleanCode = searchCode.trim().toUpperCase();
     const project = projects.find(p => p.code === cleanCode);
-    if (project) { 
-      setFoundProject(project); 
-      setError(''); 
-      setImgError(false);
-    } 
+    if (project) { setFoundProject(project); setError(''); setImgError(false); } 
     else { setError('Code introuvable.'); setFoundProject(null); }
   };
 
@@ -1012,6 +901,101 @@ function ClientPortal({ projects, onBack }: { projects: Project[], onBack: () =>
         </form>
         {error && <div className="mt-4 text-red-500 text-sm bg-red-50 p-3 rounded-lg flex items-center justify-center gap-2"><AlertCircle className="w-4 h-4"/> {error}</div>}
       </div>
+    </div>
+  );
+}
+
+// --- Vue Archive (Lead Capture) ---
+function ArchiveView({ onBack }: { onBack: () => void }) {
+  const [step, setStep] = useState(1);
+  const [date, setDate] = useState('');
+  const [leadName, setLeadName] = useState('');
+  const [leadEmail, setLeadEmail] = useState('');
+  const [leadPhone, setLeadPhone] = useState('');
+  const [loading, setLoading] = useState(false);
+  
+  const handleCheck = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!date) return;
+    setStep(1.5);
+  };
+
+  const handleCaptureLead = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    let colRef;
+    if (typeof __app_id !== 'undefined') { colRef = collection(db, 'artifacts', typeof __app_id !== 'undefined' ? __app_id : 'default-app-id', 'public', 'data', LEADS_COLLECTION); } 
+    else { colRef = collection(db, LEADS_COLLECTION); }
+    try {
+        await addDoc(colRef, {
+            name: leadName, email: leadEmail, phone: leadPhone, weddingDate: date,
+            createdAt: serverTimestamp(), source: 'archive_check'
+        });
+    } catch (err) { console.error("Erreur sauvegarde lead", err); }
+    setLoading(false);
+    
+    const year = new Date(date).getFullYear();
+    if (year < 2022) { setStep(3); } else { setStep(2); }
+  };
+
+  return (
+    <div className="min-h-screen bg-stone-900 flex items-center justify-center p-4 relative">
+       <button onClick={onBack} className="absolute top-6 left-6 text-stone-400 hover:text-white flex gap-2 transition-colors"><LogOut className="w-4 h-4" /> Retour</button>
+       
+       <div className="w-full max-w-md bg-white rounded-2xl shadow-2xl overflow-hidden">
+         <div className="bg-stone-100 p-6 text-center border-b border-stone-200">
+            <div className="w-16 h-16 bg-stone-800 rounded-full flex items-center justify-center mx-auto mb-4 text-amber-400 shadow-lg"><ShieldCheck className="w-8 h-8" /></div>
+            <h2 className="text-2xl font-serif text-stone-900">Vérification des Archives</h2>
+         </div>
+
+         <div className="p-8">
+            {step === 1 && (
+              <form onSubmit={handleCheck} className="space-y-6 animate-fade-in">
+                <div className="bg-amber-50 border border-amber-200 p-4 rounded-lg flex gap-3 text-sm text-amber-800">
+                  <AlertCircle className="w-5 h-5 shrink-0" />
+                  <p>Suite à une maintenance serveur, certaines archives anciennes ne sont plus accessibles. Vérifiez votre éligibilité.</p>
+                </div>
+                <div>
+                  <label className="block text-sm font-bold text-stone-700 uppercase mb-2">Date de votre mariage</label>
+                  <input required type="date" value={date} onChange={(e) => setDate(e.target.value)} className="w-full p-4 border-2 border-stone-200 rounded-xl focus:border-stone-800 outline-none transition-colors text-lg" />
+                </div>
+                <button type="submit" className="w-full bg-stone-900 text-white py-4 rounded-xl font-bold text-lg hover:bg-black transition-transform active:scale-95">Vérifier mes fichiers</button>
+              </form>
+            )}
+
+            {step === 1.5 && (
+               <form onSubmit={handleCaptureLead} className="space-y-4 animate-fade-in">
+                  <div className="text-center mb-6"><h3 className="font-bold text-lg text-stone-900">Sécurisation de la requête</h3><p className="text-sm text-stone-500">Pour accéder au résultat, confirmez vos coordonnées.</p></div>
+                  <div><label className="block text-xs font-bold text-stone-500 uppercase mb-1">Nom & Prénom</label><input required type="text" value={leadName} onChange={(e) => setLeadName(e.target.value)} className="w-full p-3 border rounded-lg" /></div>
+                  <div><label className="block text-xs font-bold text-stone-500 uppercase mb-1">Email</label><input required type="email" value={leadEmail} onChange={(e) => setLeadEmail(e.target.value)} className="w-full p-3 border rounded-lg" /></div>
+                  <div><label className="block text-xs font-bold text-stone-500 uppercase mb-1">Téléphone</label><input required type="tel" value={leadPhone} onChange={(e) => setLeadPhone(e.target.value)} className="w-full p-3 border rounded-lg" /></div>
+                  <button disabled={loading} type="submit" className="w-full bg-stone-900 text-white py-4 rounded-xl font-bold text-lg hover:bg-black flex items-center justify-center gap-2">{loading ? <Loader2 className="w-5 h-5 animate-spin"/> : 'Accéder au résultat'}</button>
+               </form>
+            )}
+
+            {step === 2 && (
+              <div className="text-center space-y-6 animate-fade-in">
+                <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto text-green-600"><CheckCircle className="w-8 h-8" /></div>
+                <div><h3 className="text-2xl font-bold text-stone-900">Bonne nouvelle !</h3><p className="text-stone-600 mt-2">Vos fichiers sont présents.</p></div>
+                <div className="bg-stone-50 p-6 rounded-xl border border-stone-200 text-left space-y-4">
+                  <div className="flex justify-between items-center"><span className="font-bold text-stone-700">Taille estimée</span><span className="font-mono text-stone-500">~450 Go</span></div>
+                  <div className="flex justify-between items-center"><span className="font-bold text-stone-900">Pack Sécurité à vie</span><span className="text-2xl font-bold text-green-600">199 €</span></div>
+                </div>
+                <a href={STRIPE_ARCHIVE_LINK} target="_blank" rel="noopener noreferrer" className="block w-full bg-green-600 text-white py-4 rounded-xl font-bold text-lg hover:bg-green-700 transition-colors shadow-lg shadow-green-200 text-center flex items-center justify-center gap-2">
+                  <CreditCard className="w-5 h-5"/> Sécuriser maintenant (CB)
+                </a>
+              </div>
+            )}
+
+            {step === 3 && (
+               <div className="text-center space-y-6 animate-fade-in">
+                 <div className="w-16 h-16 bg-red-50 rounded-full flex items-center justify-center mx-auto text-red-500"><History className="w-8 h-8" /></div>
+                 <div><h3 className="text-xl font-bold text-stone-900">Archives Indisponibles</h3><p className="text-stone-600 mt-2 text-sm">Désolé, les serveurs d'avant 2022 ont été purgés.</p></div>
+                 <button onClick={() => setStep(1)} className="text-stone-400 underline text-sm hover:text-stone-800">Réessayer une autre date</button>
+               </div>
+            )}
+         </div>
+       </div>
     </div>
   );
 }
