@@ -283,7 +283,7 @@ function ArchiveView({ onBack }: { onBack: () => void }) {
 
                 {/* --- ICI METTEZ VOTRE LIEN STRIPE --- */}
                 <a 
-                  href="#" 
+                  href="https://buy.stripe.com/3cI3cv3jq2j37x9eFy5gc0b" 
                   onClick={(e) => { e.preventDefault(); alert("Remplacez le '#' dans le code par votre lien Stripe !"); }}
                   className="block w-full bg-green-600 text-white py-4 rounded-xl font-bold text-lg hover:bg-green-700 transition-colors shadow-lg shadow-green-200 text-center"
                 >
