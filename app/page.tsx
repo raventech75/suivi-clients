@@ -50,7 +50,7 @@ const storage = getStorage(app);
 const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
 
 // --- CONFIGURATION ---
-const MAKE_WEBHOOK_URL = "https://hook.eu1.make.com/VOTRE_URL_ICI"; 
+const MAKE_WEBHOOK_URL = "https://hook.eu2.make.com/iwf8nbt3tywmywp6u89xgn7e2nar0bbs"; 
 // ⚠️ AJOUTEZ ICI LES EMAILS DES PATRONS (Finance + Suppression)
 const SUPER_ADMINS = ["admin@raventech.fr", "irzzenproductions@gmail.com"]; 
 
@@ -376,7 +376,7 @@ function ChatBox({ project, userType }: { project: Project, userType: 'admin' | 
         await updateDoc(docRef, updates);
 
         // --- NOUVEAU : Envoi de l'alerte Mail via Make ---
-        if (MAKE_WEBHOOK_URL && !MAKE_WEBHOOK_URL.includes('VOTRE_URL')) {
+        if (MAKE_WEBHOOK_URL && !MAKE_WEBHOOK_URL.includes('https://hook.eu2.make.com/iwf8nbt3tywmywp6u89xgn7e2nar0bbs')) {
             // Si c'est le client qui écrit -> On notifie le Responsable (ou l'admin par défaut)
             // Si c'est l'admin qui écrit -> On notifie le Client
             const targetEmail = userType === 'client' ? (project.managerEmail || 'admin@raventech.fr') : project.clientEmail;
@@ -688,7 +688,7 @@ function ProjectEditor({ project, isSuperAdmin, staffList }: { project: Project,
     await updateDoc(docRef, finalData);
     
     // Si l'admin modifie, on peut notifier le manager responsable si son email est là
-    if(localData.managerEmail && MAKE_WEBHOOK_URL && !MAKE_WEBHOOK_URL.includes('VOTRE_URL')) {
+    if(localData.managerEmail && MAKE_WEBHOOK_URL && !MAKE_WEBHOOK_URL.includes('https://hook.eu2.make.com/iwf8nbt3tywmywp6u89xgn7e2nar0bbs')) {
         fetch(MAKE_WEBHOOK_URL, {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ type: 'update_manager', clientName: localData.clientNames, managerEmail: localData.managerEmail, status: 'Mise à jour dossier' })
@@ -719,7 +719,7 @@ function ProjectEditor({ project, isSuperAdmin, staffList }: { project: Project,
 
   const sendInviteViaWebhook = async () => {
       if (!localData.clientEmail) { alert("Veuillez renseigner l'email du client."); return; }
-      if (MAKE_WEBHOOK_URL.includes('VOTRE_URL_ICI')) { alert("Configurez le Webhook Make dans le code !"); return; }
+      if (MAKE_WEBHOOK_URL.includes('https://hook.eu2.make.com/iwf8nbt3tywmywp6u89xgn7e2nar0bbs')) { alert("Configurez le Webhook Make dans le code !"); return; }
       setSendingInvite(true);
       try {
           await fetch(MAKE_WEBHOOK_URL, {
