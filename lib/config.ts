@@ -3,7 +3,12 @@ export const SUPER_ADMINS = ["admin@raventech.fr", "irzzenproductions@gmail.com"
 export const STRIPE_ARCHIVE_LINK = "https://buy.stripe.com/3cI3cv3jq2j37x9eFy5gc0b";
 export const STRIPE_PRIORITY_LINK = "https://buy.stripe.com/VOTRE_LIEN_PRIORITE"; 
 
-export const DEFAULT_STAFF = ["Feridun", "Volkan", "Ali", "Steeven", "Taner", "Yunus", "Emir", "Serife"];
+// 👇 LISTE MISE À JOUR ICI 👇
+export const DEFAULT_STAFF = [
+  "Feridun", "Volkan", "Ali", "Yunus", "Serife", "Emir", 
+  "Celine", "Goksel", "Emirkan", "Steeven", "Taner", "Halil"
+];
+
 export const ALBUM_FORMATS = ["30x20", "30x30", "40x30", "40x30 + 2x 18x24", "Autre"];
 
 export const COLLECTION_NAME = 'wedding_projects';
@@ -52,10 +57,10 @@ export interface Project {
   clientAddress?: string;
   clientCity?: string;
   adminNotes?: string;
-  weddingVenue?: string; // NOUVEAU
+  weddingVenue?: string;
 
   weddingDate: string;
-  code: string; // LE FAMEUX CODE
+  code: string;
   
   statusPhoto: 'waiting' | 'culling' | 'editing' | 'exporting' | 'delivered' | 'none';
   statusVideo: 'waiting' | 'cutting' | 'grading' | 'mixing' | 'delivered' | 'none';
