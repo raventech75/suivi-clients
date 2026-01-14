@@ -11,7 +11,6 @@ export default function ChatBox({ project, userType, disabled }: { project: Proj
     const scrollRef = useRef<HTMLDivElement>(null);
     const messages = project.messages || [];
 
-    // Scroll automatique vers le bas à chaque nouveau message
     useEffect(() => { 
         if(scrollRef.current) {
             scrollRef.current.scrollTop = scrollRef.current.scrollHeight; 
@@ -38,11 +37,8 @@ export default function ChatBox({ project, userType, disabled }: { project: Proj
                 lastUpdated: serverTimestamp() 
             });
 
-            // Envoi Webhook (Notification)
             if (MAKE_WEBHOOK_URL && !MAKE_WEBHOOK_URL.includes('VOTRE_URL')) {
                 const targetEmail = userType === 'client' ? (project.managerEmail || 'admin@raventech.fr') : project.clientEmail;
-                
-                // On envoie la notif seulement s'il y a un email cible
                 if (targetEmail) {
                     fetch(MAKE_WEBHOOK_URL, {
                         method: 'POST', 
@@ -55,14 +51,12 @@ export default function ChatBox({ project, userType, disabled }: { project: Proj
                             msg: msgText, 
                             url: window.location.origin 
                         })
-                    }).catch(err => console.error("Erreur webhook chat:", err));
+                    }).catch(console.error);
                 }
             }
         } catch (error) {
-            console.error("Erreur envoi message:", error);
-            alert("Erreur lors de l'envoi du message.");
+            console.error(error);
         }
-
         setMsgText('');
         setSending(false);
     };
@@ -81,61 +75,26 @@ export default function ChatBox({ project, userType, disabled }: { project: Proj
                     <MessageSquare className="w-4 h-4"/> Messagerie
                 </h4>
             </div>
-            
             <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 space-y-3">
-                {messages.length === 0 && (
-                    <div className="text-center text-xs text-stone-400 mt-10 italic">
-                        Aucun message pour le moment.
-                    </div>
-                )}
                 {messages.map((m, idx) => (
                     <div key={idx} className={`flex ${m.author === userType ? 'justify-end' : 'justify-start'}`}>
-                        <div className={`max-w-[85%] p-3 rounded-2xl text-sm relative group shadow-sm ${
-                            m.author === 'admin' 
-                                ? 'bg-blue-600 text-white rounded-tr-none' 
-                                : 'bg-white border border-stone-200 text-stone-800 rounded-tl-none'
-                        }`}>
+                        <div className={`max-w-[85%] p-3 rounded-2xl text-sm relative group shadow-sm ${m.author === 'admin' ? 'bg-blue-600 text-white rounded-tr-none' : 'bg-white border border-stone-200 text-stone-800 rounded-tl-none'}`}>
                             <p className="whitespace-pre-wrap">{m.text}</p>
-                            <span className={`text-[9px] block mt-1 opacity-70 text-right ${m.author === 'admin' ? 'text-blue-100' : 'text-stone-400'}`}>
-                                {new Date(m.date).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}
-                            </span>
-                            
-                            {/* Bouton de suppression (Admin uniquement) */}
+                            <span className={`text-[9px] block mt-1 opacity-70 text-right ${m.author === 'admin' ? 'text-blue-100' : 'text-stone-400'}`}>{new Date(m.date).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</span>
                             {userType === 'admin' && !disabled && (
-                                <button 
-                                    onClick={() => handleDeleteMessage(m)} 
-                                    className="absolute -top-2 -right-2 bg-red-100 text-red-500 p-1 rounded-full opacity-0 group-hover:opacity-100 transition-opacity shadow-sm hover:bg-red-200"
-                                    title="Supprimer"
-                                >
-                                    <X className="w-3 h-3" />
-                                </button>
+                                <button onClick={() => handleDeleteMessage(m)} className="absolute -top-2 -right-2 bg-red-100 text-red-500 p-1 rounded-full opacity-0 group-hover:opacity-100 transition-opacity shadow-sm"><X className="w-3 h-3" /></button>
                             )}
                         </div>
                     </div>
                 ))}
             </div>
-            
             {!disabled ? (
                 <div className="p-3 bg-white border-t flex gap-2 items-center">
-                    <input 
-                        className="flex-1 bg-stone-100 rounded-full px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-stone-200 transition-all" 
-                        placeholder="Écrivez votre message..." 
-                        value={msgText} 
-                        onChange={e => setMsgText(e.target.value)} 
-                        onKeyDown={e => e.key === 'Enter' && handleSend()} 
-                    />
-                    <button 
-                        onClick={handleSend} 
-                        disabled={sending || !msgText.trim()} 
-                        className="bg-blue-600 text-white p-3 rounded-full hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-md"
-                    >
-                        {sending ? <Loader2 className="w-4 h-4 animate-spin"/> : <Send className="w-4 h-4"/>}
-                    </button>
+                    <input className="flex-1 bg-stone-100 rounded-full px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-stone-200" placeholder="Votre message..." value={msgText} onChange={e => setMsgText(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleSend()} />
+                    <button onClick={handleSend} disabled={sending} className="bg-blue-600 text-white p-3 rounded-full hover:bg-blue-700 transition-colors disabled:opacity-50">{sending ? <Loader2 className="w-4 h-4 animate-spin"/> : <Send className="w-4 h-4"/>}</button>
                 </div>
             ) : (
-                <div className="p-3 text-center text-xs text-stone-400 italic bg-stone-50 border-t">
-                    Lecture seule (Vous ne pouvez pas répondre)
-                </div>
+                <div className="p-3 text-center text-xs text-stone-400 italic bg-stone-50 border-t">Lecture seule</div>
             )}
         </div>
     );
