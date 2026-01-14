@@ -12,9 +12,10 @@ import {
   COLLECTION_NAME, MAKE_WEBHOOK_URL, PHOTO_STEPS, 
   VIDEO_STEPS, ALBUM_FORMATS, ALBUM_STATUSES, Project 
 } from '../lib/config';
-import ChatBox from './Chatbox'; // Attention à la majuscule selon votre fichier
+import ChatBox from './ChatBox'; 
 
-export default function ProjectEditor({ project, isSuperAdmin, user }: { project: Project, isSuperAdmin: boolean, user: any }) {
+// 👇 LA CORRECTION EST ICI (ajout de staffList dans les props)
+export default function ProjectEditor({ project, isSuperAdmin, staffList, user }: { project: Project, isSuperAdmin: boolean, staffList: string[], user: any }) {
   const [isExpanded, setIsExpanded] = useState(false);
   const [localData, setLocalData] = useState(project);
   const [hasChanges, setHasChanges] = useState(false);
@@ -190,6 +191,12 @@ export default function ProjectEditor({ project, isSuperAdmin, user }: { project
                         <h4 className="font-bold mb-3 flex items-center gap-2 text-amber-600"><Camera className="w-4 h-4"/> Photo</h4>
                         <div className="space-y-3">
                             <select disabled={!canEdit} className="w-full p-2 border rounded text-sm bg-stone-50 font-medium" value={localData.statusPhoto} onChange={e=>updateField('statusPhoto', e.target.value)}>{Object.entries(PHOTO_STEPS).map(([k,v])=><option key={k} value={k}>{v.label}</option>)}</select>
+                            
+                            <select disabled={!canEdit} className="w-full p-2 border rounded text-sm bg-stone-50 font-medium" value={localData.photographerName} onChange={e=>updateField('photographerName', e.target.value)}>
+                                <option value="">Choisir Photographe...</option>
+                                {staffList.map(s => <option key={s} value={s}>{s}</option>)}
+                            </select>
+
                             <div><label className="text-[10px] font-bold text-stone-400 uppercase">Livraison Prévue</label><input disabled={!canEdit} type="date" className="w-full p-2 border rounded text-sm" value={localData.estimatedDeliveryPhoto || ''} onChange={e=>updateField('estimatedDeliveryPhoto', e.target.value)} /></div>
                             <input disabled={!canEdit} className="w-full p-2 border rounded text-sm" placeholder="Lien Galerie" value={localData.linkPhoto} onChange={e=>updateField('linkPhoto', e.target.value)}/>
                         </div>
@@ -198,6 +205,12 @@ export default function ProjectEditor({ project, isSuperAdmin, user }: { project
                         <h4 className="font-bold mb-3 flex items-center gap-2 text-blue-600"><Video className="w-4 h-4"/> Vidéo</h4>
                         <div className="space-y-3">
                             <select disabled={!canEdit} className="w-full p-2 border rounded text-sm bg-stone-50 font-medium" value={localData.statusVideo} onChange={e=>updateField('statusVideo', e.target.value)}>{Object.entries(VIDEO_STEPS).map(([k,v])=><option key={k} value={k}>{v.label}</option>)}</select>
+                            
+                            <select disabled={!canEdit} className="w-full p-2 border rounded text-sm bg-stone-50 font-medium" value={localData.videographerName} onChange={e=>updateField('videographerName', e.target.value)}>
+                                <option value="">Choisir Vidéaste...</option>
+                                {staffList.map(s => <option key={s} value={s}>{s}</option>)}
+                            </select>
+
                             <div><label className="text-[10px] font-bold text-stone-400 uppercase">Livraison Prévue</label><input disabled={!canEdit} type="date" className="w-full p-2 border rounded text-sm" value={localData.estimatedDeliveryVideo || ''} onChange={e=>updateField('estimatedDeliveryVideo', e.target.value)} /></div>
                             <input disabled={!canEdit} className="w-full p-2 border rounded text-sm" placeholder="Lien Film" value={localData.linkVideo} onChange={e=>updateField('linkVideo', e.target.value)}/>
                         </div>
