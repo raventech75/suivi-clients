@@ -68,7 +68,9 @@ interface Project {
   id: string;
   clientNames: string;
   clientEmail?: string;
+  clientEmail2?: string; // NOUVEAU
   clientPhone?: string;
+  clientPhone2?: string; // NOUVEAU
   weddingDate: string;
   code: string;
   statusPhoto: 'waiting' | 'culling' | 'editing' | 'exporting' | 'delivered' | 'none';
@@ -196,7 +198,7 @@ export default function WeddingTracker() {
   );
 }
 
-// --- Client Portal (Défini ICI pour éviter l'erreur) ---
+// --- Client Portal ---
 function ClientPortal({ projects, onBack }: { projects: Project[], onBack: () => void }) {
   const [searchCode, setSearchCode] = useState('');
   const [foundProject, setFoundProject] = useState<Project | null>(null);
@@ -628,7 +630,7 @@ function AdminDashboard({ projects, user, onLogout, staffList, setStaffList }: {
   const [newMember, setNewMember] = useState('');
   
   const [newProject, setNewProject] = useState({ 
-    clientNames: '', clientEmail: '', clientPhone: '', weddingDate: '', 
+    clientNames: '', clientEmail: '', clientEmail2: '', clientPhone: '', clientPhone2: '', weddingDate: '', 
     photographerName: '', videographerName: '', managerName: '', managerEmail: '',
     onSiteTeam: [] as string[], hasPhoto: true, hasVideo: true, hasAlbum: false, isPriority: false
   });
@@ -638,11 +640,13 @@ function AdminDashboard({ projects, user, onLogout, staffList, setStaffList }: {
 
   // Fonction d'export CSV
   const exportCSV = () => {
-    const headers = ["Mariés", "Email", "Téléphone", "Date Mariage", "Statut Photo", "Statut Vidéo"];
+    const headers = ["Mariés", "Email 1", "Email 2", "Téléphone 1", "Téléphone 2", "Date Mariage", "Statut Photo", "Statut Vidéo"];
     const rows = projects.map((p: Project) => [
       p.clientNames,
       p.clientEmail || "",
+      p.clientEmail2 || "",
       p.clientPhone || "",
+      p.clientPhone2 || "",
       new Date(p.weddingDate).toLocaleDateString(),
       p.statusPhoto,
       p.statusVideo
@@ -769,10 +773,17 @@ function AdminDashboard({ projects, user, onLogout, staffList, setStaffList }: {
             </div>
             <form onSubmit={handleAddProject} className="space-y-4">
               <div><label className="text-sm font-medium text-stone-600 block mb-1">Mariés</label><input required placeholder="Ex: Sophie & Marc" className="w-full border rounded-lg p-3 text-base" value={newProject.clientNames} onChange={e => setNewProject({...newProject, clientNames: e.target.value})} /></div>
+              
+              {/* DOUBLE CONTACTS A LA CREATION */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                 <div><label className="text-sm font-medium text-stone-600 block mb-1">Email Client</label><input type="email" className="w-full border rounded-lg p-3 text-base" value={newProject.clientEmail} onChange={e => setNewProject({...newProject, clientEmail: e.target.value})} /></div>
-                 <div><label className="text-sm font-medium text-stone-600 block mb-1">Téléphone</label><input type="tel" className="w-full border rounded-lg p-3 text-base" value={newProject.clientPhone} onChange={e => setNewProject({...newProject, clientPhone: e.target.value})} /></div>
+                 <div><label className="text-sm font-medium text-stone-600 block mb-1">Email Client 1</label><input type="email" className="w-full border rounded-lg p-3 text-base" value={newProject.clientEmail} onChange={e => setNewProject({...newProject, clientEmail: e.target.value})} /></div>
+                 <div><label className="text-sm font-medium text-stone-600 block mb-1">Téléphone 1</label><input type="tel" className="w-full border rounded-lg p-3 text-base" value={newProject.clientPhone} onChange={e => setNewProject({...newProject, clientPhone: e.target.value})} /></div>
               </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                 <div><label className="text-sm font-medium text-stone-600 block mb-1">Email Client 2</label><input type="email" className="w-full border rounded-lg p-3 text-base" value={newProject.clientEmail2} onChange={e => setNewProject({...newProject, clientEmail2: e.target.value})} /></div>
+                 <div><label className="text-sm font-medium text-stone-600 block mb-1">Téléphone 2</label><input type="tel" className="w-full border rounded-lg p-3 text-base" value={newProject.clientPhone2} onChange={e => setNewProject({...newProject, clientPhone2: e.target.value})} /></div>
+              </div>
+
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                  <div><label className="text-sm font-medium text-stone-600 block mb-1">Date Mariage</label><input required type="date" className="w-full border rounded-lg p-3 text-base" value={newProject.weddingDate} onChange={e => setNewProject({...newProject, weddingDate: e.target.value})} /></div>
                  <div>
@@ -1058,9 +1069,15 @@ function ProjectEditor({ project, isSuperAdmin, staffList, user }: { project: Pr
                         <label className="text-xs font-semibold text-stone-500 uppercase block mb-2">Équipe (Tags)</label>
                         <div className="flex flex-wrap gap-2">{staffList.map(member => (<button disabled={!canEdit} key={member} onClick={() => toggleTeamMember(member)} className={`text-xs px-3 py-2 rounded-full border transition-all ${!canEdit ? 'opacity-50 cursor-not-allowed' : ''} ${(localData.onSiteTeam || []).includes(member) ? 'bg-stone-800 text-white border-stone-800' : 'bg-white text-stone-500 border-stone-200 hover:border-stone-400'}`}>{member}</button>))}</div>
                     </div>
+                    
+                    {/* DOUBLE CHAMPS CONTACTS (Modifiables ici aussi) */}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div><label className="text-xs font-semibold text-stone-500 uppercase flex items-center gap-1 mb-1"><AtSign className="w-3 h-3" /> Email Mariés</label><input disabled={!canEdit} className="w-full text-sm border-b border-stone-200 py-1 focus:outline-none focus:border-stone-500 bg-transparent disabled:opacity-50" value={localData.clientEmail || ''} onChange={e => updateField('clientEmail', e.target.value)} /></div>
-                        <div><label className="text-xs font-semibold text-stone-500 uppercase flex items-center gap-1 mb-1"><Phone className="w-3 h-3" /> Téléphone</label><input disabled={!canEdit} className="w-full text-sm border-b border-stone-200 py-1 focus:outline-none focus:border-stone-500 bg-transparent disabled:opacity-50" value={localData.clientPhone || ''} onChange={e => updateField('clientPhone', e.target.value)} /></div>
+                        <div><label className="text-xs font-semibold text-stone-500 uppercase flex items-center gap-1 mb-1"><AtSign className="w-3 h-3" /> Email 1</label><input disabled={!canEdit} className="w-full text-sm border-b border-stone-200 py-1 focus:outline-none focus:border-stone-500 bg-transparent disabled:opacity-50" value={localData.clientEmail || ''} onChange={e => updateField('clientEmail', e.target.value)} /></div>
+                        <div><label className="text-xs font-semibold text-stone-500 uppercase flex items-center gap-1 mb-1"><Phone className="w-3 h-3" /> Tel 1</label><input disabled={!canEdit} className="w-full text-sm border-b border-stone-200 py-1 focus:outline-none focus:border-stone-500 bg-transparent disabled:opacity-50" value={localData.clientPhone || ''} onChange={e => updateField('clientPhone', e.target.value)} /></div>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div><label className="text-xs font-semibold text-stone-500 uppercase flex items-center gap-1 mb-1"><AtSign className="w-3 h-3" /> Email 2</label><input disabled={!canEdit} className="w-full text-sm border-b border-stone-200 py-1 focus:outline-none focus:border-stone-500 bg-transparent disabled:opacity-50" value={localData.clientEmail2 || ''} onChange={e => updateField('clientEmail2', e.target.value)} /></div>
+                        <div><label className="text-xs font-semibold text-stone-500 uppercase flex items-center gap-1 mb-1"><Phone className="w-3 h-3" /> Tel 2</label><input disabled={!canEdit} className="w-full text-sm border-b border-stone-200 py-1 focus:outline-none focus:border-stone-500 bg-transparent disabled:opacity-50" value={localData.clientPhone2 || ''} onChange={e => updateField('clientPhone2', e.target.value)} /></div>
                     </div>
                </div>
 
