@@ -70,10 +70,8 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, user }
     setHasChanges(true); 
   };
 
-  // FONCTION SPÉCIALE POUR ACTIVER FAST TRACK AVEC DATE
   const toggleFastTrack = () => {
       const isActive = !localData.isPriority;
-      // On met à jour le booléen ET la date d'activation (si on active, on met Now, si on désactive, on met null)
       updateField('isPriority', isActive);
       updateField('fastTrackActivationDate', isActive ? new Date().toISOString() : null);
   };
@@ -151,11 +149,23 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, user }
                         <MapPin className="w-3 h-3"/> {project.clientCity || 'Ville?'}
                     </p>
                 </div>
-                {/* DATE FORMATÉE EN FR ICI 👇 */}
+                {/* DATE FORMATÉE EN FR */}
                 <div className="hidden md:block text-sm text-stone-500 font-mono bg-stone-50 px-2 py-1 rounded">{formatDateFR(project.weddingDate)}</div>
+                
+                {/* --- MODIFICATION ICI : DATES DANS LES BULLES --- */}
                 <div className="hidden md:flex gap-4">
-                    {project.statusPhoto !== 'none' && <span className={`text-xs px-2 py-1 rounded-full font-bold ${project.statusPhoto === 'delivered' ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'}`}>PHOTO: {PHOTO_STEPS[project.statusPhoto].label}</span>}
-                    {project.statusVideo !== 'none' && <span className={`text-xs px-2 py-1 rounded-full font-bold ${project.statusVideo === 'delivered' ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'}`}>VIDEO: {VIDEO_STEPS[project.statusVideo].label}</span>}
+                    {project.statusPhoto !== 'none' && (
+                        <div className={`text-xs px-3 py-1.5 rounded-full font-bold flex flex-col items-center leading-tight ${project.statusPhoto === 'delivered' ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'}`}>
+                            <span>PHOTO: {PHOTO_STEPS[project.statusPhoto].label}</span>
+                            {project.estimatedDeliveryPhoto && <span className="text-[10px] opacity-75">{formatDateFR(project.estimatedDeliveryPhoto)}</span>}
+                        </div>
+                    )}
+                    {project.statusVideo !== 'none' && (
+                        <div className={`text-xs px-3 py-1.5 rounded-full font-bold flex flex-col items-center leading-tight ${project.statusVideo === 'delivered' ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'}`}>
+                            <span>VIDEO: {VIDEO_STEPS[project.statusVideo].label}</span>
+                            {project.estimatedDeliveryVideo && <span className="text-[10px] opacity-75">{formatDateFR(project.estimatedDeliveryVideo)}</span>}
+                        </div>
+                    )}
                 </div>
             </div>
             <div className="flex items-center gap-4">
@@ -193,7 +203,7 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, user }
                                     <div><label className="text-[10px] uppercase font-bold text-stone-400">Email 1</label><input disabled={!canEdit} className="w-full p-2 border rounded bg-stone-50" value={localData.clientEmail} onChange={e=>updateField('clientEmail', e.target.value)} /></div>
                                     <div><label className="text-[10px] uppercase font-bold text-stone-400">Tel 1</label><input disabled={!canEdit} className="w-full p-2 border rounded bg-stone-50" value={localData.clientPhone} onChange={e=>updateField('clientPhone', e.target.value)} /></div>
                                 </div>
-                                {/* DATE DE MARIAGE (INPUT RESTE YYYY-MM-DD POUR LE NAVIGATEUR, MAIS L'AFFICHAGE LISTE EST FR) */}
+                                {/* DATE DE MARIAGE (INPUT RESTE YYYY-MM-DD POUR LE NAVIGATEUR) */}
                                 <div><label className="text-[10px] uppercase font-bold text-stone-400">Date Mariage</label><input required type="date" disabled={!canEdit} className="w-full p-2 border rounded bg-stone-50" value={localData.weddingDate} onChange={e=>updateField('weddingDate', e.target.value)} /></div>
                                 
                                 <div><label className="text-[10px] uppercase font-bold text-stone-400">Salle de Mariage (Lieu)</label><input disabled={!canEdit} className="w-full p-2 border rounded bg-stone-50" placeholder="Château de..." value={localData.weddingVenue || ''} onChange={e=>updateField('weddingVenue', e.target.value)} /></div>
