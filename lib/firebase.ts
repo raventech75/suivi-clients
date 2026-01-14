@@ -24,4 +24,4 @@ const app = !getApps().length ? initializeApp(getFirebaseConfig()) : getApp();
 export const auth = getAuth(app);
 export const db = getFirestore(app);
 export const storage = getStorage(app);
-export const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+export const appId = undefined;
