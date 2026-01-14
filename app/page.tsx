@@ -9,7 +9,7 @@ import {
   UserCheck, Users as UsersIcon, ImagePlus, Hourglass,
   Upload, Loader2, AtSign, MessageSquare, Send,
   Copy, ClipboardCheck, BookOpen, ArrowRight, HardDrive, ShieldCheck, History,
-  Euro, Eye, AlertTriangle, CreditCard, X, Phone, Rocket, Star, Mail, Settings, AlertOctagon, Music, Disc, Download
+  Euro, Eye, AlertTriangle, CreditCard, X, Phone, Rocket, Star, Mail, Settings, AlertOctagon, Music, Disc, Download, Ban
 } from 'lucide-react';
 
 // --- Configuration Firebase ---
@@ -198,7 +198,7 @@ export default function WeddingTracker() {
   );
 }
 
-// --- Vue Accueil ---
+// --- Vue Accueil (Landing Page) ---
 function LandingView({ setView }: { setView: (v: any) => void }) {
   return (
     <div className="min-h-screen bg-white text-stone-900 font-sans selection:bg-amber-100 selection:text-amber-900">
@@ -260,7 +260,7 @@ function LandingView({ setView }: { setView: (v: any) => void }) {
   );
 }
 
-// --- Vue Archive ---
+// --- Vue Archive (Lead Capture) ---
 function ArchiveView({ onBack }: { onBack: () => void }) {
   const [step, setStep] = useState(1);
   const [date, setDate] = useState('');
@@ -1000,211 +1000,6 @@ function ProjectEditor({ project, isSuperAdmin, staffList, user }: { project: Pr
            </div>
         </div>
       )}
-    </div>
-  );
-}
-
-// --- Vue Client (Existante) ---
-function ClientPortal({ projects, onBack }: { projects: Project[], onBack: () => void }) {
-  const [searchCode, setSearchCode] = useState('');
-  const [foundProject, setFoundProject] = useState<Project | null>(null);
-  const [error, setError] = useState('');
-  const [imgError, setImgError] = useState(false);
-  const [emailCopied, setEmailCopied] = useState(false);
-  const [musicLinks, setMusicLinks] = useState('');
-  const [musicInstructions, setMusicInstructions] = useState('');
-  const [savingMusic, setSavingMusic] = useState(false);
-
-  useEffect(() => {
-    if (projects.length === 1 && projects[0].id) {
-        setFoundProject(projects[0]);
-    } else if (foundProject) {
-        const live = projects.find(p => p.id === foundProject.id);
-        if(live) setFoundProject(live);
-    }
-  }, [projects, foundProject]);
-
-  useEffect(() => {
-      if(foundProject) {
-          setMusicLinks(foundProject.musicLinks || '');
-          setMusicInstructions(foundProject.musicInstructions || '');
-      }
-  }, [foundProject]);
-
-  const handleSearch = (e: React.FormEvent) => {
-    e.preventDefault();
-    const cleanCode = searchCode.trim().toUpperCase();
-    const project = projects.find(p => p.code === cleanCode);
-    if (project) { setFoundProject(project); setError(''); setImgError(false); } 
-    else { setError('Code introuvable.'); setFoundProject(null); }
-  };
-
-  const handleSaveMusic = async () => {
-      if(!foundProject) return;
-      setSavingMusic(true);
-      let docRef;
-      if (typeof __app_id !== 'undefined') { docRef = doc(db, 'artifacts', typeof __app_id !== 'undefined' ? __app_id : 'default-app-id', 'public', 'data', COLLECTION_NAME, foundProject.id); } 
-      else { docRef = doc(db, COLLECTION_NAME, foundProject.id); }
-      await updateDoc(docRef, { musicLinks, musicInstructions, lastUpdated: serverTimestamp() });
-      alert("Vos choix musicaux ont été enregistrés !");
-      setSavingMusic(false);
-  };
-
-  const copyProdEmail = () => {
-    navigator.clipboard.writeText('irzzenproductions@gmail.com').then(() => {
-      setEmailCopied(true); setTimeout(() => setEmailCopied(false), 2000);
-    }).catch(() => {
-      const textArea = document.createElement("textarea"); textArea.value = 'irzzenproductions@gmail.com'; document.body.appendChild(textArea); textArea.select();
-      document.execCommand('copy'); document.body.removeChild(textArea); setEmailCopied(true); setTimeout(() => setEmailCopied(false), 2000);
-    });
-  };
-
-  useEffect(() => { if (foundProject) setImgError(false); }, [foundProject?.coverImage]);
-
-  if (foundProject) {
-    const defaultImage = 'https://images.unsplash.com/photo-1519741497674-611481863552?auto=format&fit=crop&q=80';
-    const displayImage = (!imgError && foundProject.coverImage) ? foundProject.coverImage : defaultImage;
-    
-    const remaining = (foundProject.totalPrice || 0) - (foundProject.depositAmount || 0);
-    const isBlocked = remaining > 0 && (foundProject.totalPrice || 0) > 0;
-    
-    const delivery = foundProject.estimatedDelivery ? new Date(foundProject.estimatedDelivery) : null;
-    const diffTime = delivery ? delivery.getTime() - new Date().getTime() : 0;
-    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)); 
-    let badgeColor = "bg-stone-100 text-stone-600";
-    let badgeText = "";
-    
-    if (delivery) {
-        if (diffDays < 0) { badgeColor = "bg-red-100 text-red-600"; badgeText = `En retard de ${Math.abs(diffDays)}j`; }
-        else if (diffDays < 15) { badgeColor = "bg-amber-100 text-amber-600"; badgeText = `J-${diffDays}`; }
-        else { badgeText = `J-${diffDays}`; }
-    }
-
-    return (
-      <div className="min-h-screen bg-stone-50">
-        <div className="relative h-[40vh] md:h-[50vh] w-full overflow-hidden bg-stone-900">
-           <img src={displayImage} alt="Couverture Mariage" className="absolute inset-0 w-full h-full object-cover transition-opacity duration-700" onError={() => setImgError(true)} />
-           <div className="absolute inset-0 bg-black/40 backdrop-blur-[2px]"></div>
-           <div className="absolute inset-0 flex flex-col items-center justify-center text-white p-4 text-center">
-             <button onClick={() => onBack()} className="absolute top-6 left-6 text-white/80 hover:text-white flex items-center gap-2 text-sm bg-black/20 px-4 py-2 rounded-full backdrop-blur-md border border-white/20 transition-all hover:bg-black/40 z-20"><ChevronRight className="w-4 h-4 rotate-180" /> Retour</button>
-             <h2 className="text-3xl md:text-6xl font-serif mb-4 drop-shadow-lg relative z-10 px-2">{foundProject.clientNames}</h2>
-             <div className="flex flex-wrap items-center justify-center gap-3 text-sm md:text-base relative z-10">
-                <span className="bg-white/20 backdrop-blur-md px-4 py-1.5 rounded-full border border-white/20 flex items-center gap-2"><Calendar className="w-4 h-4" />{new Date(foundProject.weddingDate).toLocaleDateString('fr-FR', { dateStyle: 'long' })}</span>
-                {foundProject.isPriority && <span className="bg-amber-500/90 text-white backdrop-blur-md px-4 py-1.5 rounded-full border border-amber-400/50 flex items-center gap-2 animate-pulse"><Rocket className="w-4 h-4" /> Dossier Prioritaire</span>}
-             </div>
-           </div>
-        </div>
-        <div className="max-w-4xl mx-auto px-4 -mt-20 relative z-10 pb-20">
-          
-          {foundProject.estimatedDelivery && (
-             <div className="bg-white rounded-xl shadow-lg border border-amber-100 p-6 mb-8 flex flex-col md:flex-row items-center gap-4 animate-fade-in justify-between text-center md:text-left">
-               <div className="flex items-center gap-4">
-                    <div className="p-3 bg-amber-50 rounded-full"><Hourglass className="w-6 h-6 text-amber-600 animate-pulse-slow" /></div>
-                    <div><h4 className="text-sm font-bold text-stone-500 uppercase tracking-wide">Livraison Estimée</h4><p className="text-lg font-serif text-stone-800">{new Date(foundProject.estimatedDelivery).toLocaleDateString()}</p></div>
-               </div>
-               <div className="flex flex-col items-center md:items-end gap-2">
-                   {badgeText && <span className={`px-3 py-1 rounded-full font-bold text-sm ${badgeColor}`}>{badgeText}</span>}
-                   {!foundProject.isPriority && (
-                       <a href={STRIPE_PRIORITY_LINK} target="_blank" className="text-xs flex items-center gap-1 text-amber-600 hover:text-amber-700 underline"><Star className="w-3 h-3"/> Je suis pressé (Passer en priorité)</a>
-                   )}
-               </div>
-             </div>
-          )}
-
-          {isBlocked && (
-              <div className="bg-red-50 border border-red-200 rounded-xl p-6 mb-8 flex items-center gap-4 animate-pulse">
-                   <AlertTriangle className="w-8 h-8 text-red-600 shrink-0" />
-                   <div><h3 className="font-bold text-red-800 text-lg">Action requise</h3><p className="text-red-700 text-sm">Le téléchargement est bloqué en attente du solde ({remaining} €). Merci de contacter l'administration.</p></div>
-              </div>
-          )}
-
-          <div className="bg-white rounded-2xl shadow-xl border border-stone-100 p-4 md:p-10 space-y-12">
-            <div className={`grid gap-10 ${foundProject.statusPhoto !== 'none' && foundProject.statusVideo !== 'none' ? 'md:grid-cols-2' : 'grid-cols-1 max-w-2xl mx-auto'}`}>
-              {foundProject.statusPhoto !== 'none' && (
-                <div className="bg-stone-50 rounded-2xl p-6 border border-stone-100 shadow-sm relative overflow-hidden group hover:shadow-md transition-shadow flex flex-col justify-between">
-                  <div>
-                    <div className="flex items-center gap-4 mb-6"><div className="w-12 h-12 bg-white rounded-xl flex items-center justify-center shadow-sm text-amber-600"><ImageIcon className="w-6 h-6" /></div><div><h3 className="font-serif text-xl text-stone-800">Photos</h3><p className="text-sm text-stone-500 flex items-center gap-1"><Users className="w-3 h-3" /> {foundProject.photographerName || 'En attente'}</p></div></div>
-                    <div className="space-y-2 mb-6">
-                      <div className="flex justify-between items-end mb-2"><span className="text-sm font-medium text-stone-600 uppercase tracking-wider text-xs">Statut</span><span className="text-2xl font-bold text-amber-600">{foundProject.progressPhoto}%</span></div>
-                      <div className="h-3 bg-stone-200 rounded-full overflow-hidden"><div className="h-full bg-amber-500 rounded-full transition-all duration-1000 ease-out relative" style={{ width: `${foundProject.progressPhoto}%` }} /></div>
-                      <p className="text-right text-sm font-medium text-stone-700 mt-2">{PHOTO_STEPS[foundProject.statusPhoto].label}</p>
-                    </div>
-                  </div>
-                  {foundProject.statusPhoto === 'delivered' && (isBlocked ? (<button disabled className="mt-4 w-full flex items-center justify-center gap-2 bg-stone-300 text-stone-500 py-3 rounded-xl cursor-not-allowed"><Lock className="w-4 h-4" /> Téléchargement bloqué</button>) : (foundProject.linkPhoto && (<a href={foundProject.linkPhoto} target="_blank" rel="noopener noreferrer" className="mt-4 w-full flex items-center justify-center gap-2 bg-stone-900 text-white py-3 rounded-xl hover:bg-stone-700 transition-colors shadow-lg"><ExternalLink className="w-4 h-4" /> Accéder à la Galerie</a>)))}
-                </div>
-              )}
-              {foundProject.statusVideo !== 'none' && (
-                <div className="bg-stone-50 rounded-2xl p-6 border border-stone-100 shadow-sm relative overflow-hidden group hover:shadow-md transition-shadow flex flex-col justify-between">
-                  <div>
-                    <div className="flex items-center gap-4 mb-6"><div className="w-12 h-12 bg-white rounded-xl flex items-center justify-center shadow-sm text-sky-600"><Film className="w-6 h-6" /></div><div><h3 className="font-serif text-xl text-stone-800">Film</h3><p className="text-sm text-stone-500 flex items-center gap-1"><Users className="w-3 h-3" /> {foundProject.videographerName || 'En attente'}</p></div></div>
-                    <div className="space-y-2 mb-6">
-                       <div className="flex justify-between items-end mb-2"><span className="text-sm font-medium text-stone-600 uppercase tracking-wider text-xs">Statut</span><span className="text-2xl font-bold text-sky-600">{foundProject.progressVideo}%</span></div>
-                      <div className="h-3 bg-stone-200 rounded-full overflow-hidden"><div className="h-full bg-sky-500 rounded-full transition-all duration-1000 ease-out relative" style={{ width: `${foundProject.progressVideo}%` }} /></div>
-                      <p className="text-right text-sm font-medium text-stone-700 mt-2">{VIDEO_STEPS[foundProject.statusVideo].label}</p>
-                    </div>
-                  </div>
-                  {foundProject.statusVideo === 'delivered' && (isBlocked ? (<button disabled className="mt-4 w-full flex items-center justify-center gap-2 bg-stone-300 text-stone-500 py-3 rounded-xl cursor-not-allowed"><Lock className="w-4 h-4" /> Téléchargement bloqué</button>) : (foundProject.linkVideo && (<a href={foundProject.linkVideo} target="_blank" rel="noopener noreferrer" className="mt-4 w-full flex items-center justify-center gap-2 bg-stone-900 text-white py-3 rounded-xl hover:bg-stone-700 transition-colors shadow-lg"><ExternalLink className="w-4 h-4" /> Télécharger le Film</a>)))}
-                </div>
-              )}
-            </div>
-            
-            {/* ALBUM SECTION */}
-            {foundProject.hasAlbum && foundProject.statusPhoto === 'delivered' && !isBlocked && (
-              <div className="mt-8 bg-stone-800 rounded-2xl p-8 text-white relative overflow-hidden">
-                <div className="absolute top-0 right-0 w-64 h-64 bg-stone-700 rounded-full mix-blend-overlay filter blur-3xl opacity-20 -translate-y-1/2 translate-x-1/2"></div>
-                <div className="relative z-10">
-                  <div className="flex items-center gap-3 mb-6"><div className="bg-stone-700 p-3 rounded-xl"><BookOpen className="w-6 h-6 text-amber-200" /></div><h3 className="font-serif text-2xl">Album Photo</h3></div>
-                  <div className="grid md:grid-cols-2 gap-8">
-                    <div className="space-y-4">
-                        <p className="text-stone-300">Votre pack inclut un album format <strong>{foundProject.albumFormat || 'Standard'}</strong>.</p>
-                        <p className="text-sm text-stone-400">Pour lancer la création, merci de nous envoyer votre sélection de photos.</p>
-                    </div>
-                    <div className="bg-stone-900/50 p-6 rounded-xl border border-stone-700"><div className="mb-4"><label className="text-xs uppercase text-stone-500 font-bold mb-1 block">Adresse d'envoi</label><div className="flex items-center gap-2 bg-stone-800 p-2 rounded-lg border border-stone-700"><code className="flex-1 text-sm text-amber-100">irzzenproductions@gmail.com</code><button onClick={copyProdEmail} className="p-1.5 hover:bg-stone-700 rounded text-stone-400 hover:text-white transition-colors">{emailCopied ? <ClipboardCheck className="w-4 h-4 text-green-400"/> : <Copy className="w-4 h-4"/>}</button></div></div><a href="https://wetransfer.com/" target="_blank" rel="noopener noreferrer" className="w-full bg-white text-stone-900 py-3 rounded-lg font-medium hover:bg-amber-50 transition-colors flex items-center justify-center gap-2">Envoyer ma sélection <ArrowRight className="w-4 h-4"/></a></div>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* MUSIQUE SECTION */}
-            {foundProject.statusVideo !== 'none' && (
-                <div className="mt-8 bg-purple-50 rounded-2xl p-6 border border-purple-100">
-                    <h3 className="text-lg font-bold text-purple-900 mb-4 flex items-center gap-2"><Music className="w-5 h-5"/> Choix Musicaux</h3>
-                    <div className="space-y-4">
-                        <div>
-                            <label className="text-xs font-bold text-purple-700 uppercase mb-1 block">Vos liens (YouTube, Spotify, WeTransfer pour MP3)</label>
-                            <textarea className="w-full p-3 rounded-xl border border-purple-200 focus:ring-2 focus:ring-purple-500 outline-none" rows={3} placeholder="Collez vos liens ici..." value={musicLinks} onChange={e => setMusicLinks(e.target.value)} />
-                        </div>
-                        <div>
-                            <label className="text-xs font-bold text-purple-700 uppercase mb-1 block">Instructions de montage</label>
-                            <input className="w-full p-3 rounded-xl border border-purple-200 focus:ring-2 focus:ring-purple-500 outline-none" placeholder="Ex: Musique dynamique pour l'entrée..." value={musicInstructions} onChange={e => setMusicInstructions(e.target.value)} />
-                        </div>
-                        <button onClick={handleSaveMusic} disabled={savingMusic} className="bg-purple-600 text-white px-6 py-2 rounded-lg font-bold hover:bg-purple-700 transition-colors disabled:opacity-50">{savingMusic ? <Loader2 className="w-4 h-4 animate-spin"/> : 'Enregistrer mes choix'}</button>
-                    </div>
-                </div>
-            )}
-            
-            {/* --- CHAT CLIENT --- */}
-            <div className="mt-8">
-               <ChatBox project={foundProject} userType="client" />
-            </div>
-
-          </div>
-        </div>
-      </div>
-    );
-  }
-  return (
-    <div className="min-h-screen flex flex-col items-center justify-center p-6 relative">
-      <button onClick={() => onBack()} className="absolute top-6 left-6 text-stone-400 hover:text-stone-800 flex gap-2 transition-colors"><LogOut className="w-4 h-4" /> Accueil</button>
-      <div className="w-full max-w-md bg-white p-8 rounded-2xl shadow-xl text-center">
-        <div className="bg-stone-100 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-6"><Search className="w-8 h-8 text-stone-400" /></div>
-        <h2 className="text-2xl font-serif text-stone-900 mb-2">Accès Mariés</h2>
-        <form onSubmit={handleSearch} className="space-y-4 mt-8">
-          <input type="text" placeholder="CODE..." value={searchCode} onChange={(e) => setSearchCode(e.target.value)} className="w-full p-4 border rounded-xl text-center text-lg tracking-widest uppercase focus:ring-2 focus:ring-stone-800 outline-none" />
-          <button type="submit" className="w-full bg-stone-900 text-white py-4 rounded-xl font-medium hover:bg-stone-800 transition-colors">Voir l'avancement</button>
-        </form>
-        {error && <div className="mt-4 text-red-500 text-sm bg-red-50 p-3 rounded-lg flex items-center justify-center gap-2"><AlertCircle className="w-4 h-4"/> {error}</div>}
-      </div>
     </div>
   );
 }
