@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { 
   Camera, Video, Ban, ChevronRight, Rocket, Mail, 
   BookOpen, Trash2, Image as ImageIcon, CheckSquare, 
-  Upload, Loader2, MapPin, FileText, Users, Calendar, Eye, Timer, Music // 👈 J'ai ajouté l'icône Music
+  Upload, Loader2, MapPin, FileText, Users, Calendar, Eye, Timer, Music
 } from 'lucide-react';
 import { doc, updateDoc, deleteDoc, serverTimestamp } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
@@ -96,7 +96,6 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, user }
     } catch (error: any) { alert(`Erreur: ${error.message}`); } finally { setUploading(false); }
   };
 
-  // --- SÉCURISATION DU SAVE (WEBHOOK) ---
   const save = async () => {
       const colPath = typeof appId !== 'undefined' ? `artifacts/${appId}/public/data/${COLLECTION_NAME}` : COLLECTION_NAME;
       await updateDoc(doc(db, colPath, project.id), { ...localData, lastUpdated: serverTimestamp() });
@@ -212,6 +211,14 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, user }
                                     <div><label className="text-[10px] uppercase font-bold text-stone-400">Email 1</label><input disabled={!canEdit} className="w-full p-2 border rounded bg-stone-50" value={localData.clientEmail} onChange={e=>updateField('clientEmail', e.target.value)} /></div>
                                     <div><label className="text-[10px] uppercase font-bold text-stone-400">Tel 1</label><input disabled={!canEdit} className="w-full p-2 border rounded bg-stone-50" value={localData.clientPhone} onChange={e=>updateField('clientPhone', e.target.value)} /></div>
                                 </div>
+                                
+                                {/* 👇 AJOUT DES CHAMPS SECONDAIRES 👇 */}
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div><label className="text-[10px] uppercase font-bold text-stone-400">Email 2</label><input disabled={!canEdit} className="w-full p-2 border rounded bg-stone-50" value={localData.clientEmail2 || ''} onChange={e=>updateField('clientEmail2', e.target.value)} /></div>
+                                    <div><label className="text-[10px] uppercase font-bold text-stone-400">Tel 2</label><input disabled={!canEdit} className="w-full p-2 border rounded bg-stone-50" value={localData.clientPhone2 || ''} onChange={e=>updateField('clientPhone2', e.target.value)} /></div>
+                                </div>
+                                {/* 👆 FIN AJOUT 👆 */}
+
                                 <div><label className="text-[10px] uppercase font-bold text-stone-400">Date Mariage</label><input required type="date" disabled={!canEdit} className="w-full p-2 border rounded bg-stone-50" value={localData.weddingDate} onChange={e=>updateField('weddingDate', e.target.value)} /></div>
                                 
                                 <div><label className="text-[10px] uppercase font-bold text-stone-400">Salle de Mariage (Lieu)</label><input disabled={!canEdit} className="w-full p-2 border rounded bg-stone-50" placeholder="Château de..." value={localData.weddingVenue || ''} onChange={e=>updateField('weddingVenue', e.target.value)} /></div>
@@ -274,7 +281,7 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, user }
                             )}
                         </div>
 
-                         {/* 🟣 NOUVEAU BLOC : BRIEF MUSIQUE & MONTAGE (AFFICHE CE QUE LE CLIENT A REMPLI) */}
+                        {/* BRIEF CLIENT (LECTURE SEULE) */}
                         <div className="bg-purple-50 p-6 rounded-xl border border-purple-100 shadow-sm">
                             <h4 className="font-bold text-purple-900 mb-4 flex items-center gap-2"><Music className="w-5 h-5"/> Brief Créatif (Rempli par le client)</h4>
                             <div className="space-y-4">
