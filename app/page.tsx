@@ -12,6 +12,7 @@ import {
   Euro, Eye, AlertTriangle, CreditCard, X, Phone, Rocket, Star, Mail, Settings, AlertOctagon, Music, Disc, Download, Ban
 } from 'lucide-react';
 
+// --- Configuration Firebase ---
 import { initializeApp, getApps, getApp } from 'firebase/app';
 import { 
   getFirestore, collection, addDoc, updateDoc, deleteDoc, 
@@ -52,7 +53,7 @@ const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
 const MAKE_WEBHOOK_URL = "https://hook.eu2.make.com/iwf8nbt3tywmywp6u89xgn7e2nar0bbs"; 
 const SUPER_ADMINS = ["admin@raventech.fr", "irzzenproductions@gmail.com"]; 
 const STRIPE_ARCHIVE_LINK = "https://buy.stripe.com/3cI3cv3jq2j37x9eFy5gc0b";
-const STRIPE_PRIORITY_LINK = "https://buy.stripe.com/fZu4gz07eaPzcRt54Y5gc0c";
+const STRIPE_PRIORITY_LINK = "https://buy.stripe.com/VOTRE_LIEN_PRIORITE"; // Mettre le lien à 290€ ici
 
 const DEFAULT_STAFF = ["Feridun", "Volkan", "Ali", "Steeven", "Taner", "Yunus", "Emir", "Serife"];
 const ALBUM_FORMATS = ["30x20", "30x30", "40x30", "40x30 + 2x 18x24", "Autre"];
@@ -61,16 +62,19 @@ const COLLECTION_NAME = 'wedding_projects';
 const LEADS_COLLECTION = 'leads';
 const SETTINGS_COLLECTION = 'settings'; 
 
+// --- Types ---
 interface Message { id: string; author: 'client' | 'admin'; text: string; date: any; }
 interface Remuneration { name: string; amount: number; note: string; paid?: boolean; }
 
 interface Project {
   id: string;
   clientNames: string;
+  // --- NOUVEAU : Double Contacts ---
   clientEmail?: string;
-  clientEmail2?: string; // NOUVEAU
+  clientEmail2?: string;
   clientPhone?: string;
-  clientPhone2?: string; // NOUVEAU
+  clientPhone2?: string;
+  // ---------------------------------
   weddingDate: string;
   code: string;
   statusPhoto: 'waiting' | 'culling' | 'editing' | 'exporting' | 'delivered' | 'none';
@@ -198,198 +202,7 @@ export default function WeddingTracker() {
   );
 }
 
-// --- Client Portal ---
-function ClientPortal({ projects, onBack }: { projects: Project[], onBack: () => void }) {
-  const [searchCode, setSearchCode] = useState('');
-  const [foundProject, setFoundProject] = useState<Project | null>(null);
-  const [error, setError] = useState('');
-  const [imgError, setImgError] = useState(false);
-  const [emailCopied, setEmailCopied] = useState(false);
-  const [musicLinks, setMusicLinks] = useState('');
-  const [musicInstructions, setMusicInstructions] = useState('');
-  const [savingMusic, setSavingMusic] = useState(false);
-
-  useEffect(() => {
-    if (projects.length === 1 && projects[0].id) {
-        setFoundProject(projects[0]);
-    } else if (foundProject) {
-        const live = projects.find(p => p.id === foundProject.id);
-        if(live) setFoundProject(live);
-    }
-  }, [projects, foundProject]);
-
-  useEffect(() => {
-      if(foundProject) {
-          setMusicLinks(foundProject.musicLinks || '');
-          setMusicInstructions(foundProject.musicInstructions || '');
-      }
-  }, [foundProject]);
-
-  const handleSearch = (e: React.FormEvent) => {
-    e.preventDefault();
-    const cleanCode = searchCode.trim().toUpperCase();
-    const project = projects.find(p => p.code === cleanCode);
-    if (project) { setFoundProject(project); setError(''); setImgError(false); } 
-    else { setError('Code introuvable.'); setFoundProject(null); }
-  };
-
-  const handleSaveMusic = async () => {
-      if(!foundProject) return;
-      setSavingMusic(true);
-      let docRef;
-      if (typeof __app_id !== 'undefined') { docRef = doc(db, 'artifacts', typeof __app_id !== 'undefined' ? __app_id : 'default-app-id', 'public', 'data', COLLECTION_NAME, foundProject.id); } 
-      else { docRef = doc(db, COLLECTION_NAME, foundProject.id); }
-      await updateDoc(docRef, { musicLinks, musicInstructions, lastUpdated: serverTimestamp() });
-      alert("Vos choix musicaux ont été enregistrés !");
-      setSavingMusic(false);
-  };
-
-  const copyProdEmail = () => {
-    navigator.clipboard.writeText('irzzenproductions@gmail.com').then(() => {
-      setEmailCopied(true); setTimeout(() => setEmailCopied(false), 2000);
-    }).catch(() => {
-      const textArea = document.createElement("textarea"); textArea.value = 'irzzenproductions@gmail.com'; document.body.appendChild(textArea); textArea.select();
-      document.execCommand('copy'); document.body.removeChild(textArea); setEmailCopied(true); setTimeout(() => setEmailCopied(false), 2000);
-    });
-  };
-
-  useEffect(() => { if (foundProject) setImgError(false); }, [foundProject?.coverImage]);
-
-  if (foundProject) {
-    const defaultImage = 'https://images.unsplash.com/photo-1519741497674-611481863552?auto=format&fit=crop&q=80';
-    const displayImage = (!imgError && foundProject.coverImage) ? foundProject.coverImage : defaultImage;
-    const remaining = (foundProject.totalPrice || 0) - (foundProject.depositAmount || 0);
-    const isBlocked = remaining > 0 && (foundProject.totalPrice || 0) > 0;
-    
-    return (
-      <div className="min-h-screen bg-stone-50">
-        <div className="relative h-[40vh] md:h-[50vh] w-full overflow-hidden bg-stone-900">
-           <img src={displayImage} alt="Couverture Mariage" className="absolute inset-0 w-full h-full object-cover transition-opacity duration-700" onError={() => setImgError(true)} />
-           <div className="absolute inset-0 bg-black/40 backdrop-blur-[2px]"></div>
-           <div className="absolute inset-0 flex flex-col items-center justify-center text-white p-4 text-center">
-             <button onClick={() => onBack()} className="absolute top-6 left-6 text-white/80 hover:text-white flex items-center gap-2 text-sm bg-black/20 px-4 py-2 rounded-full backdrop-blur-md border border-white/20 transition-all hover:bg-black/40 z-20"><ChevronRight className="w-4 h-4 rotate-180" /> Retour</button>
-             <h2 className="text-3xl md:text-6xl font-serif mb-4 drop-shadow-lg relative z-10 px-2">{foundProject.clientNames}</h2>
-             <div className="flex flex-wrap items-center justify-center gap-3 text-sm md:text-base relative z-10">
-                <span className="bg-white/20 backdrop-blur-md px-4 py-1.5 rounded-full border border-white/20 flex items-center gap-2"><Calendar className="w-4 h-4" />{new Date(foundProject.weddingDate).toLocaleDateString('fr-FR', { dateStyle: 'long' })}</span>
-                {foundProject.isPriority && <span className="bg-amber-500/90 text-white backdrop-blur-md px-4 py-1.5 rounded-full border border-amber-400/50 flex items-center gap-2 animate-pulse"><Rocket className="w-4 h-4" /> Dossier Prioritaire</span>}
-             </div>
-           </div>
-        </div>
-        <div className="max-w-4xl mx-auto px-4 -mt-20 relative z-10 pb-20">
-          
-          {foundProject.estimatedDelivery && (
-             <div className="bg-white rounded-xl shadow-lg border border-amber-100 p-6 mb-8 flex flex-col md:flex-row items-center gap-4 animate-fade-in justify-between text-center md:text-left">
-               <div className="flex items-center gap-4">
-                    <div className="p-3 bg-amber-50 rounded-full"><Hourglass className="w-6 h-6 text-amber-600 animate-pulse-slow" /></div>
-                    <div><h4 className="text-sm font-bold text-stone-500 uppercase tracking-wide">Livraison Estimée</h4><p className="text-lg font-serif text-stone-800">{new Date(foundProject.estimatedDelivery).toLocaleDateString()}</p></div>
-               </div>
-               <div className="flex flex-col items-center md:items-end gap-2">
-                   {!foundProject.isPriority && (
-                       <a href={STRIPE_PRIORITY_LINK} target="_blank" className="text-xs flex items-center gap-1 text-amber-600 hover:text-amber-700 underline"><Star className="w-3 h-3"/> Je suis pressé (Passer en priorité)</a>
-                   )}
-               </div>
-             </div>
-          )}
-
-          {isBlocked && (
-              <div className="bg-red-50 border border-red-200 rounded-xl p-6 mb-8 flex items-center gap-4 animate-pulse">
-                   <AlertTriangle className="w-8 h-8 text-red-600 shrink-0" />
-                   <div><h3 className="font-bold text-red-800 text-lg">Action requise</h3><p className="text-red-700 text-sm">Le téléchargement est bloqué en attente du solde ({remaining} €). Merci de contacter l'administration.</p></div>
-              </div>
-          )}
-
-          <div className="bg-white rounded-2xl shadow-xl border border-stone-100 p-4 md:p-10 space-y-12">
-            <div className={`grid gap-10 ${foundProject.statusPhoto !== 'none' && foundProject.statusVideo !== 'none' ? 'md:grid-cols-2' : 'grid-cols-1 max-w-2xl mx-auto'}`}>
-              {foundProject.statusPhoto !== 'none' && (
-                <div className="bg-stone-50 rounded-2xl p-6 border border-stone-100 shadow-sm relative overflow-hidden group hover:shadow-md transition-shadow flex flex-col justify-between">
-                  <div>
-                    <div className="flex items-center gap-4 mb-6"><div className="w-12 h-12 bg-white rounded-xl flex items-center justify-center shadow-sm text-amber-600"><ImageIcon className="w-6 h-6" /></div><div><h3 className="font-serif text-xl text-stone-800">Photos</h3><p className="text-sm text-stone-500 flex items-center gap-1"><Users className="w-3 h-3" /> {foundProject.photographerName || 'En attente'}</p></div></div>
-                    <div className="space-y-2 mb-6">
-                      <div className="flex justify-between items-end mb-2"><span className="text-sm font-medium text-stone-600 uppercase tracking-wider text-xs">Statut</span><span className="text-2xl font-bold text-amber-600">{foundProject.progressPhoto}%</span></div>
-                      <div className="h-3 bg-stone-200 rounded-full overflow-hidden"><div className="h-full bg-amber-500 rounded-full transition-all duration-1000 ease-out relative" style={{ width: `${foundProject.progressPhoto}%` }} /></div>
-                      <p className="text-right text-sm font-medium text-stone-700 mt-2">{PHOTO_STEPS[foundProject.statusPhoto].label}</p>
-                    </div>
-                  </div>
-                  {foundProject.statusPhoto === 'delivered' && (isBlocked ? (<button disabled className="mt-4 w-full flex items-center justify-center gap-2 bg-stone-300 text-stone-500 py-3 rounded-xl cursor-not-allowed"><Lock className="w-4 h-4" /> Téléchargement bloqué</button>) : (foundProject.linkPhoto && (<a href={foundProject.linkPhoto} target="_blank" rel="noopener noreferrer" className="mt-4 w-full flex items-center justify-center gap-2 bg-stone-900 text-white py-3 rounded-xl hover:bg-stone-700 transition-colors shadow-lg"><ExternalLink className="w-4 h-4" /> Accéder à la Galerie</a>)))}
-                </div>
-              )}
-              {foundProject.statusVideo !== 'none' && (
-                <div className="bg-stone-50 rounded-2xl p-6 border border-stone-100 shadow-sm relative overflow-hidden group hover:shadow-md transition-shadow flex flex-col justify-between">
-                  <div>
-                    <div className="flex items-center gap-4 mb-6"><div className="w-12 h-12 bg-white rounded-xl flex items-center justify-center shadow-sm text-sky-600"><Film className="w-6 h-6" /></div><div><h3 className="font-serif text-xl text-stone-800">Film</h3><p className="text-sm text-stone-500 flex items-center gap-1"><Users className="w-3 h-3" /> {foundProject.videographerName || 'En attente'}</p></div></div>
-                    <div className="space-y-2 mb-6">
-                       <div className="flex justify-between items-end mb-2"><span className="text-sm font-medium text-stone-600 uppercase tracking-wider text-xs">Statut</span><span className="text-2xl font-bold text-sky-600">{foundProject.progressVideo}%</span></div>
-                      <div className="h-3 bg-stone-200 rounded-full overflow-hidden"><div className="h-full bg-sky-500 rounded-full transition-all duration-1000 ease-out relative" style={{ width: `${foundProject.progressVideo}%` }} /></div>
-                      <p className="text-right text-sm font-medium text-stone-700 mt-2">{VIDEO_STEPS[foundProject.statusVideo].label}</p>
-                    </div>
-                  </div>
-                  {foundProject.statusVideo === 'delivered' && (isBlocked ? (<button disabled className="mt-4 w-full flex items-center justify-center gap-2 bg-stone-300 text-stone-500 py-3 rounded-xl cursor-not-allowed"><Lock className="w-4 h-4" /> Téléchargement bloqué</button>) : (foundProject.linkVideo && (<a href={foundProject.linkVideo} target="_blank" rel="noopener noreferrer" className="mt-4 w-full flex items-center justify-center gap-2 bg-stone-900 text-white py-3 rounded-xl hover:bg-stone-700 transition-colors shadow-lg"><ExternalLink className="w-4 h-4" /> Télécharger le Film</a>)))}
-                </div>
-              )}
-            </div>
-            
-            {/* ALBUM SECTION */}
-            {foundProject.hasAlbum && foundProject.statusPhoto === 'delivered' && !isBlocked && (
-              <div className="mt-8 bg-stone-800 rounded-2xl p-8 text-white relative overflow-hidden">
-                <div className="absolute top-0 right-0 w-64 h-64 bg-stone-700 rounded-full mix-blend-overlay filter blur-3xl opacity-20 -translate-y-1/2 translate-x-1/2"></div>
-                <div className="relative z-10">
-                  <div className="flex items-center gap-3 mb-6"><div className="bg-stone-700 p-3 rounded-xl"><BookOpen className="w-6 h-6 text-amber-200" /></div><h3 className="font-serif text-2xl">Album Photo</h3></div>
-                  <div className="grid md:grid-cols-2 gap-8">
-                    <div className="space-y-4">
-                        <p className="text-stone-300">Votre pack inclut un album format <strong>{foundProject.albumFormat || 'Standard'}</strong>.</p>
-                        <p className="text-sm text-stone-400">Pour lancer la création, merci de nous envoyer votre sélection de photos.</p>
-                    </div>
-                    <div className="bg-stone-900/50 p-6 rounded-xl border border-stone-700"><div className="mb-4"><label className="text-xs uppercase text-stone-500 font-bold mb-1 block">Adresse d'envoi</label><div className="flex items-center gap-2 bg-stone-800 p-2 rounded-lg border border-stone-700"><code className="flex-1 text-sm text-amber-100">irzzenproductions@gmail.com</code><button onClick={copyProdEmail} className="p-1.5 hover:bg-stone-700 rounded text-stone-400 hover:text-white transition-colors">{emailCopied ? <ClipboardCheck className="w-4 h-4 text-green-400"/> : <Copy className="w-4 h-4"/>}</button></div></div><a href="https://wetransfer.com/" target="_blank" rel="noopener noreferrer" className="w-full bg-white text-stone-900 py-3 rounded-lg font-medium hover:bg-amber-50 transition-colors flex items-center justify-center gap-2">Envoyer ma sélection <ArrowRight className="w-4 h-4"/></a></div>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* MUSIQUE SECTION */}
-            {foundProject.statusVideo !== 'none' && (
-                <div className="mt-8 bg-purple-50 rounded-2xl p-6 border border-purple-100">
-                    <h3 className="text-lg font-bold text-purple-900 mb-4 flex items-center gap-2"><Music className="w-5 h-5"/> Choix Musicaux</h3>
-                    <div className="space-y-4">
-                        <div>
-                            <label className="text-xs font-bold text-purple-700 uppercase mb-1 block">Vos liens (YouTube, Spotify, WeTransfer pour MP3)</label>
-                            <textarea className="w-full p-3 rounded-xl border border-purple-200 focus:ring-2 focus:ring-purple-500 outline-none" rows={3} placeholder="Collez vos liens ici..." value={musicLinks} onChange={e => setMusicLinks(e.target.value)} />
-                        </div>
-                        <div>
-                            <label className="text-xs font-bold text-purple-700 uppercase mb-1 block">Instructions de montage</label>
-                            <input className="w-full p-3 rounded-xl border border-purple-200 focus:ring-2 focus:ring-purple-500 outline-none" placeholder="Ex: Musique dynamique pour l'entrée..." value={musicInstructions} onChange={e => setMusicInstructions(e.target.value)} />
-                        </div>
-                        <button onClick={handleSaveMusic} disabled={savingMusic} className="bg-purple-600 text-white px-6 py-2 rounded-lg font-bold hover:bg-purple-700 transition-colors disabled:opacity-50">{savingMusic ? <Loader2 className="w-4 h-4 animate-spin"/> : 'Enregistrer mes choix'}</button>
-                    </div>
-                </div>
-            )}
-            
-            {/* --- CHAT CLIENT --- */}
-            <div className="mt-8">
-               <ChatBox project={foundProject} userType="client" />
-            </div>
-
-          </div>
-        </div>
-      </div>
-    );
-  }
-  return (
-    <div className="min-h-screen flex flex-col items-center justify-center p-6 relative">
-      <button onClick={() => onBack()} className="absolute top-6 left-6 text-stone-400 hover:text-stone-800 flex gap-2 transition-colors"><LogOut className="w-4 h-4" /> Accueil</button>
-      <div className="w-full max-w-md bg-white p-8 rounded-2xl shadow-xl text-center">
-        <div className="bg-stone-100 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-6"><Search className="w-8 h-8 text-stone-400" /></div>
-        <h2 className="text-2xl font-serif text-stone-900 mb-2">Accès Mariés</h2>
-        <form onSubmit={handleSearch} className="space-y-4 mt-8">
-          <input type="text" placeholder="CODE..." value={searchCode} onChange={(e) => setSearchCode(e.target.value)} className="w-full p-4 border rounded-xl text-center text-lg tracking-widest uppercase focus:ring-2 focus:ring-stone-800 outline-none" />
-          <button type="submit" className="w-full bg-stone-900 text-white py-4 rounded-xl font-medium hover:bg-stone-800 transition-colors">Voir l'avancement</button>
-        </form>
-        {error && <div className="mt-4 text-red-500 text-sm bg-red-50 p-3 rounded-lg flex items-center justify-center gap-2"><AlertCircle className="w-4 h-4"/> {error}</div>}
-      </div>
-    </div>
-  );
-}
-
-// --- Vue Accueil (Landing Page) ---
+// --- Vue Accueil ---
 function LandingView({ setView }: { setView: (v: any) => void }) {
   return (
     <div className="min-h-screen bg-white text-stone-900 font-sans selection:bg-amber-100 selection:text-amber-900">
@@ -451,7 +264,7 @@ function LandingView({ setView }: { setView: (v: any) => void }) {
   );
 }
 
-// --- Vue Archive (Lead Capture) ---
+// --- Vue Archive ---
 function ArchiveView({ onBack }: { onBack: () => void }) {
   const [step, setStep] = useState(1);
   const [date, setDate] = useState('');
@@ -638,39 +451,20 @@ function AdminDashboard({ projects, user, onLogout, staffList, setStaffList }: {
 
   const isSuperAdmin = SUPER_ADMINS.includes(user?.email);
 
-  // --- AJOUT DE LA LOGIQUE DES COMPTEURS ICI ---
+  // --- CALCUL DES COMPTEURS DYNAMIQUE ---
   const counts = {
     all: projects.length,
-    active: projects.filter(p => 
-      (p.statusPhoto !== 'delivered' && p.statusPhoto !== 'none') || 
-      (p.statusVideo !== 'delivered' && p.statusVideo !== 'none')
-    ).length,
+    active: projects.filter(p => (p.statusPhoto !== 'delivered' && p.statusPhoto !== 'none') || (p.statusVideo !== 'delivered' && p.statusVideo !== 'none')).length,
     late: projects.filter(p => {
-      // On définit le retard à partir de 60 jours après le mariage
       const limitDate = new Date(p.weddingDate).getTime() + (60 * 24 * 60 * 60 * 1000); 
-      const isFinished = (p.statusPhoto === 'delivered' || p.statusPhoto === 'none') && 
-                         (p.statusVideo === 'delivered' || p.statusVideo === 'none');
+      const isFinished = (p.statusPhoto === 'delivered' || p.statusPhoto === 'none') && (p.statusVideo === 'delivered' || p.statusVideo === 'none');
       return Date.now() > limitDate && !isFinished;
     }).length
   };
-  // ----------------------------------------------
 
-  const handleLogin = async (e: React.FormEvent) => {
-
-
-  // Fonction d'export CSV
   const exportCSV = () => {
     const headers = ["Mariés", "Email 1", "Email 2", "Téléphone 1", "Téléphone 2", "Date Mariage", "Statut Photo", "Statut Vidéo"];
-    const rows = projects.map((p: Project) => [
-      p.clientNames,
-      p.clientEmail || "",
-      p.clientEmail2 || "",
-      p.clientPhone || "",
-      p.clientPhone2 || "",
-      new Date(p.weddingDate).toLocaleDateString(),
-      p.statusPhoto,
-      p.statusVideo
-    ]);
+    const rows = projects.map((p: Project) => [p.clientNames, p.clientEmail || "", p.clientEmail2 || "", p.clientPhone || "", p.clientPhone2 || "", new Date(p.weddingDate).toLocaleDateString(), p.statusPhoto, p.statusVideo]);
     const csvContent = [headers.join(","), ...rows.map((r: string[]) => r.map(c => `"${c}"`).join(","))].join("\n");
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement("a");
@@ -710,14 +504,14 @@ function AdminDashboard({ projects, user, onLogout, staffList, setStaffList }: {
   if (!user || user.isAnonymous) return (
     <div className="min-h-screen flex items-center justify-center bg-stone-100 p-4">
       <div className="bg-white p-6 rounded-xl shadow-lg max-w-sm w-full">
-         <h2 className="text-xl font-bold mb-4 flex gap-2"><Lock className="w-5 h-5" /> Accès Production</h2>
+         <h2 className="text-xl font-bold mb-4 flex gap-2"><Lock className="w-5 h-5" /> Accès Studio</h2>
          <form onSubmit={handleLogin} className="space-y-4">
-            <div><label className="text-xs font-bold text-stone-500 uppercase">Email</label><input type="email" required className="w-full p-3 border rounded-lg text-base" value={emailInput} onChange={(e) => setEmailInput(e.target.value)} /></div>
-            <div><label className="text-xs font-bold text-stone-500 uppercase">Mot de passe</label><input type="password" required className="w-full p-3 border rounded-lg text-base" value={passInput} onChange={(e) => setPassInput(e.target.value)} /></div>
+            <input type="email" placeholder="Email" required className="w-full p-3 border rounded-lg" value={emailInput} onChange={(e) => setEmailInput(e.target.value)} />
+            <input type="password" placeholder="Mots de passe" required className="w-full p-3 border rounded-lg" value={passInput} onChange={(e) => setPassInput(e.target.value)} />
             {errorMsg && <p className="text-red-500 text-sm">{errorMsg}</p>}
-            <button type="submit" className="w-full bg-blue-600 text-white p-4 rounded-xl font-bold hover:bg-blue-700 text-lg">Se Connecter</button>
+            <button type="submit" className="w-full bg-blue-600 text-white p-3 rounded-lg font-bold">Se Connecter</button>
          </form>
-         <button onClick={onLogout} className="mt-4 text-sm w-full text-center text-stone-500 py-2">Retour Accueil</button>
+         <button onClick={onLogout} className="mt-4 text-sm w-full text-center text-stone-500">Retour Accueil</button>
       </div>
     </div>
   );
@@ -751,33 +545,24 @@ function AdminDashboard({ projects, user, onLogout, staffList, setStaffList }: {
 
   return (
     <div className="min-h-screen bg-gray-50 pb-20">
-      <header className="bg-white border-b sticky top-0 z-20 shadow-sm">
-        <div className="max-w-7xl mx-auto px-4 py-3 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-          <div className="flex items-center gap-3 w-full md:w-auto justify-between">
-            <div className="flex items-center gap-3">
-                <div className="bg-stone-900 text-white p-2 rounded-lg"><Users className="w-5 h-5" /></div>
-                <div><h1 className="font-bold text-stone-900 text-lg">Dashboard</h1><p className="text-xs text-stone-500 truncate max-w-[150px]">{user.email}</p></div>
-            </div>
-            <div className="flex items-center gap-2 md:hidden">
-                <button onClick={() => setShowTeamModal(true)} className="p-2 border rounded-lg bg-stone-100"><Settings className="w-5 h-5 text-stone-600"/></button>
-                <button onClick={() => setIsAdding(true)} className="p-2 bg-blue-600 text-white rounded-lg"><Plus className="w-5 h-5"/></button>
-            </div>
-          </div>
-          
-          <div className="hidden md:flex items-center gap-2">
-            {isSuperAdmin && <button onClick={exportCSV} className="text-stone-500 hover:text-stone-800 px-3 py-2 text-sm font-medium transition flex items-center gap-1 border rounded-lg mr-2"><Download className="w-4 h-4"/> CSV</button>}
-            <button onClick={() => setShowTeamModal(true)} className="text-stone-500 hover:text-stone-800 px-3 py-2 text-sm font-medium transition flex items-center gap-1 border rounded-lg mr-2"><Settings className="w-4 h-4"/> Équipe</button>
-            <button onClick={onLogout} className="text-stone-500 hover:text-stone-800 px-3 py-2 text-sm font-medium transition flex items-center gap-1"><LogOut className="w-4 h-4"/> Déconnexion</button>
-            <button onClick={() => setIsAdding(true)} className="bg-blue-600 text-white px-4 py-2 rounded-lg flex gap-2 text-sm font-medium hover:bg-blue-700 transition"><Plus className="w-4 h-4" /> Nouveau</button>
-          </div>
+      <header className="bg-white border-b sticky top-0 z-20 shadow-sm p-4 flex justify-between items-center">
+        <div className="flex items-center gap-3">
+          <div className="bg-stone-900 text-white p-2 rounded-lg"><Users className="w-5 h-5" /></div>
+          <h1 className="font-bold text-stone-900 text-lg">Dashboard</h1>
+        </div>
+        <div className="flex gap-2">
+          {isSuperAdmin && <button onClick={exportCSV} className="text-stone-500 hover:text-stone-800 p-2 border rounded-lg"><Download className="w-5 h-5"/></button>}
+          <button onClick={() => setShowTeamModal(true)} className="text-stone-500 hover:text-stone-800 p-2 border rounded-lg"><Settings className="w-5 h-5"/></button>
+          <button onClick={onLogout} className="text-stone-500 hover:text-stone-800 p-2 border rounded-lg"><LogOut className="w-5 h-5"/></button>
+          <button onClick={() => setIsAdding(true)} className="bg-blue-600 text-white px-4 rounded-lg flex items-center gap-2 text-sm font-medium"><Plus className="w-4 h-4" /> Nouveau</button>
         </div>
       </header>
       
       <main className="max-w-6xl mx-auto px-4 py-6">
         <div className="flex gap-2 mb-6 overflow-x-auto pb-2 scrollbar-hide">
-          <button onClick={() => setFilter('all')} className={`px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap ${filter === 'all' ? 'bg-stone-800 text-white' : 'bg-white text-stone-600'}`}>Tous ({projects.length})</button>
-          <button onClick={() => setFilter('active')} className={`px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap ${filter === 'active' ? 'bg-blue-600 text-white' : 'bg-white text-stone-600'}`}>En cours</button>
-          <button onClick={() => setFilter('late')} className={`px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap ${filter === 'late' ? 'bg-red-500 text-white' : 'bg-white text-stone-600'}`}>En retard</button>
+          <button onClick={() => setFilter('all')} className={`px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap ${filter === 'all' ? 'bg-stone-800 text-white' : 'bg-white text-stone-600 border'}`}>Tous ({counts.all})</button>
+          <button onClick={() => setFilter('active')} className={`px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap ${filter === 'active' ? 'bg-blue-600 text-white' : 'bg-white text-stone-600 border'}`}>En cours ({counts.active})</button>
+          <button onClick={() => setFilter('late')} className={`px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap ${filter === 'late' ? 'bg-red-500 text-white' : 'bg-white text-stone-600 border'}`}>En retard ({counts.late})</button>
         </div>
         <div className="grid gap-4 md:gap-6">
           {filteredProjects.map(p => <ProjectEditor key={p.id} project={p} isSuperAdmin={isSuperAdmin} staffList={staffList} user={user} />)}
@@ -825,28 +610,6 @@ function AdminDashboard({ projects, user, onLogout, staffList, setStaffList }: {
                           {staffList.map(s => <option key={s} value={s}>{s}</option>)}
                       </select>
                   )}
-                  <div className="flex gap-2 mb-6 overflow-x-auto pb-2 scrollbar-hide">
-  <button 
-    onClick={() => setFilter('all')} 
-    className={`px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap ${filter === 'all' ? 'bg-stone-800 text-white' : 'bg-white text-stone-600'}`}
-  >
-    Tous ({counts.all})
-  </button>
-  
-  <button 
-    onClick={() => setFilter('active')} 
-    className={`px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap ${filter === 'active' ? 'bg-blue-600 text-white' : 'bg-white text-stone-600'}`}
-  >
-    En cours ({counts.active})
-  </button>
-  
-  <button 
-    onClick={() => setFilter('late')} 
-    className={`px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap ${filter === 'late' ? 'bg-red-500 text-white' : 'bg-white text-stone-600'}`}
-  >
-    En retard ({counts.late})
-  </button>
-</div>
                 </div>
                 <div className="p-3 bg-stone-50 rounded-lg border border-stone-100">
                   <label className="flex items-center gap-2 mb-2 font-medium text-sm"><input type="checkbox" checked={newProject.hasVideo} onChange={e => setNewProject({...newProject, hasVideo: e.target.checked})} className="w-5 h-5 accent-sky-600" /> Vidéo</label>
@@ -1250,4 +1013,4 @@ function ProjectEditor({ project, isSuperAdmin, staffList, user }: { project: Pr
       )}
     </div>
   );
-}}
+}
