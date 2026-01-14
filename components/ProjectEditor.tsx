@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { 
   Camera, Video, Ban, ChevronRight, Rocket, Mail, 
   BookOpen, Trash2, Image as ImageIcon, CheckSquare, 
-  Upload, Loader2, MapPin, FileText, Users, Calendar, Eye, Timer
+  Upload, Loader2, MapPin, FileText, Users, Calendar, Eye, Timer, Music // 👈 J'ai ajouté l'icône Music
 } from 'lucide-react';
 import { doc, updateDoc, deleteDoc, serverTimestamp } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
@@ -101,9 +101,7 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, user }
       const colPath = typeof appId !== 'undefined' ? `artifacts/${appId}/public/data/${COLLECTION_NAME}` : COLLECTION_NAME;
       await updateDoc(doc(db, colPath, project.id), { ...localData, lastUpdated: serverTimestamp() });
       
-      // On vérifie si une étape a changé
       if (localData.statusPhoto !== project.statusPhoto || localData.statusVideo !== project.statusVideo) {
-          // 🛑 SÉCURITÉ : On n'envoie le webhook QUE si l'email existe
           if (localData.clientEmail && localData.clientEmail.includes('@')) {
               fetch(MAKE_WEBHOOK_URL, {
                   method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -111,26 +109,23 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, user }
                       type: 'step_update', 
                       clientName: localData.clientNames, 
                       clientEmail: localData.clientEmail, 
-                      projectCode: localData.code, // 👈 C'EST ICI QUE JE L'AI RAJOUTÉ !
+                      projectCode: localData.code,
                       stepName: localData.statusPhoto !== project.statusPhoto ? PHOTO_STEPS[localData.statusPhoto].label : VIDEO_STEPS[localData.statusVideo].label, 
                       url: window.location.origin 
                   })
               }).catch(console.error);
           } else {
-              console.warn("Pas d'email client renseigné : Notification Make annulée pour éviter l'erreur.");
+              console.warn("Pas d'email client renseigné : Notification Make annulée.");
           }
       }
       setHasChanges(false); setIsExpanded(false);
   };
 
-  // --- SÉCURISATION DE L'INVITATION ---
   const invite = async () => {
-      // 🛑 SÉCURITÉ : On bloque si pas d'email
       if (!localData.clientEmail || !localData.clientEmail.includes('@')) {
           alert("❌ Impossible d'envoyer l'invitation : L'adresse email du client est manquante ou invalide.");
           return;
       }
-
       fetch(MAKE_WEBHOOK_URL, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ type:'invite', clientName: localData.clientNames, clientEmail: localData.clientEmail, projectCode: localData.code, url: window.location.origin }) });
       alert("Invitation envoyée !");
   };
@@ -166,10 +161,8 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, user }
                         <MapPin className="w-3 h-3"/> {project.clientCity || 'Ville?'}
                     </p>
                 </div>
-                {/* DATE FORMATÉE EN FR */}
                 <div className="hidden md:block text-sm text-stone-500 font-mono bg-stone-50 px-2 py-1 rounded">{formatDateFR(project.weddingDate)}</div>
                 
-                {/* DATES DANS LES BULLES */}
                 <div className="hidden md:flex gap-4">
                     {project.statusPhoto !== 'none' && (
                         <div className={`text-xs px-3 py-1.5 rounded-full font-bold flex flex-col items-center leading-tight ${project.statusPhoto === 'delivered' ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'}`}>
@@ -194,7 +187,6 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, user }
         {isExpanded && (
             <div className="p-6 border-t bg-stone-50/50 space-y-8 animate-fade-in">
                 
-                {/* BARRE D'ACTION HAUTE */}
                 <div className="flex flex-col md:flex-row justify-between items-center gap-4 bg-white p-4 rounded-xl border border-stone-100 shadow-sm">
                     <div className="flex items-center gap-4 w-full md:w-auto">
                         <button onClick={toggleFastTrack} className={`flex-1 md:flex-none flex items-center justify-center gap-2 px-6 py-3 rounded-xl font-bold transition-all ${localData.isPriority ? 'bg-orange-500 text-white shadow-lg shadow-orange-200 transform scale-105' : 'bg-stone-100 text-stone-400 hover:bg-stone-200'}`}>
@@ -281,6 +273,22 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, user }
                                 </div>
                             )}
                         </div>
+
+                         {/* 🟣 NOUVEAU BLOC : BRIEF MUSIQUE & MONTAGE (AFFICHE CE QUE LE CLIENT A REMPLI) */}
+                        <div className="bg-purple-50 p-6 rounded-xl border border-purple-100 shadow-sm">
+                            <h4 className="font-bold text-purple-900 mb-4 flex items-center gap-2"><Music className="w-5 h-5"/> Brief Créatif (Rempli par le client)</h4>
+                            <div className="space-y-4">
+                                <div>
+                                    <label className="text-[10px] uppercase font-bold text-purple-400">Instructions de Montage</label>
+                                    <textarea disabled={!canEdit} className="w-full p-3 rounded-xl border border-purple-200 bg-white text-sm min-h-[80px]" placeholder="Le client n'a rien indiqué..." value={localData.musicInstructions || ''} onChange={e=>updateField('musicInstructions', e.target.value)} />
+                                </div>
+                                <div>
+                                    <label className="text-[10px] uppercase font-bold text-purple-400">Liens Musique (Spotify/YouTube)</label>
+                                    <textarea disabled={!canEdit} className="w-full p-3 rounded-xl border border-purple-200 bg-white text-sm" placeholder="Pas de liens..." value={localData.musicLinks || ''} onChange={e=>updateField('musicLinks', e.target.value)} />
+                                </div>
+                            </div>
+                        </div>
+
                     </div>
                 </div>
 
