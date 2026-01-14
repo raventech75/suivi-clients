@@ -1,10 +1,17 @@
 'use client';
 import React, { useState, useEffect } from 'react';
+import { 
+  ChevronRight, Search, AlertTriangle, ImageIcon, Film, Calendar, 
+  Music, Rocket, Star, CheckCircle, CheckSquare, BookOpen, 
+  Copy, ClipboardCheck, ExternalLink
+} from 'lucide-react';
 import { doc, updateDoc, serverTimestamp } from 'firebase/firestore';
-import { db, appId } from '@/lib/firebase';
-import { COLLECTION_NAME, STRIPE_PRIORITY_LINK, PHOTO_STEPS, VIDEO_STEPS, ALBUM_STATUSES, Project } from '@/lib/config';
-import { ChevronRight, LogOut, Search, AlertTriangle, ImageIcon, Film, Calendar, ExternalLink, Music, Rocket, Star, CheckCircle, CheckSquare, BookOpen, Copy, ClipboardCheck } from 'lucide-react';
-import ChatBox from './ChatBox';
+import { db, appId } from '../lib/firebase';
+import { 
+  COLLECTION_NAME, STRIPE_PRIORITY_LINK, PHOTO_STEPS, 
+  VIDEO_STEPS, ALBUM_STATUSES, Project 
+} from '../lib/config';
+import ChatBox from './Chatbox';
 
 export default function ClientPortal({ projects, onBack }: { projects: Project[], onBack: () => void }) {
   const [searchCode, setSearchCode] = useState('');
@@ -31,14 +38,14 @@ export default function ClientPortal({ projects, onBack }: { projects: Project[]
   const handleSaveMusic = async () => {
       if(!foundProject) return;
       setSavingMusic(true);
-      const colPath = appId !== 'default-app-id' ? `artifacts/${appId}/public/data/${COLLECTION_NAME}` : COLLECTION_NAME;
+      const colPath = typeof appId !== 'undefined' ? `artifacts/${appId}/public/data/${COLLECTION_NAME}` : COLLECTION_NAME;
       await updateDoc(doc(db, colPath, foundProject.id), { musicLinks, musicInstructions, lastUpdated: serverTimestamp() });
       alert("Enregistré !"); setSavingMusic(false);
   };
 
   const confirmDelivery = async () => {
-      if(!foundProject || !confirm("Confirmer la bonne réception ?")) return;
-      const colPath = appId !== 'default-app-id' ? `artifacts/${appId}/public/data/${COLLECTION_NAME}` : COLLECTION_NAME;
+      if(!foundProject || !confirm("Confirmer la bonne réception de tous les fichiers ?")) return;
+      const colPath = typeof appId !== 'undefined' ? `artifacts/${appId}/public/data/${COLLECTION_NAME}` : COLLECTION_NAME;
       await updateDoc(doc(db, colPath, foundProject.id), { deliveryConfirmed: true, deliveryConfirmationDate: serverTimestamp() });
   };
 
@@ -62,14 +69,22 @@ export default function ClientPortal({ projects, onBack }: { projects: Project[]
         
         <div className="max-w-4xl mx-auto px-4 -mt-16 space-y-8 relative z-10">
           
-          {/* VALIDATION RECEPTION */}
+          {/* CONFIRMATION DE LIVRAISON */}
           {(foundProject.statusPhoto === 'delivered' || foundProject.statusVideo === 'delivered') && !foundProject.deliveryConfirmed && !isBlocked && (
               <div className="bg-green-50 border border-green-200 rounded-2xl p-6 flex flex-col md:flex-row items-center justify-between gap-4 shadow-lg animate-fade-in">
                   <div>
-                      <h3 className="font-bold text-green-900 text-lg flex items-center gap-2"><CheckCircle className="w-5 h-5"/> Confirmation</h3>
-                      <p className="text-green-800 text-sm">Avez-vous bien reçu et téléchargé vos fichiers ?</p>
+                      <h3 className="font-bold text-green-900 text-lg flex items-center gap-2"><CheckCircle className="w-5 h-5"/> Confirmation de réception</h3>
+                      <p className="text-green-800 text-sm">Avez-vous bien téléchargé et vérifié vos fichiers ?</p>
                   </div>
-                  <button onClick={confirmDelivery} className="bg-green-600 hover:bg-green-700 text-white px-6 py-3 rounded-xl font-bold flex items-center gap-2 shadow-lg"><CheckSquare className="w-5 h-5"/> Je confirme la réception</button>
+                  <button onClick={confirmDelivery} className="bg-green-600 hover:bg-green-700 text-white px-6 py-3 rounded-xl font-bold transition-colors shadow-md flex items-center gap-2">
+                      <CheckSquare className="w-5 h-5"/> Je confirme la bonne réception
+                  </button>
+              </div>
+          )}
+
+          {foundProject.deliveryConfirmed && (
+              <div className="bg-stone-100 border border-stone-200 rounded-xl p-4 flex items-center justify-center gap-2 text-stone-500 text-sm italic">
+                  <CheckCircle className="w-4 h-4"/> Réception confirmée le {new Date(foundProject.deliveryConfirmationDate?.seconds * 1000).toLocaleDateString()}
               </div>
           )}
 
