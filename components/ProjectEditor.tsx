@@ -12,9 +12,10 @@ import {
   COLLECTION_NAME, MAKE_WEBHOOK_URL, PHOTO_STEPS, 
   VIDEO_STEPS, ALBUM_FORMATS, ALBUM_STATUSES, Project 
 } from '../lib/config';
-import ChatBox from '@/components/ChatBox';
 
-// 👇 LA CORRECTION EST ICI (ajout de staffList dans les props)
+// 👇 IMPORT MIS A JOUR (Nouveau nom de fichier)
+import ChatBox from './ChatSystem'; 
+
 export default function ProjectEditor({ project, isSuperAdmin, staffList, user }: { project: Project, isSuperAdmin: boolean, staffList: string[], user: any }) {
   const [isExpanded, setIsExpanded] = useState(false);
   const [localData, setLocalData] = useState(project);
@@ -81,7 +82,6 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, user }
       const colPath = typeof appId !== 'undefined' ? `artifacts/${appId}/public/data/${COLLECTION_NAME}` : COLLECTION_NAME;
       await updateDoc(doc(db, colPath, project.id), { ...localData, lastUpdated: serverTimestamp() });
       
-      // Webhook Step Update
       if (localData.statusPhoto !== project.statusPhoto || localData.statusVideo !== project.statusVideo) {
           fetch(MAKE_WEBHOOK_URL, {
               method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -139,7 +139,6 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, user }
                     </div>
                 </div>
 
-                {/* DOUBLE CONTACTS */}
                 <div className="bg-white p-4 rounded-xl border space-y-3">
                     <h4 className="font-bold text-xs text-stone-400 uppercase tracking-wide">Contacts</h4>
                     <div className="grid grid-cols-2 gap-4">

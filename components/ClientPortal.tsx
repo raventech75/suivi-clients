@@ -11,7 +11,7 @@ import {
   COLLECTION_NAME, STRIPE_PRIORITY_LINK, PHOTO_STEPS, 
   VIDEO_STEPS, ALBUM_STATUSES, Project 
 } from '../lib/config';
-import ChatBox from '@/components/ChatBox';
+import ChatBox from './ChatSystem';
 
 export default function ClientPortal({ projects, onBack }: { projects: Project[], onBack: () => void }) {
   const [searchCode, setSearchCode] = useState('');
