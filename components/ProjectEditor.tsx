@@ -30,22 +30,18 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, user }
   const isManager = user?.email && project.managerEmail && user.email.toLowerCase() === project.managerEmail.toLowerCase();
   const canEdit = isSuperAdmin || isManager;
 
-  // --- LOGIQUE FAST TRACK CORRIGÉE ---
+  // --- LOGIQUE FAST TRACK ---
   const now = Date.now();
   const wedDate = new Date(project.weddingDate).getTime();
   const isFinished = (project.statusPhoto === 'delivered' || project.statusPhoto === 'none') && (project.statusVideo === 'delivered' || project.statusVideo === 'none');
   
-  // CALCUL: Si activé, on prend la date d'activation, sinon "maintenant" (pour simulation)
   const activationTime = project.fastTrackActivationDate ? new Date(project.fastTrackActivationDate).getTime() : now;
-  // Le délai est de 14 jours APRES l'activation
   const fastTrackDeadline = activationTime + (14 * 24 * 60 * 60 * 1000);
   const daysRemaining = Math.ceil((fastTrackDeadline - now) / (1000 * 60 * 60 * 24));
   
-  // Style de base
   let borderStyle = 'border-l-4 border-l-stone-300 border-y border-r border-stone-200';
   let bgStyle = 'bg-white';
   
-  // Priorité absolue : FAST TRACK (Flashy Orange)
   if (localData.isPriority && !isFinished) {
       borderStyle = 'border-l-8 border-l-orange-500 border-y-2 border-r-2 border-orange-400 ring-2 ring-orange-200 shadow-xl shadow-orange-100/50';
       bgStyle = 'bg-orange-50/40';
@@ -100,19 +96,34 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, user }
     } catch (error: any) { alert(`Erreur: ${error.message}`); } finally { setUploading(false); }
   };
 
+  // --- SÉCURISATION DU SAVE (WEBHOOK) ---
   const save = async () => {
       const colPath = typeof appId !== 'undefined' ? `artifacts/${appId}/public/data/${COLLECTION_NAME}` : COLLECTION_NAME;
       await updateDoc(doc(db, colPath, project.id), { ...localData, lastUpdated: serverTimestamp() });
+      
+      // On vérifie si une étape a changé
       if (localData.statusPhoto !== project.statusPhoto || localData.statusVideo !== project.statusVideo) {
-          fetch(MAKE_WEBHOOK_URL, {
-              method: 'POST', headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ type: 'step_update', clientName: localData.clientNames, clientEmail: localData.clientEmail, stepName: localData.statusPhoto !== project.statusPhoto ? PHOTO_STEPS[localData.statusPhoto].label : VIDEO_STEPS[localData.statusVideo].label, url: window.location.origin })
-          }).catch(console.error);
+          // 🛑 SÉCURITÉ : On n'envoie le webhook QUE si l'email existe
+          if (localData.clientEmail && localData.clientEmail.includes('@')) {
+              fetch(MAKE_WEBHOOK_URL, {
+                  method: 'POST', headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ type: 'step_update', clientName: localData.clientNames, clientEmail: localData.clientEmail, stepName: localData.statusPhoto !== project.statusPhoto ? PHOTO_STEPS[localData.statusPhoto].label : VIDEO_STEPS[localData.statusVideo].label, url: window.location.origin })
+              }).catch(console.error);
+          } else {
+              console.warn("Pas d'email client renseigné : Notification Make annulée pour éviter l'erreur.");
+          }
       }
       setHasChanges(false); setIsExpanded(false);
   };
 
+  // --- SÉCURISATION DE L'INVITATION ---
   const invite = async () => {
+      // 🛑 SÉCURITÉ : On bloque si pas d'email
+      if (!localData.clientEmail || !localData.clientEmail.includes('@')) {
+          alert("❌ Impossible d'envoyer l'invitation : L'adresse email du client est manquante ou invalide.");
+          return;
+      }
+
       fetch(MAKE_WEBHOOK_URL, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ type:'invite', clientName: localData.clientNames, clientEmail: localData.clientEmail, projectCode: localData.code, url: window.location.origin }) });
       alert("Invitation envoyée !");
   };
@@ -135,7 +146,6 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, user }
                 <div className="min-w-[200px]">
                     <div className="flex items-center gap-2">
                         <span className="font-bold text-stone-800 text-lg">{project.clientNames}</span>
-                        {/* INDICATEUR FAST TRACK J-X */}
                         {localData.isPriority && !isFinished && (
                              <div className="flex items-center gap-1 bg-orange-500 text-white px-2 py-0.5 rounded-md text-xs font-black animate-pulse shadow-sm">
                                 <Rocket className="w-3 h-3"/> 
@@ -152,7 +162,7 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, user }
                 {/* DATE FORMATÉE EN FR */}
                 <div className="hidden md:block text-sm text-stone-500 font-mono bg-stone-50 px-2 py-1 rounded">{formatDateFR(project.weddingDate)}</div>
                 
-                {/* --- MODIFICATION ICI : DATES DANS LES BULLES --- */}
+                {/* DATES DANS LES BULLES */}
                 <div className="hidden md:flex gap-4">
                     {project.statusPhoto !== 'none' && (
                         <div className={`text-xs px-3 py-1.5 rounded-full font-bold flex flex-col items-center leading-tight ${project.statusPhoto === 'delivered' ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'}`}>
@@ -203,7 +213,6 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, user }
                                     <div><label className="text-[10px] uppercase font-bold text-stone-400">Email 1</label><input disabled={!canEdit} className="w-full p-2 border rounded bg-stone-50" value={localData.clientEmail} onChange={e=>updateField('clientEmail', e.target.value)} /></div>
                                     <div><label className="text-[10px] uppercase font-bold text-stone-400">Tel 1</label><input disabled={!canEdit} className="w-full p-2 border rounded bg-stone-50" value={localData.clientPhone} onChange={e=>updateField('clientPhone', e.target.value)} /></div>
                                 </div>
-                                {/* DATE DE MARIAGE (INPUT RESTE YYYY-MM-DD POUR LE NAVIGATEUR) */}
                                 <div><label className="text-[10px] uppercase font-bold text-stone-400">Date Mariage</label><input required type="date" disabled={!canEdit} className="w-full p-2 border rounded bg-stone-50" value={localData.weddingDate} onChange={e=>updateField('weddingDate', e.target.value)} /></div>
                                 
                                 <div><label className="text-[10px] uppercase font-bold text-stone-400">Salle de Mariage (Lieu)</label><input disabled={!canEdit} className="w-full p-2 border rounded bg-stone-50" placeholder="Château de..." value={localData.weddingVenue || ''} onChange={e=>updateField('weddingVenue', e.target.value)} /></div>
