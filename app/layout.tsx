@@ -1,20 +1,24 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Inter, Playfair_Display } from "next/font/google";
 import "./globals.css";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
+// Configuration des polices
+const inter = Inter({ 
+  subsets: ["latin"], 
+  variable: '--font-inter',
+  display: 'swap',
 });
 
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
+const playfair = Playfair_Display({ 
+  subsets: ["latin"], 
+  variable: '--font-playfair',
+  display: 'swap',
 });
 
+// Configuration du référencement (SEO)
 export const metadata: Metadata = {
-  title: "RavenTech - L'Atelier Visuel & Archives",
-  description: "Espace client sécurisé et plateforme de gestion pour photographes de mariage.",
+  title: "RavenTech - Suivi de Production Mariage",
+  description: "Espace client pour le suivi des photos et vidéos de mariage.",
 };
 
 export default function RootLayout({
@@ -24,9 +28,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="fr">
-      <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
-      >
+      <body className={`${inter.variable} ${playfair.variable} font-sans antialiased bg-stone-50 text-stone-900`}>
         {children}
       </body>
     </html>
