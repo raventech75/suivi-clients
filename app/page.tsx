@@ -1250,4 +1250,4 @@ function ProjectEditor({ project, isSuperAdmin, staffList, user }: { project: Pr
       )}
     </div>
   );
-}
+}}
