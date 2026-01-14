@@ -9,7 +9,7 @@ import {
   UserCheck, Users as UsersIcon, ImagePlus, Hourglass,
   Upload, Loader2, AtSign, MessageSquare, Send,
   Copy, ClipboardCheck, BookOpen, ArrowRight, HardDrive, ShieldCheck, History,
-  Euro, Eye, AlertTriangle, CreditCard, X, Phone, Rocket, Star, Mail, Settings, AlertOctagon, Music
+  Euro, Eye, AlertTriangle, CreditCard, X, Phone, Rocket, Star, Mail, Settings, AlertOctagon, Music, Disc, Layers
 } from 'lucide-react';
 
 // --- Configuration Firebase ---
@@ -50,12 +50,11 @@ const storage = getStorage(app);
 const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
 
 // --- CONFIGURATION ---
-const MAKE_WEBHOOK_URL = "https://hook.eu2.make.com/iwf8nbt3tywmywp6u89xgn7e2nar0bbs"; // Votre Webhook
+const MAKE_WEBHOOK_URL = "https://hook.eu2.make.com/iwf8nbt3tywmywp6u89xgn7e2nar0bbs"; 
 const SUPER_ADMINS = ["admin@raventech.fr", "irzzenproductions@gmail.com"]; 
 const STRIPE_ARCHIVE_LINK = "https://buy.stripe.com/3cI3cv3jq2j37x9eFy5gc0b";
 const STRIPE_PRIORITY_LINK = "https://buy.stripe.com/VOTRE_LIEN_PRIORITE";
 
-// LISTE INITIALE (Sera chargée immédiatement)
 const DEFAULT_STAFF = ["Feridun", "Volkan", "Ali", "Steeven", "Taner", "Yunus", "Emir", "Serife"];
 const ALBUM_FORMATS = ["30x20", "30x30", "40x30", "40x30 + 2x 18x24", "Autre"];
 
@@ -65,7 +64,7 @@ const SETTINGS_COLLECTION = 'settings';
 
 // --- Types ---
 interface Message { id: string; author: 'client' | 'admin'; text: string; date: any; }
-interface Remuneration { name: string; amount: number; note: string; }
+interface Remuneration { name: string; amount: number; note: string; paid?: boolean; }
 
 interface Project {
   id: string;
@@ -94,6 +93,7 @@ interface Project {
   musicInstructions?: string;
   albumFormat?: string;
   albumNotes?: string;
+  albumStatus?: 'none' | 'selection' | 'design' | 'print' | 'delivered';
   hasAlbum?: boolean;
   totalPrice?: number;
   depositAmount?: number;
@@ -122,12 +122,20 @@ const VIDEO_STEPS = {
   'none': { label: 'Non inclus', percent: 0 }
 };
 
+const ALBUM_STEPS = {
+  'none': 'Pas commencé',
+  'selection': 'Sélection client reçue',
+  'design': 'Mise en page',
+  'print': 'Impression en cours',
+  'delivered': 'Album livré'
+};
+
 // --- COMPOSANT PRINCIPAL ---
 export default function WeddingTracker() {
   const [user, setUser] = useState<any>(null);
   const [view, setView] = useState<'landing' | 'client' | 'admin' | 'archive'>('landing');
   const [projects, setProjects] = useState<Project[]>([]);
-  // CORRECTION : Initialisation immédiate avec la liste par défaut
+  // Initialisation avec la liste par défaut pour éviter le vide
   const [staffList, setStaffList] = useState<string[]>(DEFAULT_STAFF);
   const [loading, setLoading] = useState(true);
 
@@ -149,18 +157,13 @@ export default function WeddingTracker() {
     const q = query(colRef);
     const unsubscribeData = onSnapshot(q, (snapshot) => {
       const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as Project[];
-      const sortedData = data.sort((a, b) => {
-          if (a.hasUnreadMessage && !b.hasUnreadMessage) return -1;
-          if (!a.hasUnreadMessage && b.hasUnreadMessage) return 1;
-          if (a.isPriority && !b.isPriority) return -1;
-          if (!a.isPriority && b.isPriority) return 1;
-          return new Date(b.weddingDate).getTime() - new Date(a.weddingDate).getTime();
-      });
+      // Tri par date de mariage (plus récent en premier)
+      const sortedData = data.sort((a, b) => new Date(b.weddingDate).getTime() - new Date(a.weddingDate).getTime());
       setProjects(sortedData);
       setLoading(false);
     });
 
-    // Chargement Staff (mise à jour si DB différente)
+    // Chargement Staff depuis la base de données
     let settingsRef;
     if (typeof __app_id !== 'undefined') { settingsRef = doc(db, 'artifacts', appId, 'public', 'data', SETTINGS_COLLECTION, 'general'); } 
     else { settingsRef = doc(db, SETTINGS_COLLECTION, 'general'); }
@@ -169,7 +172,7 @@ export default function WeddingTracker() {
         if(docSnap.exists() && docSnap.data().staff && docSnap.data().staff.length > 0) {
             setStaffList(docSnap.data().staff);
         } else {
-            // Sauvegarde initiale si vide
+            // Si pas de données, on sauvegarde la liste par défaut pour la prochaine fois
             setDoc(settingsRef, { staff: DEFAULT_STAFF }, { merge: true });
         }
     });
@@ -193,7 +196,7 @@ export default function WeddingTracker() {
   );
 }
 
-// --- Vue Accueil ---
+// --- Vue Accueil (Landing Page) ---
 function LandingView({ setView }: { setView: (v: any) => void }) {
   return (
     <div className="min-h-screen bg-white text-stone-900 font-sans selection:bg-amber-100 selection:text-amber-900">
@@ -255,7 +258,7 @@ function LandingView({ setView }: { setView: (v: any) => void }) {
   );
 }
 
-// --- Vue Archive ---
+// --- Vue Archive (Lead Capture) ---
 function ArchiveView({ onBack }: { onBack: () => void }) {
   const [step, setStep] = useState(1);
   const [date, setDate] = useState('');
@@ -404,9 +407,9 @@ function ChatBox({ project, userType }: { project: Project, userType: 'admin' | 
                 {messages.length === 0 && <p className="text-center text-stone-400 text-xs mt-10">Démarrez la conversation !</p>}
                 {messages.map((m, idx) => (
                     <div key={idx} className={`flex ${m.author === userType ? 'justify-end' : 'justify-start'}`}>
-                        <div className={`max-w-[85%] p-3 rounded-2xl text-sm relative group ${m.author === userType ? 'bg-stone-800 text-white rounded-tr-none' : 'bg-white border border-stone-200 rounded-tl-none text-stone-800 shadow-sm'}`}>
+                        <div className={`max-w-[85%] p-3 rounded-2xl text-sm relative group ${m.author === 'admin' ? 'bg-blue-600 text-white rounded-tr-none' : 'bg-white border border-stone-200 rounded-tl-none text-stone-800 shadow-sm'}`}>
                             <p className="whitespace-pre-wrap">{m.text}</p>
-                            <span className="text-[9px] block mt-1 opacity-60 text-right">{new Date(m.date).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
+                            <span className={`text-[9px] block mt-1 text-right ${m.author === 'admin' ? 'text-blue-200' : 'text-stone-400'}`}>{new Date(m.date).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
                             {userType === 'admin' && (<button onClick={() => handleDeleteMessage(m)} className="absolute -top-2 -right-2 bg-red-100 text-red-500 p-1 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"><X className="w-3 h-3" /></button>)}
                         </div>
                     </div>
@@ -420,7 +423,562 @@ function ChatBox({ project, userType }: { project: Project, userType: 'admin' | 
     );
 }
 
-// --- Client Portal ---
+// --- Dashboard Admin ---
+function AdminDashboard({ projects, user, onLogout, staffList, setStaffList }: { projects: Project[], user: any, onLogout: () => void, staffList: string[], setStaffList: any }) {
+  const [emailInput, setEmailInput] = useState('');
+  const [passInput, setPassInput] = useState('');
+  const [errorMsg, setErrorMsg] = useState('');
+  const [isAdding, setIsAdding] = useState(false);
+  const [showTeamModal, setShowTeamModal] = useState(false);
+  const [newMember, setNewMember] = useState('');
+  
+  const [newProject, setNewProject] = useState({ 
+    clientNames: '', clientEmail: '', clientPhone: '', weddingDate: '', 
+    photographerName: '', videographerName: '', managerName: '', managerEmail: '',
+    onSiteTeam: [] as string[], hasPhoto: true, hasVideo: true, hasAlbum: false, isPriority: false
+  });
+  const [filter, setFilter] = useState<'all' | 'active' | 'completed' | 'late'>('all');
+
+  const isSuperAdmin = SUPER_ADMINS.includes(user?.email);
+
+  const handleLogin = async (e: React.FormEvent) => {
+      e.preventDefault();
+      try { await signInWithEmailAndPassword(auth, emailInput, passInput); } 
+      catch (err: any) { setErrorMsg("Identifiants incorrects."); }
+  };
+
+  const handleAddMember = async () => {
+      if(!newMember.trim()) return;
+      const updatedList = [...staffList, newMember];
+      setStaffList(updatedList);
+      let settingsRef;
+      if (typeof __app_id !== 'undefined') { settingsRef = doc(db, 'artifacts', typeof __app_id !== 'undefined' ? __app_id : 'default-app-id', 'public', 'data', SETTINGS_COLLECTION, 'general'); } 
+      else { settingsRef = doc(db, SETTINGS_COLLECTION, 'general'); }
+      await setDoc(settingsRef, { staff: updatedList }, { merge: true });
+      setNewMember('');
+  };
+
+  const handleRemoveMember = async (member: string) => {
+      const updatedList = staffList.filter(m => m !== member);
+      setStaffList(updatedList);
+      let settingsRef;
+      if (typeof __app_id !== 'undefined') { settingsRef = doc(db, 'artifacts', typeof __app_id !== 'undefined' ? __app_id : 'default-app-id', 'public', 'data', SETTINGS_COLLECTION, 'general'); } 
+      else { settingsRef = doc(db, SETTINGS_COLLECTION, 'general'); }
+      await setDoc(settingsRef, { staff: updatedList }, { merge: true });
+  }
+
+  if (!user || user.isAnonymous) return (
+    <div className="min-h-screen flex items-center justify-center bg-stone-100 p-4">
+      <div className="bg-white p-6 rounded-xl shadow-lg max-w-sm w-full">
+         <h2 className="text-xl font-bold mb-4 flex gap-2"><Lock className="w-5 h-5" /> Accès Production</h2>
+         <form onSubmit={handleLogin} className="space-y-4">
+            <div><label className="text-xs font-bold text-stone-500 uppercase">Email</label><input type="email" required className="w-full p-3 border rounded-lg text-base" value={emailInput} onChange={(e) => setEmailInput(e.target.value)} /></div>
+            <div><label className="text-xs font-bold text-stone-500 uppercase">Mot de passe</label><input type="password" required className="w-full p-3 border rounded-lg text-base" value={passInput} onChange={(e) => setPassInput(e.target.value)} /></div>
+            {errorMsg && <p className="text-red-500 text-sm">{errorMsg}</p>}
+            <button type="submit" className="w-full bg-blue-600 text-white p-4 rounded-xl font-bold hover:bg-blue-700 text-lg">Se Connecter</button>
+         </form>
+         <button onClick={onLogout} className="mt-4 text-sm w-full text-center text-stone-500 py-2">Retour Accueil</button>
+      </div>
+    </div>
+  );
+
+  const handleAddProject = async (e: React.FormEvent) => {
+    e.preventDefault();
+    let colRef;
+    if (typeof __app_id !== 'undefined') { colRef = collection(db, 'artifacts', typeof __app_id !== 'undefined' ? __app_id : 'default-app-id', 'public', 'data', COLLECTION_NAME); } 
+    else { colRef = collection(db, COLLECTION_NAME); }
+    
+    const code = (newProject.clientNames.split(' ')[0] + '-' + Math.floor(Math.random() * 1000)).toUpperCase().replace(/[^A-Z0-9-]/g, '');
+    await addDoc(colRef, {
+      ...newProject, code,
+      statusPhoto: newProject.hasPhoto ? 'waiting' : 'none', statusVideo: newProject.hasVideo ? 'waiting' : 'none',
+      progressPhoto: 0, progressVideo: 0,
+      linkPhoto: '', linkVideo: '', messages: [], hasUnreadMessage: false,
+      totalPrice: 0, depositAmount: 0, teamPayments: [],
+      createdAt: serverTimestamp(), lastUpdated: serverTimestamp()
+    });
+    setIsAdding(false);
+  };
+
+  // Logique de filtres CORRIGÉE pour les compteurs
+  const counts = {
+      all: projects.length,
+      active: projects.filter(p => (p.statusPhoto !== 'delivered' && p.statusPhoto !== 'none') || (p.statusVideo !== 'delivered' && p.statusVideo !== 'none')).length,
+      late: projects.filter(p => {
+          const limit = new Date(p.weddingDate).getTime() + (60 * 24 * 60 * 60 * 1000);
+          const isFinished = (p.statusPhoto === 'delivered' || p.statusPhoto === 'none') && (p.statusVideo === 'delivered' || p.statusVideo === 'none');
+          return Date.now() > limit && !isFinished;
+      }).length
+  };
+
+  const filteredProjects = projects.filter(p => {
+    const isFinished = (p.statusPhoto === 'delivered' || p.statusPhoto === 'none') && (p.statusVideo === 'delivered' || p.statusVideo === 'none');
+    if (filter === 'completed') return isFinished;
+    if (filter === 'active') return !isFinished;
+    if (filter === 'late') {
+        const limit = new Date(p.weddingDate).getTime() + (60 * 24 * 60 * 60 * 1000);
+        return Date.now() > limit && !isFinished;
+    }
+    return true; 
+  });
+
+  return (
+    <div className="min-h-screen bg-gray-50 pb-20">
+      <header className="bg-white border-b sticky top-0 z-20 shadow-sm">
+        <div className="max-w-7xl mx-auto px-4 py-3 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+          <div className="flex items-center gap-3 w-full md:w-auto justify-between">
+            <div className="flex items-center gap-3">
+                <div className="bg-stone-900 text-white p-2 rounded-lg"><Users className="w-5 h-5" /></div>
+                <div><h1 className="font-bold text-stone-900 text-lg">Dashboard</h1><p className="text-xs text-stone-500 truncate max-w-[150px]">{user.email}</p></div>
+            </div>
+            <div className="flex items-center gap-2 md:hidden">
+                <button onClick={() => setShowTeamModal(true)} className="p-2 border rounded-lg bg-stone-100"><Settings className="w-5 h-5 text-stone-600"/></button>
+                <button onClick={() => setIsAdding(true)} className="p-2 bg-blue-600 text-white rounded-lg"><Plus className="w-5 h-5"/></button>
+            </div>
+          </div>
+          
+          <div className="hidden md:flex items-center gap-2">
+            <button onClick={() => setShowTeamModal(true)} className="text-stone-500 hover:text-stone-800 px-3 py-2 text-sm font-medium transition flex items-center gap-1 border rounded-lg mr-2"><Settings className="w-4 h-4"/> Gérer l'équipe</button>
+            <button onClick={onLogout} className="text-stone-500 hover:text-stone-800 px-3 py-2 text-sm font-medium transition flex items-center gap-1"><LogOut className="w-4 h-4"/> Déconnexion</button>
+            <button onClick={() => setIsAdding(true)} className="bg-blue-600 text-white px-4 py-2 rounded-lg flex gap-2 text-sm font-medium hover:bg-blue-700 transition"><Plus className="w-4 h-4" /> Nouveau</button>
+          </div>
+        </div>
+      </header>
+      
+      <main className="max-w-6xl mx-auto px-4 py-6">
+        <div className="flex gap-2 mb-6 overflow-x-auto pb-2 scrollbar-hide">
+          <button onClick={() => setFilter('all')} className={`px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap ${filter === 'all' ? 'bg-stone-800 text-white' : 'bg-white text-stone-600'}`}>Tous ({counts.all})</button>
+          <button onClick={() => setFilter('active')} className={`px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap ${filter === 'active' ? 'bg-blue-600 text-white' : 'bg-white text-stone-600'}`}>En cours ({counts.active})</button>
+          <button onClick={() => setFilter('late')} className={`px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap ${filter === 'late' ? 'bg-red-500 text-white' : 'bg-white text-stone-600'}`}>En retard ({counts.late})</button>
+        </div>
+        <div className="grid gap-4 md:gap-6">
+          {filteredProjects.map(p => <ProjectEditor key={p.id} project={p} isSuperAdmin={isSuperAdmin} staffList={staffList} />)}
+        </div>
+      </main>
+      
+      {isAdding && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl p-6 w-full max-w-lg shadow-2xl max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-between items-center mb-6 border-b pb-2">
+                <h3 className="text-lg font-bold">Nouveau Dossier</h3>
+                <button onClick={() => setIsAdding(false)}><X className="w-6 h-6 text-stone-400" /></button>
+            </div>
+            <form onSubmit={handleAddProject} className="space-y-4">
+              <div><label className="text-sm font-medium text-stone-600 block mb-1">Mariés</label><input required placeholder="Ex: Sophie & Marc" className="w-full border rounded-lg p-3 text-base" value={newProject.clientNames} onChange={e => setNewProject({...newProject, clientNames: e.target.value})} /></div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                 <div><label className="text-sm font-medium text-stone-600 block mb-1">Email Client</label><input type="email" className="w-full border rounded-lg p-3 text-base" value={newProject.clientEmail} onChange={e => setNewProject({...newProject, clientEmail: e.target.value})} /></div>
+                 <div><label className="text-sm font-medium text-stone-600 block mb-1">Téléphone</label><input type="tel" className="w-full border rounded-lg p-3 text-base" value={newProject.clientPhone} onChange={e => setNewProject({...newProject, clientPhone: e.target.value})} /></div>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                 <div><label className="text-sm font-medium text-stone-600 block mb-1">Date Mariage</label><input required type="date" className="w-full border rounded-lg p-3 text-base" value={newProject.weddingDate} onChange={e => setNewProject({...newProject, weddingDate: e.target.value})} /></div>
+                 <div>
+                     <label className="text-sm font-medium text-stone-600 block mb-1">Responsable</label>
+                     <select className="w-full border rounded-lg p-3 text-base bg-white" value={newProject.managerName} onChange={e => setNewProject({...newProject, managerName: e.target.value})}>
+                        <option value="">Sélectionner...</option>
+                        {staffList.map(s => <option key={s} value={s}>{s}</option>)}
+                     </select>
+                 </div>
+              </div>
+              <div><label className="text-sm font-medium text-stone-600 block mb-1">Email du Responsable (Pour notif)</label><input type="email" className="w-full border rounded-lg p-3 text-base" placeholder="responsable@agence.com" value={newProject.managerEmail} onChange={e => setNewProject({...newProject, managerEmail: e.target.value})} /></div>
+              
+              <div className="grid grid-cols-2 gap-4 pt-2">
+                <div className="p-3 bg-stone-50 rounded-lg border border-stone-100">
+                  <label className="flex items-center gap-2 mb-2 font-medium text-sm"><input type="checkbox" checked={newProject.hasPhoto} onChange={e => setNewProject({...newProject, hasPhoto: e.target.checked})} className="w-5 h-5 accent-amber-600" /> Photo</label>
+                  {newProject.hasPhoto && (
+                      <select className="w-full text-sm border rounded p-2 bg-white" value={newProject.photographerName} onChange={e => setNewProject({...newProject, photographerName: e.target.value})}>
+                          <option value="">Qui photographie ?</option>
+                          {staffList.map(s => <option key={s} value={s}>{s}</option>)}
+                      </select>
+                  )}
+                </div>
+                <div className="p-3 bg-stone-50 rounded-lg border border-stone-100">
+                  <label className="flex items-center gap-2 mb-2 font-medium text-sm"><input type="checkbox" checked={newProject.hasVideo} onChange={e => setNewProject({...newProject, hasVideo: e.target.checked})} className="w-5 h-5 accent-sky-600" /> Vidéo</label>
+                  {newProject.hasVideo && (
+                      <select className="w-full text-sm border rounded p-2 bg-white" value={newProject.videographerName} onChange={e => setNewProject({...newProject, videographerName: e.target.value})}>
+                          <option value="">Qui filme ?</option>
+                          {staffList.map(s => <option key={s} value={s}>{s}</option>)}
+                      </select>
+                  )}
+                </div>
+              </div>
+              <div className="pt-4">
+                <button type="submit" className="w-full py-3 bg-blue-600 text-white rounded-xl font-bold text-lg">Créer le projet</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL EQUIPE */}
+      {showTeamModal && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
+            <div className="bg-white rounded-2xl p-6 w-full max-w-md shadow-2xl">
+                <h3 className="text-lg font-bold mb-4">Gérer l'équipe (Tags)</h3>
+                <div className="flex gap-2 mb-4">
+                    <input className="flex-1 border rounded-lg p-3 text-base" placeholder="Nouveau membre..." value={newMember} onChange={e => setNewMember(e.target.value)} />
+                    <button onClick={handleAddMember} className="bg-green-600 text-white px-4 rounded-lg"><Plus className="w-6 h-6"/></button>
+                </div>
+                <div className="space-y-2 max-h-60 overflow-y-auto">
+                    {staffList.length === 0 && <p className="text-stone-400 text-center italic">Aucun membre. Ajoutez-en un !</p>}
+                    {staffList.map(member => (
+                        <div key={member} className="flex justify-between items-center p-3 bg-stone-50 rounded-lg">
+                            <span className="font-medium">{member}</span>
+                            <button onClick={() => handleRemoveMember(member)} className="text-red-500 hover:bg-red-50 p-2 rounded"><Trash2 className="w-5 h-5"/></button>
+                        </div>
+                    ))}
+                </div>
+                <button onClick={() => setShowTeamModal(false)} className="w-full mt-6 py-3 bg-stone-100 text-stone-700 font-bold rounded-xl">Fermer</button>
+            </div>
+          </div>
+      )}
+    </div>
+  );
+}
+
+// --- Editeur de Projet (Admin) ---
+function ProjectEditor({ project, isSuperAdmin, staffList }: { project: Project, isSuperAdmin: boolean, staffList: string[] }) {
+  const [isExpanded, setIsExpanded] = useState(false);
+  const [localData, setLocalData] = useState(project);
+  const [hasChanges, setHasChanges] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [sendingInvite, setSendingInvite] = useState(false);
+  const [viewAsClient, setViewAsClient] = useState(false); 
+  
+  // States pour Finance
+  const [newPayName, setNewPayName] = useState('');
+  const [newPayAmount, setNewPayAmount] = useState('');
+
+  useEffect(() => { if (!hasChanges) setLocalData(project); }, [project]);
+
+  const updateField = (k: keyof Project, v: any) => { 
+    setLocalData(p => {
+      const newState = { ...p, [k]: v };
+      if (k === 'statusPhoto') newState.progressPhoto = PHOTO_STEPS[v as keyof typeof PHOTO_STEPS].percent;
+      if (k === 'statusVideo') newState.progressVideo = VIDEO_STEPS[v as keyof typeof VIDEO_STEPS].percent;
+      return newState;
+    }); 
+    setHasChanges(true); 
+  };
+
+  const toggleTeamMember = (member: string) => {
+      const currentTeam = localData.onSiteTeam || [];
+      const newTeam = currentTeam.includes(member) ? currentTeam.filter(m => m !== member) : [...currentTeam, member];
+      updateField('onSiteTeam', newTeam);
+  };
+
+  // Finance Helpers
+  const addPayment = () => {
+      if(!newPayName || !newPayAmount) return;
+      const payments = localData.teamPayments || [];
+      updateField('teamPayments', [...payments, { name: newPayName, amount: parseFloat(newPayAmount), note: '', paid: false }]);
+      setNewPayName(''); setNewPayAmount('');
+  };
+  const removePayment = (idx: number) => {
+      const payments = [...(localData.teamPayments || [])];
+      payments.splice(idx, 1);
+      updateField('teamPayments', payments);
+  };
+  
+  const handleSave = async () => {
+    const { id, ...data } = localData;
+    let docRef;
+    if (typeof __app_id !== 'undefined') { docRef = doc(db, 'artifacts', typeof __app_id !== 'undefined' ? __app_id : 'default-app-id', 'public', 'data', COLLECTION_NAME, project.id); } 
+    else { docRef = doc(db, COLLECTION_NAME, project.id); }
+    
+    // Si statut change, on peut envoyer une notif
+    const finalData = { ...data, lastUpdated: serverTimestamp() };
+    await updateDoc(docRef, finalData);
+    
+    // Webhook : Changement d'étape
+    if (data.statusPhoto !== project.statusPhoto || data.statusVideo !== project.statusVideo) {
+        fetch(MAKE_WEBHOOK_URL, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                type: 'step_update',
+                clientName: data.clientNames,
+                clientEmail: data.clientEmail,
+                stepName: data.statusPhoto !== project.statusPhoto ? PHOTO_STEPS[data.statusPhoto].label : VIDEO_STEPS[data.statusVideo].label,
+                url: window.location.origin
+            })
+        }).catch(err => console.error(err));
+    }
+
+    // Webhook : Update Manager
+    if(localData.managerEmail && MAKE_WEBHOOK_URL) {
+        fetch(MAKE_WEBHOOK_URL, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ type: 'update_manager', clientName: localData.clientNames, managerEmail: localData.managerEmail, status: 'Mise à jour dossier' })
+        }).catch(err => console.error(err));
+    }
+
+    setHasChanges(false); setIsExpanded(false);
+  };
+
+  const handleDelete = async () => {
+    if(!isSuperAdmin) return;
+    let docRef;
+    if (typeof __app_id !== 'undefined') { docRef = doc(db, 'artifacts', typeof __app_id !== 'undefined' ? __app_id : 'default-app-id', 'public', 'data', COLLECTION_NAME, project.id); } 
+    else { docRef = doc(db, COLLECTION_NAME, project.id); }
+    if (confirm('Supprimer définitivement ce projet ?')) await deleteDoc(docRef);
+  };
+
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]; if (!file) return;
+    try {
+      setUploading(true);
+      let storageRef = ref(storage, `covers/${project.id}_${Date.now()}_${file.name}`);
+      await uploadBytes(storageRef, file);
+      const url = await getDownloadURL(storageRef);
+      updateField('coverImage', url);
+    } catch (error: any) { alert(`Erreur: ${error.message}`); } finally { setUploading(false); }
+  };
+
+  const sendInviteViaWebhook = async () => {
+      if (!localData.clientEmail) { alert("Veuillez renseigner l'email du client."); return; }
+      if (MAKE_WEBHOOK_URL.includes('VOTRE_URL_ICI')) { alert("Configurez le Webhook Make dans le code !"); return; }
+      setSendingInvite(true);
+      try {
+          await fetch(MAKE_WEBHOOK_URL, {
+              method: 'POST', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ type: 'invite', clientName: localData.clientNames, clientEmail: localData.clientEmail, projectCode: localData.code, url: window.location.origin })
+          });
+          alert(`Invitation envoyée !`);
+      } catch (error) { console.error(error); alert("Erreur envoi."); } 
+      finally { setSendingInvite(false); }
+  };
+
+  const copyInvite = () => {
+    const text = `Suivi Mariage : ${window.location.origin}\nCode : ${localData.code}`;
+    const textArea = document.createElement("textarea"); textArea.value = text; document.body.appendChild(textArea); textArea.select();
+    try { document.execCommand('copy'); alert("Lien copié !"); } catch (err) {}
+    document.body.removeChild(textArea);
+  };
+
+  const now = Date.now();
+  const lastUpdate = project.lastUpdated?.toMillis() || project.createdAt?.toMillis() || now;
+  const diffDays = (now - lastUpdate) / (1000 * 60 * 60 * 24);
+  const isInactive = diffDays > 7 && (project.statusPhoto !== 'delivered' || project.statusVideo !== 'delivered');
+  const isLate = new Date().getTime() - new Date(project.weddingDate).getTime() > (60 * 24 * 60 * 60 * 1000) && (project.statusPhoto !== 'delivered' || project.statusVideo !== 'delivered');
+  const remaining = (localData.totalPrice || 0) - (localData.depositAmount || 0);
+
+  if (viewAsClient) {
+      return (
+        <div className="fixed inset-0 z-50 bg-stone-50 overflow-y-auto">
+             <div className="p-4 bg-stone-900 text-white flex justify-between items-center sticky top-0 z-50"><span>Preview Client</span><button onClick={() => setViewAsClient(false)} className="bg-white text-black px-4 py-2 rounded">Fermer</button></div>
+             <ClientPortal projects={[project]} onBack={() => {}} /> 
+        </div>
+      );
+  }
+
+  return (
+    <div className={`bg-white rounded-xl shadow-sm border transition-all ${isInactive ? 'border-red-500 border-2' : 'border-stone-200'} hover:border-blue-300`}>
+      <div className="p-4 flex flex-col md:flex-row md:items-center justify-between cursor-pointer gap-4" onClick={() => setIsExpanded(!isExpanded)}>
+        <div className="flex items-center gap-4">
+          <div className={`w-1.5 h-12 rounded-full flex-shrink-0 ${project.isPriority ? 'bg-amber-500 animate-pulse' : (isLate ? 'bg-red-500' : 'bg-green-500')}`}></div>
+          <div>
+             <div className="flex flex-wrap items-center gap-2">
+                 <h3 className="font-bold text-lg text-stone-900">{project.clientNames}</h3>
+                 {isInactive && <span className="bg-red-100 text-red-600 text-[10px] px-2 py-0.5 rounded-full font-bold flex items-center gap-1 border border-red-200 animate-pulse"><AlertOctagon className="w-3 h-3"/> Inactif +7j</span>}
+                 {project.isPriority && <span className="bg-amber-100 text-amber-700 text-[10px] px-2 py-0.5 rounded-full font-bold flex items-center gap-1"><Rocket className="w-3 h-3"/> PRIO</span>}
+                 {project.hasUnreadMessage && <span className="bg-red-500 text-white text-[10px] px-2 py-0.5 rounded-full font-bold animate-bounce">MSG</span>}
+             </div>
+             <div className="text-sm text-stone-500 flex flex-wrap items-center gap-3 mt-1">
+               <span className="font-mono bg-stone-100 px-1.5 py-0.5 rounded text-stone-600 select-all">{project.code}</span>
+               <span>{new Date(project.weddingDate).toLocaleDateString()}</span>
+               {/* AFFICHAGE DU RESPONSABLE DIRECTEMENT SUR LA CARTE */}
+               <span className="flex items-center gap-1 font-bold text-stone-700"><UserCheck className="w-3 h-3"/> {project.managerName || 'Non assigné'}</span>
+               {isSuperAdmin && remaining > 0 && <span className="bg-red-100 text-red-600 px-2 rounded-full text-xs font-bold">Reste: {remaining}€</span>}
+             </div>
+          </div>
+        </div>
+        <div className="flex items-center justify-between md:justify-end gap-6 w-full md:w-auto pl-6 md:pl-0">
+           <div className="flex gap-4 text-right">
+             {project.statusPhoto !== 'none' && (<div><div className="text-[10px] uppercase text-stone-400 font-bold tracking-wider">Photo</div><div className={`text-sm font-bold ${project.statusPhoto === 'delivered' ? 'text-green-600' : 'text-amber-600'}`}>{project.progressPhoto}%</div></div>)}
+             {project.statusVideo !== 'none' && (<div><div className="text-[10px] uppercase text-stone-400 font-bold tracking-wider">Vidéo</div><div className={`text-sm font-bold ${project.statusVideo === 'delivered' ? 'text-green-600' : 'text-sky-600'}`}>{project.progressVideo}%</div></div>)}
+           </div>
+           <ChevronRight className={`w-5 h-5 text-stone-400 transition-transform ${isExpanded ? 'rotate-90' : ''}`} />
+        </div>
+      </div>
+      
+      {isExpanded && (
+        <div className="border-t border-stone-100 bg-stone-50/50 p-4 md:p-6 rounded-b-xl">
+           <div className="mb-6 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+              <div className="flex flex-wrap gap-2 w-full md:w-auto">
+                  <button onClick={() => setViewAsClient(true)} className="flex-1 md:flex-none justify-center text-xs flex items-center gap-2 bg-stone-800 text-white px-3 py-2 rounded-lg hover:bg-stone-700 transition-colors"><Eye className="w-3 h-3"/> Voir comme le client</button>
+                  <label className="flex-1 md:flex-none justify-center flex items-center gap-2 text-xs font-bold text-amber-700 cursor-pointer bg-amber-50 border border-amber-200 px-3 py-2 rounded-lg hover:bg-amber-100"><input type="checkbox" checked={localData.isPriority || false} onChange={e => updateField('isPriority', e.target.checked)} className="accent-amber-600" /> <Rocket className="w-3 h-3"/> Fast Track</label>
+              </div>
+              <div className="flex gap-2 w-full md:w-auto">
+                  <button onClick={sendInviteViaWebhook} disabled={sendingInvite} className="flex-1 md:flex-none justify-center text-xs flex items-center gap-2 bg-blue-600 text-white px-3 py-2 rounded-lg hover:bg-blue-700 transition-colors">{sendingInvite ? <Loader2 className="w-3 h-3 animate-spin"/> : <Mail className="w-3 h-3"/>} Inviter (Email)</button>
+                  <button onClick={copyInvite} className="text-xs flex items-center gap-2 bg-white border border-stone-200 px-3 py-2 rounded-lg hover:bg-stone-50 text-stone-600 transition-colors"><Copy className="w-3 h-3"/></button>
+              </div>
+           </div>
+
+           {/* SECTION VISIBILITE MUSIQUE & INSTRUCTIONS (NOUVEAU) */}
+           <div className="bg-purple-50 p-4 rounded-xl border border-purple-100 grid md:grid-cols-2 gap-6 mb-6">
+               <div>
+                   <h4 className="font-bold text-purple-900 flex items-center gap-2 mb-2"><Music className="w-4 h-4"/> Musiques Choisies</h4>
+                   <p className="text-sm text-purple-800 whitespace-pre-wrap italic bg-white p-3 rounded border border-purple-100">{project.musicLinks || "Le client n'a pas encore envoyé de liens."}</p>
+               </div>
+               <div>
+                   <h4 className="font-bold text-purple-900 flex items-center gap-2 mb-2"><Disc className="w-4 h-4"/> Instructions Montage</h4>
+                   <p className="text-sm text-purple-800 whitespace-pre-wrap bg-white p-3 rounded border border-purple-100">{project.musicInstructions || "Aucune instruction particulière."}</p>
+               </div>
+           </div>
+
+           <div className="grid lg:grid-cols-2 gap-6">
+               <div className="bg-white p-4 rounded-xl border border-stone-200 shadow-sm space-y-4">
+                    <h4 className="font-bold text-stone-700 flex items-center gap-2"><UsersIcon className="w-4 h-4" /> Infos Générales</h4>
+                    <div>
+                        <label className="text-xs font-semibold text-stone-500 uppercase block mb-1">Responsable</label>
+                        <div className="flex gap-2">
+                            <select className="w-full text-sm border-b border-stone-200 py-1 bg-transparent" value={localData.managerName} onChange={e => updateField('managerName', e.target.value)}>
+                                <option value="" disabled>-- Choisir dans la liste --</option>
+                                {staffList.map(s => <option key={s} value={s}>{s}</option>)}
+                            </select>
+                            <input className="w-full text-sm border-b border-stone-200 py-1 bg-transparent" placeholder="Email notif" value={localData.managerEmail || ''} onChange={e => updateField('managerEmail', e.target.value)} />
+                        </div>
+                    </div>
+                    <div>
+                        <label className="text-xs font-semibold text-stone-500 uppercase block mb-2">Équipe (Tags)</label>
+                        <div className="flex flex-wrap gap-2">{staffList.map(member => (<button key={member} onClick={() => toggleTeamMember(member)} className={`text-xs px-3 py-2 rounded-full border transition-all ${(localData.onSiteTeam || []).includes(member) ? 'bg-stone-800 text-white border-stone-800' : 'bg-white text-stone-500 border-stone-200 hover:border-stone-400'}`}>{member}</button>))}</div>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div><label className="text-xs font-semibold text-stone-500 uppercase flex items-center gap-1 mb-1"><AtSign className="w-3 h-3" /> Email Mariés</label><input className="w-full text-sm border-b border-stone-200 py-1 focus:outline-none focus:border-stone-500 bg-transparent" value={localData.clientEmail || ''} onChange={e => updateField('clientEmail', e.target.value)} /></div>
+                        <div><label className="text-xs font-semibold text-stone-500 uppercase flex items-center gap-1 mb-1"><Phone className="w-3 h-3" /> Téléphone</label><input className="w-full text-sm border-b border-stone-200 py-1 focus:outline-none focus:border-stone-500 bg-transparent" value={localData.clientPhone || ''} onChange={e => updateField('clientPhone', e.target.value)} /></div>
+                    </div>
+               </div>
+
+               {isSuperAdmin && (
+                   <div className="bg-white p-4 rounded-xl border border-stone-200 shadow-sm space-y-4 relative overflow-hidden">
+                        <h4 className="font-bold text-stone-700 flex items-center gap-2"><Euro className="w-4 h-4" /> Finance (Super Admin)</h4>
+                        <div className="grid grid-cols-2 gap-4">
+                            <div><label className="text-xs font-semibold text-stone-500 uppercase block mb-1">Total Devis (€)</label><input type="number" className="w-full text-sm font-mono border-b border-stone-200 py-1 focus:outline-none focus:border-stone-500 bg-transparent" value={localData.totalPrice || 0} onChange={e => updateField('totalPrice', parseFloat(e.target.value))} /></div>
+                            <div><label className="text-xs font-semibold text-stone-500 uppercase block mb-1">Acompte Reçu (€)</label><input type="number" className="w-full text-sm font-mono border-b border-stone-200 py-1 focus:outline-none focus:border-stone-500 bg-transparent" value={localData.depositAmount || 0} onChange={e => updateField('depositAmount', parseFloat(e.target.value))} /></div>
+                        </div>
+                        <div className={`p-3 rounded-lg flex justify-between items-center ${remaining > 0 ? 'bg-red-50 text-red-700' : 'bg-green-50 text-green-700'}`}><span className="text-sm font-bold">Reste à payer :</span><span className="text-lg font-bold">{remaining} €</span></div>
+                        
+                        <div className="border-t border-stone-100 pt-3">
+                            <label className="text-xs font-semibold text-stone-500 uppercase block mb-2">Rémunérations Équipe</label>
+                            <div className="space-y-2 mb-3">
+                                {localData.teamPayments?.map((pay, i) => (
+                                    <div key={i} className="flex justify-between items-center text-sm bg-stone-50 p-2 rounded">
+                                        <span>{pay.name}</span>
+                                        <div className="flex items-center gap-2">
+                                            <span className="font-mono">{pay.amount}€</span>
+                                            <button onClick={() => {
+                                                const newPayments = [...(localData.teamPayments || [])];
+                                                newPayments[i].paid = !newPayments[i].paid;
+                                                updateField('teamPayments', newPayments);
+                                            }} className={`px-2 py-0.5 text-[10px] rounded ${pay.paid ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>{pay.paid ? 'PAYÉ' : 'EN ATTENTE'}</button>
+                                        </div>
+                                        <button onClick={() => removePayment(i)} className="text-red-400 hover:text-red-600"><X className="w-3 h-3"/></button>
+                                    </div>
+                                ))}
+                            </div>
+                            <div className="flex gap-2">
+                                <select className="flex-1 text-sm border rounded p-1" value={newPayName} onChange={e => setNewPayName(e.target.value)}>
+                                    <option value="">Qui payer ?</option>
+                                    {staffList.map(s => <option key={s} value={s}>{s}</option>)}
+                                </select>
+                                <input className="w-20 text-sm border rounded p-1" type="number" placeholder="€" value={newPayAmount} onChange={e => setNewPayAmount(e.target.value)} />
+                                <button onClick={addPayment} className="bg-green-600 text-white px-3 rounded text-xs"><Plus className="w-3 h-3"/></button>
+                            </div>
+                        </div>
+                        
+                        <div className="pt-2"><label className="text-xs font-semibold text-stone-500 uppercase block mb-1">Notes Finance</label><textarea className="w-full text-sm border-b border-stone-200 py-1 bg-transparent h-12" placeholder="Mémo interne..." value={localData.financeNotes || ''} onChange={e => updateField('financeNotes', e.target.value)} /></div>
+                   </div>
+               )}
+           </div>
+
+           {/* --- ALBUMS --- */}
+           <div className="mt-6 bg-stone-50 p-4 rounded-xl border border-stone-200">
+               <h4 className="font-bold text-stone-700 flex items-center gap-2 mb-4"><BookOpen className="w-4 h-4" /> Commande Album</h4>
+               <div className="flex flex-col md:flex-row gap-4">
+                   <div className="flex-1">
+                       <label className="text-xs font-semibold text-stone-500 uppercase block mb-1">Format Album</label>
+                       <select className="w-full text-sm border rounded p-2 bg-white" value={localData.albumFormat || ''} onChange={e => updateField('albumFormat', e.target.value)}>
+                           <option value="">Aucun album</option>
+                           {ALBUM_FORMATS.map(f => <option key={f} value={f}>{f}</option>)}
+                       </select>
+                   </div>
+                   <div className="flex-1">
+                       <label className="text-xs font-semibold text-stone-500 uppercase block mb-1">État Avancement</label>
+                       <select className="w-full text-sm border rounded p-2 bg-white" value={localData.albumStatus || 'none'} onChange={e => updateField('albumStatus', e.target.value as any)}>
+                           {Object.entries(ALBUM_STEPS).map(([k,v]) => <option key={k} value={k}>{v}</option>)}
+                       </select>
+                   </div>
+                   <div className="flex-[2]">
+                       <label className="text-xs font-semibold text-stone-500 uppercase block mb-1">Notes Album</label>
+                       <input className="w-full text-sm border rounded p-2 bg-white" placeholder="Détails (couverture, pages supp...)" value={localData.albumNotes || ''} onChange={e => updateField('albumNotes', e.target.value)} />
+                   </div>
+               </div>
+           </div>
+
+           <div className="mt-6">
+                <label className="text-xs font-semibold text-stone-500 uppercase flex items-center gap-1 mb-1"><ImagePlus className="w-3 h-3" /> Photo de Couverture</label>
+                <div className="flex items-start gap-3">
+                    {localData.coverImage ? (
+                    <div className="relative w-16 h-16 rounded-lg overflow-hidden border border-stone-200 shrink-0 group"><img src={localData.coverImage} className="w-full h-full object-cover" alt="Preview" /><button onClick={() => updateField('coverImage', '')} className="absolute inset-0 bg-black/50 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity text-white"><Trash2 className="w-4 h-4" /></button></div>
+                    ) : (<div className="w-16 h-16 rounded-lg bg-stone-100 flex items-center justify-center border border-dashed border-stone-300 shrink-0"><ImageIcon className="w-6 h-6 text-stone-300" /></div>)}
+                    <label className={`mt-2 inline-flex items-center gap-2 cursor-pointer bg-stone-800 hover:bg-stone-700 text-white text-xs px-3 py-2 rounded-lg transition-colors ${uploading ? 'opacity-50 cursor-not-allowed' : ''}`}><input type="file" className="hidden" accept="image/*" disabled={uploading} onChange={handleImageUpload} />{uploading ? <Loader2 className="w-3 h-3 animate-spin"/> : <Upload className="w-3 h-3"/>} {uploading ? 'Envoi...' : 'Choisir une photo'}</label>
+                </div>
+           </div>
+
+           <div className="grid md:grid-cols-2 gap-6 mt-6">
+             {project.statusPhoto !== 'none' && (
+               <div className="bg-white p-4 rounded-xl border border-stone-200 shadow-sm">
+                 <div className="flex items-center justify-between mb-4"><h4 className="font-bold text-stone-700 flex items-center gap-2"><Camera className="w-4 h-4 text-amber-500"/> Photo</h4><span className="text-xs font-bold bg-amber-100 text-amber-700 px-2 py-1 rounded-full">{localData.progressPhoto}%</span></div>
+                 <div className="space-y-3">
+                   <div><label className="text-xs font-semibold text-stone-500 uppercase">Photographe</label>
+                   <select className="w-full text-sm border-b border-stone-200 py-1 focus:outline-none focus:border-amber-500 bg-transparent h-8" value={localData.photographerName} onChange={e => updateField('photographerName', e.target.value)}>
+                        <option value="">Choisir...</option>
+                        {staffList.map(s => <option key={s} value={s}>{s}</option>)}
+                   </select>
+                   </div>
+                   <div><label className="text-xs font-semibold text-stone-500 uppercase">Étape</label><div className="flex gap-2"><select className="flex-1 mt-1 p-2 bg-stone-50 border rounded-lg text-sm focus:ring-2 focus:ring-amber-500 outline-none" value={localData.statusPhoto} onChange={e => updateField('statusPhoto', e.target.value as any)}>{Object.entries(PHOTO_STEPS).filter(([k]) => k !== 'none').map(([k, s]) => (<option key={k} value={k}>{s.label}</option>))}</select></div></div>
+                   <div><label className="text-xs font-semibold text-stone-500 uppercase flex items-center gap-1"><LinkIcon className="w-3 h-3"/> Lien Livraison</label><input className="w-full mt-1 p-2 bg-stone-50 border rounded-lg text-sm focus:ring-2 focus:ring-amber-500 outline-none" placeholder="https://..." value={localData.linkPhoto || ''} onChange={e => updateField('linkPhoto', e.target.value)} /></div>
+                 </div>
+               </div>
+             )}
+             {project.statusVideo !== 'none' && (
+               <div className="bg-white p-4 rounded-xl border border-stone-200 shadow-sm">
+                 <div className="flex items-center justify-between mb-4"><h4 className="font-bold text-stone-700 flex items-center gap-2"><Video className="w-4 h-4 text-sky-500"/> Vidéo</h4><span className="text-xs font-bold bg-sky-100 text-sky-700 px-2 py-1 rounded-full">{localData.progressVideo}%</span></div>
+                 <div className="space-y-3">
+                   <div><label className="text-xs font-semibold text-stone-500 uppercase">Vidéaste</label>
+                   <select className="w-full text-sm border-b border-stone-200 py-1 focus:outline-none focus:border-sky-500 bg-transparent h-8" value={localData.videographerName} onChange={e => updateField('videographerName', e.target.value)}>
+                        <option value="">Choisir...</option>
+                        {staffList.map(s => <option key={s} value={s}>{s}</option>)}
+                   </select>
+                   </div>
+                   <div><label className="text-xs font-semibold text-stone-500 uppercase">Étape</label><div className="flex gap-2"><select className="flex-1 mt-1 p-2 bg-stone-50 border rounded-lg text-sm focus:ring-2 focus:ring-sky-500 outline-none" value={localData.statusVideo} onChange={e => updateField('statusVideo', e.target.value as any)}>{Object.entries(VIDEO_STEPS).filter(([k]) => k !== 'none').map(([k, s]) => (<option key={k} value={k}>{s.label}</option>))}</select></div></div>
+                   <div><label className="text-xs font-semibold text-stone-500 uppercase flex items-center gap-1"><LinkIcon className="w-3 h-3"/> Lien Livraison</label><input className="w-full mt-1 p-2 bg-stone-50 border rounded-lg text-sm focus:ring-2 focus:ring-sky-500 outline-none" placeholder="https://..." value={localData.linkVideo || ''} onChange={e => updateField('linkVideo', e.target.value)} /></div>
+                 </div>
+               </div>
+             )}
+           </div>
+
+           {/* --- CHAT ADMIN LIVE --- */}
+           <div className="mt-8">
+               {/* Important: On passe le projet LIVE pour que les messages soient synchronisés */}
+               <ChatBox project={project} userType="admin" />
+           </div>
+           
+           <div className="flex justify-between items-center pt-6 mt-6 border-t border-stone-200">
+             {isSuperAdmin ? (
+                 <button onClick={handleDelete} className="text-red-500 text-xs md:text-sm flex gap-1.5 hover:bg-red-50 px-3 py-2 rounded-lg transition"><Trash2 className="w-4 h-4"/> Supprimer</button>
+             ) : <div></div>}
+             <div className="flex gap-3">
+               {hasChanges && <button onClick={() => { setLocalData(project); setHasChanges(false); }} className="px-4 py-2 text-stone-600 hover:bg-stone-100 rounded-lg text-sm">Annuler</button>}
+               <button onClick={handleSave} disabled={!hasChanges} className={`px-6 py-2 rounded-lg font-medium shadow-sm transition-all text-sm ${hasChanges ? 'bg-blue-600 text-white hover:bg-blue-700 hover:shadow-md' : 'bg-stone-200 text-stone-400 cursor-not-allowed'}`}>Enregistrer</button>
+             </div>
+           </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// --- Vue Client (Existante) ---
 function ClientPortal({ projects, onBack }: { projects: Project[], onBack: () => void }) {
   const [searchCode, setSearchCode] = useState('');
   const [foundProject, setFoundProject] = useState<Project | null>(null);
@@ -621,503 +1179,6 @@ function ClientPortal({ projects, onBack }: { projects: Project[], onBack: () =>
         </form>
         {error && <div className="mt-4 text-red-500 text-sm bg-red-50 p-3 rounded-lg flex items-center justify-center gap-2"><AlertCircle className="w-4 h-4"/> {error}</div>}
       </div>
-    </div>
-  );
-}
-
-// --- Dashboard Admin (Redéfini avec affichage du manager et correction Staff) ---
-function AdminDashboard({ projects, user, onLogout, staffList, setStaffList }: { projects: Project[], user: any, onLogout: () => void, staffList: string[], setStaffList: any }) {
-  const [emailInput, setEmailInput] = useState('');
-  const [passInput, setPassInput] = useState('');
-  const [errorMsg, setErrorMsg] = useState('');
-  const [isAdding, setIsAdding] = useState(false);
-  const [showTeamModal, setShowTeamModal] = useState(false);
-  const [newMember, setNewMember] = useState('');
-  
-  const [newProject, setNewProject] = useState({ 
-    clientNames: '', clientEmail: '', clientPhone: '', weddingDate: '', 
-    photographerName: '', videographerName: '', managerName: '', managerEmail: '',
-    onSiteTeam: [] as string[], hasPhoto: true, hasVideo: true, hasAlbum: false, isPriority: false
-  });
-  const [filter, setFilter] = useState<'all' | 'active' | 'completed' | 'late'>('all');
-
-  const isSuperAdmin = SUPER_ADMINS.includes(user?.email);
-
-  const handleLogin = async (e: React.FormEvent) => {
-      e.preventDefault();
-      try { await signInWithEmailAndPassword(auth, emailInput, passInput); } 
-      catch (err: any) { setErrorMsg("Identifiants incorrects."); }
-  };
-
-  const handleAddMember = async () => {
-      if(!newMember.trim()) return;
-      const updatedList = [...staffList, newMember];
-      setStaffList(updatedList);
-      let settingsRef;
-      if (typeof __app_id !== 'undefined') { settingsRef = doc(db, 'artifacts', typeof __app_id !== 'undefined' ? __app_id : 'default-app-id', 'public', 'data', SETTINGS_COLLECTION, 'general'); } 
-      else { settingsRef = doc(db, SETTINGS_COLLECTION, 'general'); }
-      await setDoc(settingsRef, { staff: updatedList }, { merge: true });
-      setNewMember('');
-  };
-
-  const handleRemoveMember = async (member: string) => {
-      const updatedList = staffList.filter(m => m !== member);
-      setStaffList(updatedList);
-      let settingsRef;
-      if (typeof __app_id !== 'undefined') { settingsRef = doc(db, 'artifacts', typeof __app_id !== 'undefined' ? __app_id : 'default-app-id', 'public', 'data', SETTINGS_COLLECTION, 'general'); } 
-      else { settingsRef = doc(db, SETTINGS_COLLECTION, 'general'); }
-      await setDoc(settingsRef, { staff: updatedList }, { merge: true });
-  }
-
-  if (!user || user.isAnonymous) return (
-    <div className="min-h-screen flex items-center justify-center bg-stone-100 p-4">
-      <div className="bg-white p-6 rounded-xl shadow-lg max-w-sm w-full">
-         <h2 className="text-xl font-bold mb-4 flex gap-2"><Lock className="w-5 h-5" /> Accès Production</h2>
-         <form onSubmit={handleLogin} className="space-y-4">
-            <div><label className="text-xs font-bold text-stone-500 uppercase">Email</label><input type="email" required className="w-full p-3 border rounded-lg text-base" value={emailInput} onChange={(e) => setEmailInput(e.target.value)} /></div>
-            <div><label className="text-xs font-bold text-stone-500 uppercase">Mot de passe</label><input type="password" required className="w-full p-3 border rounded-lg text-base" value={passInput} onChange={(e) => setPassInput(e.target.value)} /></div>
-            {errorMsg && <p className="text-red-500 text-sm">{errorMsg}</p>}
-            <button type="submit" className="w-full bg-blue-600 text-white p-4 rounded-xl font-bold hover:bg-blue-700 text-lg">Se Connecter</button>
-         </form>
-         <button onClick={onLogout} className="mt-4 text-sm w-full text-center text-stone-500 py-2">Retour Accueil</button>
-      </div>
-    </div>
-  );
-
-  const handleAddProject = async (e: React.FormEvent) => {
-    e.preventDefault();
-    let colRef;
-    if (typeof __app_id !== 'undefined') { colRef = collection(db, 'artifacts', typeof __app_id !== 'undefined' ? __app_id : 'default-app-id', 'public', 'data', COLLECTION_NAME); } 
-    else { colRef = collection(db, COLLECTION_NAME); }
-    
-    const code = (newProject.clientNames.split(' ')[0] + '-' + Math.floor(Math.random() * 1000)).toUpperCase().replace(/[^A-Z0-9-]/g, '');
-    await addDoc(colRef, {
-      ...newProject, code,
-      statusPhoto: newProject.hasPhoto ? 'waiting' : 'none', statusVideo: newProject.hasVideo ? 'waiting' : 'none',
-      progressPhoto: 0, progressVideo: 0,
-      linkPhoto: '', linkVideo: '', messages: [], hasUnreadMessage: false,
-      totalPrice: 0, depositAmount: 0, teamPayments: [],
-      createdAt: serverTimestamp(), lastUpdated: serverTimestamp()
-    });
-    setIsAdding(false);
-  };
-
-  const filteredProjects = projects.filter(p => {
-    const isFinished = (p.statusPhoto === 'delivered' || p.statusPhoto === 'none') && (p.statusVideo === 'delivered' || p.statusVideo === 'none');
-    const isLate = new Date().getTime() - new Date(p.weddingDate).getTime() > (60 * 24 * 60 * 60 * 1000) && !isFinished;
-    if (filter === 'completed') return isFinished;
-    if (filter === 'active') return !isFinished;
-    if (filter === 'late') return isLate;
-    return true; 
-  });
-
-  return (
-    <div className="min-h-screen bg-gray-50 pb-20">
-      <header className="bg-white border-b sticky top-0 z-20 shadow-sm">
-        <div className="max-w-7xl mx-auto px-4 py-3 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-          <div className="flex items-center gap-3 w-full md:w-auto justify-between">
-            <div className="flex items-center gap-3">
-                <div className="bg-stone-900 text-white p-2 rounded-lg"><Users className="w-5 h-5" /></div>
-                <div><h1 className="font-bold text-stone-900 text-lg">Dashboard</h1><p className="text-xs text-stone-500 truncate max-w-[150px]">{user.email}</p></div>
-            </div>
-            <div className="flex items-center gap-2 md:hidden">
-                <button onClick={() => setShowTeamModal(true)} className="p-2 border rounded-lg bg-stone-100"><Settings className="w-5 h-5 text-stone-600"/></button>
-                <button onClick={() => setIsAdding(true)} className="p-2 bg-blue-600 text-white rounded-lg"><Plus className="w-5 h-5"/></button>
-            </div>
-          </div>
-          
-          <div className="hidden md:flex items-center gap-2">
-            <button onClick={() => setShowTeamModal(true)} className="text-stone-500 hover:text-stone-800 px-3 py-2 text-sm font-medium transition flex items-center gap-1 border rounded-lg mr-2"><Settings className="w-4 h-4"/> Équipe</button>
-            <button onClick={onLogout} className="text-stone-500 hover:text-stone-800 px-3 py-2 text-sm font-medium transition flex items-center gap-1"><LogOut className="w-4 h-4"/> Déconnexion</button>
-            <button onClick={() => setIsAdding(true)} className="bg-blue-600 text-white px-4 py-2 rounded-lg flex gap-2 text-sm font-medium hover:bg-blue-700 transition"><Plus className="w-4 h-4" /> Nouveau</button>
-          </div>
-        </div>
-      </header>
-      
-      <main className="max-w-6xl mx-auto px-4 py-6">
-        <div className="flex gap-2 mb-6 overflow-x-auto pb-2 scrollbar-hide">
-          <button onClick={() => setFilter('all')} className={`px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap ${filter === 'all' ? 'bg-stone-800 text-white' : 'bg-white text-stone-600'}`}>Tous ({projects.length})</button>
-          <button onClick={() => setFilter('active')} className={`px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap ${filter === 'active' ? 'bg-blue-600 text-white' : 'bg-white text-stone-600'}`}>En cours</button>
-          <button onClick={() => setFilter('late')} className={`px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap ${filter === 'late' ? 'bg-red-500 text-white' : 'bg-white text-stone-600'}`}>En retard</button>
-        </div>
-        <div className="grid gap-4 md:gap-6">
-          {filteredProjects.map(p => <ProjectEditor key={p.id} project={p} isSuperAdmin={isSuperAdmin} staffList={staffList} />)}
-        </div>
-      </main>
-      
-      {isAdding && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
-          <div className="bg-white rounded-2xl p-6 w-full max-w-lg shadow-2xl max-h-[90vh] overflow-y-auto">
-            <div className="flex justify-between items-center mb-6 border-b pb-2">
-                <h3 className="text-lg font-bold">Nouveau Dossier</h3>
-                <button onClick={() => setIsAdding(false)}><X className="w-6 h-6 text-stone-400" /></button>
-            </div>
-            <form onSubmit={handleAddProject} className="space-y-4">
-              <div><label className="text-sm font-medium text-stone-600 block mb-1">Mariés</label><input required placeholder="Ex: Sophie & Marc" className="w-full border rounded-lg p-3 text-base" value={newProject.clientNames} onChange={e => setNewProject({...newProject, clientNames: e.target.value})} /></div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                 <div><label className="text-sm font-medium text-stone-600 block mb-1">Email Client</label><input type="email" className="w-full border rounded-lg p-3 text-base" value={newProject.clientEmail} onChange={e => setNewProject({...newProject, clientEmail: e.target.value})} /></div>
-                 <div><label className="text-sm font-medium text-stone-600 block mb-1">Téléphone</label><input type="tel" className="w-full border rounded-lg p-3 text-base" value={newProject.clientPhone} onChange={e => setNewProject({...newProject, clientPhone: e.target.value})} /></div>
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                 <div><label className="text-sm font-medium text-stone-600 block mb-1">Date Mariage</label><input required type="date" className="w-full border rounded-lg p-3 text-base" value={newProject.weddingDate} onChange={e => setNewProject({...newProject, weddingDate: e.target.value})} /></div>
-                 <div>
-                     <label className="text-sm font-medium text-stone-600 block mb-1">Responsable</label>
-                     <select className="w-full border rounded-lg p-3 text-base bg-white" value={newProject.managerName} onChange={e => setNewProject({...newProject, managerName: e.target.value})}>
-                        <option value="">Sélectionner...</option>
-                        {staffList.map(s => <option key={s} value={s}>{s}</option>)}
-                     </select>
-                 </div>
-              </div>
-              <div><label className="text-sm font-medium text-stone-600 block mb-1">Email du Responsable (Pour notif)</label><input type="email" className="w-full border rounded-lg p-3 text-base" placeholder="responsable@agence.com" value={newProject.managerEmail} onChange={e => setNewProject({...newProject, managerEmail: e.target.value})} /></div>
-              
-              <div className="grid grid-cols-2 gap-4 pt-2">
-                <div className="p-3 bg-stone-50 rounded-lg border border-stone-100">
-                  <label className="flex items-center gap-2 mb-2 font-medium text-sm"><input type="checkbox" checked={newProject.hasPhoto} onChange={e => setNewProject({...newProject, hasPhoto: e.target.checked})} className="w-5 h-5 accent-amber-600" /> Photo</label>
-                  {newProject.hasPhoto && (
-                      <select className="w-full text-sm border rounded p-2 bg-white" value={newProject.photographerName} onChange={e => setNewProject({...newProject, photographerName: e.target.value})}>
-                          <option value="">Qui photographie ?</option>
-                          {staffList.map(s => <option key={s} value={s}>{s}</option>)}
-                      </select>
-                  )}
-                </div>
-                <div className="p-3 bg-stone-50 rounded-lg border border-stone-100">
-                  <label className="flex items-center gap-2 mb-2 font-medium text-sm"><input type="checkbox" checked={newProject.hasVideo} onChange={e => setNewProject({...newProject, hasVideo: e.target.checked})} className="w-5 h-5 accent-sky-600" /> Vidéo</label>
-                  {newProject.hasVideo && (
-                      <select className="w-full text-sm border rounded p-2 bg-white" value={newProject.videographerName} onChange={e => setNewProject({...newProject, videographerName: e.target.value})}>
-                          <option value="">Qui filme ?</option>
-                          {staffList.map(s => <option key={s} value={s}>{s}</option>)}
-                      </select>
-                  )}
-                </div>
-              </div>
-              <div className="pt-4">
-                <button type="submit" className="w-full py-3 bg-blue-600 text-white rounded-xl font-bold text-lg">Créer le projet</button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* MODAL EQUIPE */}
-      {showTeamModal && (
-          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
-            <div className="bg-white rounded-2xl p-6 w-full max-w-md shadow-2xl">
-                <h3 className="text-lg font-bold mb-4">Gérer l'équipe (Tags)</h3>
-                <div className="flex gap-2 mb-4">
-                    <input className="flex-1 border rounded-lg p-3 text-base" placeholder="Nouveau membre..." value={newMember} onChange={e => setNewMember(e.target.value)} />
-                    <button onClick={handleAddMember} className="bg-green-600 text-white px-4 rounded-lg"><Plus className="w-6 h-6"/></button>
-                </div>
-                <div className="space-y-2 max-h-60 overflow-y-auto">
-                    {staffList.length === 0 && <p className="text-stone-400 text-center italic">Aucun membre. Ajoutez-en un !</p>}
-                    {staffList.map(member => (
-                        <div key={member} className="flex justify-between items-center p-3 bg-stone-50 rounded-lg">
-                            <span className="font-medium">{member}</span>
-                            <button onClick={() => handleRemoveMember(member)} className="text-red-500 hover:bg-red-50 p-2 rounded"><Trash2 className="w-5 h-5"/></button>
-                        </div>
-                    ))}
-                </div>
-                <button onClick={() => setShowTeamModal(false)} className="w-full mt-6 py-3 bg-stone-100 text-stone-700 font-bold rounded-xl">Fermer</button>
-            </div>
-          </div>
-      )}
-    </div>
-  );
-}
-
-// --- Project Editor (Avec ajout du nom du manager en vue collapsed) ---
-function ProjectEditor({ project, isSuperAdmin, staffList }: { project: Project, isSuperAdmin: boolean, staffList: string[] }) {
-  const [isExpanded, setIsExpanded] = useState(false);
-  const [localData, setLocalData] = useState(project);
-  const [hasChanges, setHasChanges] = useState(false);
-  const [uploading, setUploading] = useState(false);
-  const [sendingInvite, setSendingInvite] = useState(false);
-  const [viewAsClient, setViewAsClient] = useState(false); 
-  const [newPayName, setNewPayName] = useState('');
-  const [newPayAmount, setNewPayAmount] = useState('');
-
-  useEffect(() => { if (!hasChanges) setLocalData(project); }, [project]);
-
-  const updateField = (k: keyof Project, v: any) => { 
-    setLocalData(p => {
-      const newState = { ...p, [k]: v };
-      if (k === 'statusPhoto') newState.progressPhoto = PHOTO_STEPS[v as keyof typeof PHOTO_STEPS].percent;
-      if (k === 'statusVideo') newState.progressVideo = VIDEO_STEPS[v as keyof typeof VIDEO_STEPS].percent;
-      return newState;
-    }); 
-    setHasChanges(true); 
-  };
-
-  const toggleTeamMember = (member: string) => {
-      const currentTeam = localData.onSiteTeam || [];
-      const newTeam = currentTeam.includes(member) ? currentTeam.filter(m => m !== member) : [...currentTeam, member];
-      updateField('onSiteTeam', newTeam);
-  };
-
-  const addPayment = () => {
-      if(!newPayName || !newPayAmount) return;
-      const payments = localData.teamPayments || [];
-      updateField('teamPayments', [...payments, { name: newPayName, amount: parseFloat(newPayAmount), note: '' }]);
-      setNewPayName(''); setNewPayAmount('');
-  };
-  const removePayment = (idx: number) => {
-      const payments = [...(localData.teamPayments || [])];
-      payments.splice(idx, 1);
-      updateField('teamPayments', payments);
-  };
-  
-  const handleSave = async () => {
-    const { id, ...data } = localData;
-    let docRef;
-    if (typeof __app_id !== 'undefined') { docRef = doc(db, 'artifacts', typeof __app_id !== 'undefined' ? __app_id : 'default-app-id', 'public', 'data', COLLECTION_NAME, project.id); } 
-    else { docRef = doc(db, COLLECTION_NAME, project.id); }
-    
-    const finalData = { ...data, lastUpdated: serverTimestamp() };
-    await updateDoc(docRef, finalData);
-    
-    if(localData.managerEmail && MAKE_WEBHOOK_URL && !MAKE_WEBHOOK_URL.includes('VOTRE_URL')) {
-        fetch(MAKE_WEBHOOK_URL, {
-            method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ type: 'update_manager', clientName: localData.clientNames, managerEmail: localData.managerEmail, status: 'Mise à jour dossier' })
-        }).catch(err => console.error(err));
-    }
-
-    setHasChanges(false); setIsExpanded(false);
-  };
-
-  const handleDelete = async () => {
-    if(!isSuperAdmin) return;
-    let docRef;
-    if (typeof __app_id !== 'undefined') { docRef = doc(db, 'artifacts', typeof __app_id !== 'undefined' ? __app_id : 'default-app-id', 'public', 'data', COLLECTION_NAME, project.id); } 
-    else { docRef = doc(db, COLLECTION_NAME, project.id); }
-    if (confirm('Supprimer définitivement ce projet ?')) await deleteDoc(docRef);
-  };
-
-  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]; if (!file) return;
-    try {
-      setUploading(true);
-      let storageRef = ref(storage, `covers/${project.id}_${Date.now()}_${file.name}`);
-      await uploadBytes(storageRef, file);
-      const url = await getDownloadURL(storageRef);
-      updateField('coverImage', url);
-    } catch (error: any) { alert(`Erreur: ${error.message}`); } finally { setUploading(false); }
-  };
-
-  const sendInviteViaWebhook = async () => {
-      if (!localData.clientEmail) { alert("Veuillez renseigner l'email du client."); return; }
-      if (MAKE_WEBHOOK_URL.includes('VOTRE_URL_ICI')) { alert("Configurez le Webhook Make dans le code !"); return; }
-      setSendingInvite(true);
-      try {
-          await fetch(MAKE_WEBHOOK_URL, {
-              method: 'POST', headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ type: 'invite', clientName: localData.clientNames, clientEmail: localData.clientEmail, projectCode: localData.code, url: window.location.origin })
-          });
-          alert(`Invitation envoyée !`);
-      } catch (error) { console.error(error); alert("Erreur envoi."); } 
-      finally { setSendingInvite(false); }
-  };
-
-  const copyInvite = () => {
-    const text = `Suivi Mariage : ${window.location.origin}\nCode : ${localData.code}`;
-    const textArea = document.createElement("textarea"); textArea.value = text; document.body.appendChild(textArea); textArea.select();
-    try { document.execCommand('copy'); alert("Lien copié !"); } catch (err) {}
-    document.body.removeChild(textArea);
-  };
-
-  const now = Date.now();
-  const lastUpdate = project.lastUpdated?.toMillis() || project.createdAt?.toMillis() || now;
-  const diffDays = (now - lastUpdate) / (1000 * 60 * 60 * 24);
-  const isInactive = diffDays > 7 && (project.statusPhoto !== 'delivered' || project.statusVideo !== 'delivered');
-  const isLate = new Date().getTime() - new Date(project.weddingDate).getTime() > (60 * 24 * 60 * 60 * 1000) && (project.statusPhoto !== 'delivered' || project.statusVideo !== 'delivered');
-  const remaining = (localData.totalPrice || 0) - (localData.depositAmount || 0);
-
-  if (viewAsClient) {
-      return (
-        <div className="fixed inset-0 z-50 bg-stone-50 overflow-y-auto">
-             <div className="p-4 bg-stone-900 text-white flex justify-between items-center sticky top-0 z-50"><span>Preview Client</span><button onClick={() => setViewAsClient(false)} className="bg-white text-black px-4 py-2 rounded">Fermer</button></div>
-             <ClientPortal projects={[project]} onBack={() => {}} /> 
-        </div>
-      );
-  }
-
-  return (
-    <div className={`bg-white rounded-xl shadow-sm border transition-all ${isInactive ? 'border-red-500 border-2' : 'border-stone-200'} hover:border-blue-300`}>
-      <div className="p-4 flex flex-col md:flex-row md:items-center justify-between cursor-pointer gap-4" onClick={() => setIsExpanded(!isExpanded)}>
-        <div className="flex items-center gap-4">
-          <div className={`w-1.5 h-12 rounded-full flex-shrink-0 ${project.isPriority ? 'bg-amber-500 animate-pulse' : (isLate ? 'bg-red-500' : 'bg-green-500')}`}></div>
-          <div>
-             <div className="flex flex-wrap items-center gap-2">
-                 <h3 className="font-bold text-lg text-stone-900">{project.clientNames}</h3>
-                 {isInactive && <span className="bg-red-100 text-red-600 text-[10px] px-2 py-0.5 rounded-full font-bold flex items-center gap-1 border border-red-200 animate-pulse"><AlertOctagon className="w-3 h-3"/> Inactif +7j</span>}
-                 {project.isPriority && <span className="bg-amber-100 text-amber-700 text-[10px] px-2 py-0.5 rounded-full font-bold flex items-center gap-1"><Rocket className="w-3 h-3"/> PRIO</span>}
-                 {project.hasUnreadMessage && <span className="bg-red-500 text-white text-[10px] px-2 py-0.5 rounded-full font-bold animate-bounce">MSG</span>}
-                 {/* VISIBILITE RESPONSABLE SUR LA CARTE */}
-                 {project.managerName && <span className="text-xs text-stone-400 border px-1.5 py-0.5 rounded bg-stone-50 flex items-center gap-1"><UserCheck className="w-3 h-3"/> {project.managerName}</span>}
-             </div>
-             <div className="text-sm text-stone-500 flex flex-wrap items-center gap-3 mt-1">
-               <span className="font-mono bg-stone-100 px-1.5 py-0.5 rounded text-stone-600 select-all">{project.code}</span>
-               <span>{new Date(project.weddingDate).toLocaleDateString()}</span>
-               {isSuperAdmin && remaining > 0 && <span className="bg-red-100 text-red-600 px-2 rounded-full text-xs font-bold">Reste: {remaining}€</span>}
-             </div>
-          </div>
-        </div>
-        <div className="flex items-center justify-between md:justify-end gap-6 w-full md:w-auto pl-6 md:pl-0">
-           <div className="flex gap-4 text-right">
-             {project.statusPhoto !== 'none' && (<div><div className="text-[10px] uppercase text-stone-400 font-bold tracking-wider">Photo</div><div className={`text-sm font-bold ${project.statusPhoto === 'delivered' ? 'text-green-600' : 'text-amber-600'}`}>{project.progressPhoto}%</div></div>)}
-             {project.statusVideo !== 'none' && (<div><div className="text-[10px] uppercase text-stone-400 font-bold tracking-wider">Vidéo</div><div className={`text-sm font-bold ${project.statusVideo === 'delivered' ? 'text-green-600' : 'text-sky-600'}`}>{project.progressVideo}%</div></div>)}
-           </div>
-           <ChevronRight className={`w-5 h-5 text-stone-400 transition-transform ${isExpanded ? 'rotate-90' : ''}`} />
-        </div>
-      </div>
-      
-      {isExpanded && (
-        <div className="border-t border-stone-100 bg-stone-50/50 p-4 md:p-6 rounded-b-xl">
-           <div className="mb-6 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-              <div className="flex flex-wrap gap-2 w-full md:w-auto">
-                  <button onClick={() => setViewAsClient(true)} className="flex-1 md:flex-none justify-center text-xs flex items-center gap-2 bg-stone-800 text-white px-3 py-2 rounded-lg hover:bg-stone-700 transition-colors"><Eye className="w-3 h-3"/> Voir comme le client</button>
-                  <label className="flex-1 md:flex-none justify-center flex items-center gap-2 text-xs font-bold text-amber-700 cursor-pointer bg-amber-50 border border-amber-200 px-3 py-2 rounded-lg hover:bg-amber-100"><input type="checkbox" checked={localData.isPriority || false} onChange={e => updateField('isPriority', e.target.checked)} className="accent-amber-600" /> <Rocket className="w-3 h-3"/> Fast Track</label>
-              </div>
-              <div className="flex gap-2 w-full md:w-auto">
-                  <button onClick={sendInviteViaWebhook} disabled={sendingInvite} className="flex-1 md:flex-none justify-center text-xs flex items-center gap-2 bg-blue-600 text-white px-3 py-2 rounded-lg hover:bg-blue-700 transition-colors">{sendingInvite ? <Loader2 className="w-3 h-3 animate-spin"/> : <Mail className="w-3 h-3"/>} Inviter (Email)</button>
-                  <button onClick={copyInvite} className="text-xs flex items-center gap-2 bg-white border border-stone-200 px-3 py-2 rounded-lg hover:bg-stone-50 text-stone-600 transition-colors"><Copy className="w-3 h-3"/></button>
-              </div>
-           </div>
-
-           <div className="grid lg:grid-cols-2 gap-6">
-               <div className="bg-white p-4 rounded-xl border border-stone-200 shadow-sm space-y-4">
-                    <h4 className="font-bold text-stone-700 flex items-center gap-2"><UsersIcon className="w-4 h-4" /> Infos Générales</h4>
-                    <div>
-                        <label className="text-xs font-semibold text-stone-500 uppercase block mb-1">Responsable</label>
-                        <div className="flex gap-2">
-                            <select className="w-full text-sm border-b border-stone-200 py-1 bg-transparent" value={localData.managerName} onChange={e => updateField('managerName', e.target.value)}>
-                                <option value="">Sélectionner...</option>
-                                {staffList.map(s => <option key={s} value={s}>{s}</option>)}
-                            </select>
-                            <input className="w-full text-sm border-b border-stone-200 py-1 bg-transparent" placeholder="Email notif" value={localData.managerEmail || ''} onChange={e => updateField('managerEmail', e.target.value)} />
-                        </div>
-                    </div>
-                    <div>
-                        <label className="text-xs font-semibold text-stone-500 uppercase block mb-2">Équipe (Tags)</label>
-                        <div className="flex flex-wrap gap-2">{staffList.map(member => (<button key={member} onClick={() => toggleTeamMember(member)} className={`text-xs px-3 py-2 rounded-full border transition-all ${(localData.onSiteTeam || []).includes(member) ? 'bg-stone-800 text-white border-stone-800' : 'bg-white text-stone-500 border-stone-200 hover:border-stone-400'}`}>{member}</button>))}</div>
-                    </div>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div><label className="text-xs font-semibold text-stone-500 uppercase flex items-center gap-1 mb-1"><AtSign className="w-3 h-3" /> Email Mariés</label><input className="w-full text-sm border-b border-stone-200 py-1 focus:outline-none focus:border-stone-500 bg-transparent" value={localData.clientEmail || ''} onChange={e => updateField('clientEmail', e.target.value)} /></div>
-                        <div><label className="text-xs font-semibold text-stone-500 uppercase flex items-center gap-1 mb-1"><Phone className="w-3 h-3" /> Téléphone</label><input className="w-full text-sm border-b border-stone-200 py-1 focus:outline-none focus:border-stone-500 bg-transparent" value={localData.clientPhone || ''} onChange={e => updateField('clientPhone', e.target.value)} /></div>
-                    </div>
-               </div>
-
-               {isSuperAdmin && (
-                   <div className="bg-white p-4 rounded-xl border border-stone-200 shadow-sm space-y-4 relative overflow-hidden">
-                        <h4 className="font-bold text-stone-700 flex items-center gap-2"><Euro className="w-4 h-4" /> Finance (Super Admin)</h4>
-                        <div className="grid grid-cols-2 gap-4">
-                            <div><label className="text-xs font-semibold text-stone-500 uppercase block mb-1">Total Devis (€)</label><input type="number" className="w-full text-sm font-mono border-b border-stone-200 py-1 focus:outline-none focus:border-stone-500 bg-transparent" value={localData.totalPrice || 0} onChange={e => updateField('totalPrice', parseFloat(e.target.value))} /></div>
-                            <div><label className="text-xs font-semibold text-stone-500 uppercase block mb-1">Acompte Reçu (€)</label><input type="number" className="w-full text-sm font-mono border-b border-stone-200 py-1 focus:outline-none focus:border-stone-500 bg-transparent" value={localData.depositAmount || 0} onChange={e => updateField('depositAmount', parseFloat(e.target.value))} /></div>
-                        </div>
-                        <div className={`p-3 rounded-lg flex justify-between items-center ${remaining > 0 ? 'bg-red-50 text-red-700' : 'bg-green-50 text-green-700'}`}><span className="text-sm font-bold">Reste à payer :</span><span className="text-lg font-bold">{remaining} €</span></div>
-                        
-                        <div className="border-t border-stone-100 pt-3">
-                            <label className="text-xs font-semibold text-stone-500 uppercase block mb-2">Rémunérations Équipe</label>
-                            <div className="space-y-2 mb-3">
-                                {localData.teamPayments?.map((pay, i) => (
-                                    <div key={i} className="flex justify-between items-center text-sm bg-stone-50 p-2 rounded">
-                                        <span>{pay.name}</span>
-                                        <span className="font-mono">{pay.amount}€</span>
-                                        <button onClick={() => removePayment(i)} className="text-red-400 hover:text-red-600"><X className="w-3 h-3"/></button>
-                                    </div>
-                                ))}
-                            </div>
-                            <div className="flex gap-2">
-                                <select className="flex-1 text-sm border rounded p-1" value={newPayName} onChange={e => setNewPayName(e.target.value)}>
-                                    <option value="">Qui payer ?</option>
-                                    {staffList.map(s => <option key={s} value={s}>{s}</option>)}
-                                </select>
-                                <input className="w-20 text-sm border rounded p-1" type="number" placeholder="€" value={newPayAmount} onChange={e => setNewPayAmount(e.target.value)} />
-                                <button onClick={addPayment} className="bg-green-600 text-white px-3 rounded text-xs"><Plus className="w-3 h-3"/></button>
-                            </div>
-                        </div>
-                        
-                        <div className="pt-2"><label className="text-xs font-semibold text-stone-500 uppercase block mb-1">Notes Finance</label><textarea className="w-full text-sm border-b border-stone-200 py-1 bg-transparent h-12" placeholder="Mémo interne..." value={localData.financeNotes || ''} onChange={e => updateField('financeNotes', e.target.value)} /></div>
-                   </div>
-               )}
-           </div>
-
-           {/* --- ALBUMS --- */}
-           <div className="mt-6 bg-stone-50 p-4 rounded-xl border border-stone-200">
-               <h4 className="font-bold text-stone-700 flex items-center gap-2 mb-4"><BookOpen className="w-4 h-4" /> Commande Album</h4>
-               <div className="flex flex-col md:flex-row gap-4">
-                   <div className="flex-1">
-                       <label className="text-xs font-semibold text-stone-500 uppercase block mb-1">Format Album</label>
-                       <select className="w-full text-sm border rounded p-2 bg-white" value={localData.albumFormat || ''} onChange={e => updateField('albumFormat', e.target.value)}>
-                           <option value="">Aucun album</option>
-                           {ALBUM_FORMATS.map(f => <option key={f} value={f}>{f}</option>)}
-                       </select>
-                   </div>
-                   <div className="flex-[2]">
-                       <label className="text-xs font-semibold text-stone-500 uppercase block mb-1">Notes Album</label>
-                       <input className="w-full text-sm border rounded p-2 bg-white" placeholder="Détails (couverture, pages supp...)" value={localData.albumNotes || ''} onChange={e => updateField('albumNotes', e.target.value)} />
-                   </div>
-               </div>
-           </div>
-
-           <div className="mt-6">
-                <label className="text-xs font-semibold text-stone-500 uppercase flex items-center gap-1 mb-1"><ImagePlus className="w-3 h-3" /> Photo de Couverture</label>
-                <div className="flex items-start gap-3">
-                    {localData.coverImage ? (
-                    <div className="relative w-16 h-16 rounded-lg overflow-hidden border border-stone-200 shrink-0 group"><img src={localData.coverImage} className="w-full h-full object-cover" alt="Preview" /><button onClick={() => updateField('coverImage', '')} className="absolute inset-0 bg-black/50 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity text-white"><Trash2 className="w-4 h-4" /></button></div>
-                    ) : (<div className="w-16 h-16 rounded-lg bg-stone-100 flex items-center justify-center border border-dashed border-stone-300 shrink-0"><ImageIcon className="w-6 h-6 text-stone-300" /></div>)}
-                    <label className={`mt-2 inline-flex items-center gap-2 cursor-pointer bg-stone-800 hover:bg-stone-700 text-white text-xs px-3 py-2 rounded-lg transition-colors ${uploading ? 'opacity-50 cursor-not-allowed' : ''}`}><input type="file" className="hidden" accept="image/*" disabled={uploading} onChange={handleImageUpload} />{uploading ? <Loader2 className="w-3 h-3 animate-spin"/> : <Upload className="w-3 h-3"/>} {uploading ? 'Envoi...' : 'Choisir une photo'}</label>
-                </div>
-           </div>
-
-           <div className="grid md:grid-cols-2 gap-6 mt-6">
-             {project.statusPhoto !== 'none' && (
-               <div className="bg-white p-4 rounded-xl border border-stone-200 shadow-sm">
-                 <div className="flex items-center justify-between mb-4"><h4 className="font-bold text-stone-700 flex items-center gap-2"><Camera className="w-4 h-4 text-amber-500"/> Photo</h4><span className="text-xs font-bold bg-amber-100 text-amber-700 px-2 py-1 rounded-full">{localData.progressPhoto}%</span></div>
-                 <div className="space-y-3">
-                   <div><label className="text-xs font-semibold text-stone-500 uppercase">Photographe</label>
-                   <select className="w-full text-sm border-b border-stone-200 py-1 focus:outline-none focus:border-amber-500 bg-transparent h-8" value={localData.photographerName} onChange={e => updateField('photographerName', e.target.value)}>
-                        <option value="">Choisir...</option>
-                        {staffList.map(s => <option key={s} value={s}>{s}</option>)}
-                   </select>
-                   </div>
-                   <div><label className="text-xs font-semibold text-stone-500 uppercase">Étape</label><div className="flex gap-2"><select className="flex-1 mt-1 p-2 bg-stone-50 border rounded-lg text-sm focus:ring-2 focus:ring-amber-500 outline-none" value={localData.statusPhoto} onChange={e => updateField('statusPhoto', e.target.value as any)}>{Object.entries(PHOTO_STEPS).filter(([k]) => k !== 'none').map(([k, s]) => (<option key={k} value={k}>{s.label}</option>))}</select></div></div>
-                   <div><label className="text-xs font-semibold text-stone-500 uppercase flex items-center gap-1"><LinkIcon className="w-3 h-3"/> Lien Livraison</label><input className="w-full mt-1 p-2 bg-stone-50 border rounded-lg text-sm focus:ring-2 focus:ring-amber-500 outline-none" placeholder="https://..." value={localData.linkPhoto || ''} onChange={e => updateField('linkPhoto', e.target.value)} /></div>
-                 </div>
-               </div>
-             )}
-             {project.statusVideo !== 'none' && (
-               <div className="bg-white p-4 rounded-xl border border-stone-200 shadow-sm">
-                 <div className="flex items-center justify-between mb-4"><h4 className="font-bold text-stone-700 flex items-center gap-2"><Video className="w-4 h-4 text-sky-500"/> Vidéo</h4><span className="text-xs font-bold bg-sky-100 text-sky-700 px-2 py-1 rounded-full">{localData.progressVideo}%</span></div>
-                 <div className="space-y-3">
-                   <div><label className="text-xs font-semibold text-stone-500 uppercase">Vidéaste</label>
-                   <select className="w-full text-sm border-b border-stone-200 py-1 focus:outline-none focus:border-sky-500 bg-transparent h-8" value={localData.videographerName} onChange={e => updateField('videographerName', e.target.value)}>
-                        <option value="">Choisir...</option>
-                        {staffList.map(s => <option key={s} value={s}>{s}</option>)}
-                   </select>
-                   </div>
-                   <div><label className="text-xs font-semibold text-stone-500 uppercase">Étape</label><div className="flex gap-2"><select className="flex-1 mt-1 p-2 bg-stone-50 border rounded-lg text-sm focus:ring-2 focus:ring-sky-500 outline-none" value={localData.statusVideo} onChange={e => updateField('statusVideo', e.target.value as any)}>{Object.entries(VIDEO_STEPS).filter(([k]) => k !== 'none').map(([k, s]) => (<option key={k} value={k}>{s.label}</option>))}</select></div></div>
-                   <div><label className="text-xs font-semibold text-stone-500 uppercase flex items-center gap-1"><LinkIcon className="w-3 h-3"/> Lien Livraison</label><input className="w-full mt-1 p-2 bg-stone-50 border rounded-lg text-sm focus:ring-2 focus:ring-sky-500 outline-none" placeholder="https://..." value={localData.linkVideo || ''} onChange={e => updateField('linkVideo', e.target.value)} /></div>
-                 </div>
-               </div>
-             )}
-           </div>
-
-           {/* --- CHAT ADMIN LIVE --- */}
-           <div className="mt-8">
-               <ChatBox project={project} userType="admin" />
-           </div>
-           
-           <div className="flex justify-between items-center pt-6 mt-6 border-t border-stone-200">
-             {isSuperAdmin ? (
-                 <button onClick={handleDelete} className="text-red-500 text-xs md:text-sm flex gap-1.5 hover:bg-red-50 px-3 py-2 rounded-lg transition"><Trash2 className="w-4 h-4"/> Supprimer</button>
-             ) : <div></div>}
-             <div className="flex gap-3">
-               {hasChanges && <button onClick={() => { setLocalData(project); setHasChanges(false); }} className="px-4 py-2 text-stone-600 hover:bg-stone-100 rounded-lg text-sm">Annuler</button>}
-               <button onClick={handleSave} disabled={!hasChanges} className={`px-6 py-2 rounded-lg font-medium shadow-sm transition-all text-sm ${hasChanges ? 'bg-blue-600 text-white hover:bg-blue-700 hover:shadow-md' : 'bg-stone-200 text-stone-400 cursor-not-allowed'}`}>Enregistrer</button>
-             </div>
-           </div>
-        </div>
-      )}
     </div>
   );
 }
