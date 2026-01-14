@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { 
   Camera, Video, Ban, ChevronRight, Rocket, Mail, 
   BookOpen, Trash2, Image as ImageIcon, CheckSquare, 
-  Upload, Loader2, MapPin, FileText, Users, Calendar, Eye
+  Upload, Loader2, MapPin, FileText, Users, Calendar, Eye, Timer
 } from 'lucide-react';
 import { doc, updateDoc, deleteDoc, serverTimestamp } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
@@ -24,17 +24,30 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, user }
   const isManager = user?.email && project.managerEmail && user.email.toLowerCase() === project.managerEmail.toLowerCase();
   const canEdit = isSuperAdmin || isManager;
 
-  // --- LOGIQUE ETAT COULEURS ---
+  // --- LOGIQUE FAST TRACK & COMPTE A REBOURS ---
   const now = Date.now();
   const wedDate = new Date(project.weddingDate).getTime();
   const isFinished = (project.statusPhoto === 'delivered' || project.statusPhoto === 'none') && (project.statusVideo === 'delivered' || project.statusVideo === 'none');
-  const isUrgent = !isFinished && now > wedDate + (60 * 24 * 3600 * 1000); // 2 mois
-  const isLate = !isFinished && !isUrgent && now > wedDate + (15 * 24 * 3600 * 1000); // 15 jours
-
+  
+  // Calcul du délai Fast Track (14 jours après le mariage)
+  const fastTrackDeadline = wedDate + (14 * 24 * 60 * 60 * 1000);
+  const daysRemaining = Math.ceil((fastTrackDeadline - now) / (1000 * 60 * 60 * 24));
+  
+  // Style de base
   let borderStyle = 'border-l-4 border-l-stone-300 border-y border-r border-stone-200';
-  if (isUrgent) borderStyle = 'border-l-4 border-l-red-500 border-y border-r border-red-200 bg-red-50/30';
-  else if (isLate) borderStyle = 'border-l-4 border-l-orange-400 border-y border-r border-orange-200 bg-orange-50/30';
-  else if (isExpanded) borderStyle = 'border-l-4 border-l-stone-800 border-y border-r border-stone-300 shadow-md transform scale-[1.01]';
+  let bgStyle = 'bg-white';
+  
+  // Priorité absolue : FAST TRACK (Flashy Orange)
+  if (localData.isPriority && !isFinished) {
+      borderStyle = 'border-l-8 border-l-orange-500 border-y-2 border-r-2 border-orange-400 ring-2 ring-orange-200 shadow-xl shadow-orange-100/50';
+      bgStyle = 'bg-orange-50/40';
+  } else if (!isFinished && now > wedDate + (60 * 24 * 3600 * 1000)) { // Urgent classique > 60j
+      borderStyle = 'border-l-4 border-l-red-500 border-y border-r border-red-200';
+      bgStyle = 'bg-red-50/30';
+  } else if (!isFinished && now > wedDate + (15 * 24 * 3600 * 1000)) { // Retard classique > 15j
+      borderStyle = 'border-l-4 border-l-orange-300 border-y border-r border-orange-200';
+      bgStyle = 'bg-orange-50/20';
+  }
 
   useEffect(() => { if (!hasChanges) setLocalData(project); }, [project, hasChanges]);
 
@@ -97,7 +110,7 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, user }
   };
 
   return (
-    <div className={`bg-white rounded-lg transition-all duration-200 ${borderStyle}`}>
+    <div className={`rounded-lg transition-all duration-200 mb-4 ${borderStyle} ${bgStyle}`}>
         {/* ENTÊTE LIGNE (LISTE) */}
         <div className="p-4 flex items-center justify-between cursor-pointer" onClick={() => setIsExpanded(!isExpanded)}>
             <div className="flex items-center gap-6 flex-1">
@@ -108,7 +121,13 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, user }
                 <div className="min-w-[200px]">
                     <div className="flex items-center gap-2">
                         <span className="font-bold text-stone-800 text-lg">{project.clientNames}</span>
-                        {localData.isPriority && <Rocket className="w-4 h-4 text-amber-500 animate-pulse"/>}
+                        {/* INDICATEUR FAST TRACK J-X */}
+                        {localData.isPriority && !isFinished && (
+                             <div className="flex items-center gap-1 bg-orange-500 text-white px-2 py-0.5 rounded-md text-xs font-black animate-pulse shadow-sm">
+                                <Rocket className="w-3 h-3"/> 
+                                {daysRemaining >= 0 ? `J-${daysRemaining}` : `RETARD J+${Math.abs(daysRemaining)}`}
+                             </div>
+                        )}
                     </div>
                     <p className="text-xs text-stone-500 flex items-center gap-2">
                         <span className="bg-stone-100 text-stone-600 px-1.5 py-0.5 rounded font-mono font-bold">CODE: {project.code}</span>
@@ -134,7 +153,7 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, user }
                 {/* BARRE D'ACTION HAUTE */}
                 <div className="flex flex-col md:flex-row justify-between items-center gap-4 bg-white p-4 rounded-xl border border-stone-100 shadow-sm">
                     <div className="flex items-center gap-4 w-full md:w-auto">
-                        <button onClick={() => updateField('isPriority', !localData.isPriority)} className={`flex-1 md:flex-none flex items-center justify-center gap-2 px-6 py-3 rounded-xl font-bold transition-all ${localData.isPriority ? 'bg-amber-500 text-white shadow-lg shadow-amber-200 transform scale-105' : 'bg-stone-100 text-stone-400 hover:bg-stone-200'}`}>
+                        <button onClick={() => updateField('isPriority', !localData.isPriority)} className={`flex-1 md:flex-none flex items-center justify-center gap-2 px-6 py-3 rounded-xl font-bold transition-all ${localData.isPriority ? 'bg-orange-500 text-white shadow-lg shadow-orange-200 transform scale-105' : 'bg-stone-100 text-stone-400 hover:bg-stone-200'}`}>
                             <Rocket className="w-5 h-5"/> {localData.isPriority ? 'FAST TRACK ACTIF' : 'Activer Fast Track'}
                         </button>
                     </div>

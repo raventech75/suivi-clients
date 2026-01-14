@@ -60,6 +60,9 @@ export default function ClientPortal({ projects, onBack }: { projects: Project[]
     const isBlocked = ((foundProject.totalPrice || 0) - (foundProject.depositAmount || 0)) > 0 && (foundProject.totalPrice || 0) > 0;
     const defaultImage = 'https://images.unsplash.com/photo-1519741497674-611481863552?auto=format&fit=crop&q=80';
     
+    // NOUVELLE CONDITION DE SÉCURITÉ GALERIE
+    const canViewGallery = foundProject.statusPhoto === 'delivered' && !isBlocked && foundProject.linkPhoto && foundProject.linkPhoto.length > 5;
+    
     return (
       <div className="min-h-screen bg-stone-50 pb-20">
         <div className="bg-stone-900 text-white p-10 text-center relative h-[40vh] flex flex-col justify-center items-center overflow-hidden">
@@ -108,7 +111,13 @@ export default function ClientPortal({ projects, onBack }: { projects: Project[]
                       <p className="text-right text-xs mt-1 text-stone-400">{PHOTO_STEPS[foundProject.statusPhoto].label}</p>
                   </div>
                   {foundProject.estimatedDeliveryPhoto && <div className="mb-4 bg-amber-50 text-amber-800 text-xs p-3 rounded-lg flex items-center gap-2"><Calendar className="w-4 h-4"/> Livraison estimée : <strong>{new Date(foundProject.estimatedDeliveryPhoto).toLocaleDateString()}</strong></div>}
-                  {foundProject.statusPhoto === 'delivered' && !isBlocked && <a href={foundProject.linkPhoto} target="_blank" className="block w-full bg-stone-900 text-white text-center py-3 rounded-xl font-bold hover:bg-stone-800 transition shadow-lg transform active:scale-95">Voir la Galerie</a>}
+                  
+                  {/* BOUTON SÉCURISÉ */}
+                  {canViewGallery ? (
+                      <a href={foundProject.linkPhoto} target="_blank" className="block w-full bg-stone-900 text-white text-center py-3 rounded-xl font-bold hover:bg-stone-800 transition shadow-lg transform active:scale-95">Voir la Galerie</a>
+                  ) : foundProject.statusPhoto === 'delivered' ? (
+                      <button disabled className="block w-full bg-stone-200 text-stone-400 text-center py-3 rounded-xl font-bold cursor-not-allowed">Lien en cours de génération...</button>
+                  ) : null}
               </div>
               )}
 
@@ -121,7 +130,11 @@ export default function ClientPortal({ projects, onBack }: { projects: Project[]
                       <p className="text-right text-xs mt-1 text-stone-400">{VIDEO_STEPS[foundProject.statusVideo].label}</p>
                   </div>
                   {foundProject.estimatedDeliveryVideo && <div className="mb-4 bg-blue-50 text-blue-800 text-xs p-3 rounded-lg flex items-center gap-2"><Calendar className="w-4 h-4"/> Livraison estimée : <strong>{new Date(foundProject.estimatedDeliveryVideo).toLocaleDateString()}</strong></div>}
-                  {foundProject.statusVideo === 'delivered' && !isBlocked && <a href={foundProject.linkVideo} target="_blank" className="block w-full bg-stone-900 text-white text-center py-3 rounded-xl font-bold hover:bg-stone-800 transition shadow-lg transform active:scale-95">Télécharger le Film</a>}
+                  {foundProject.statusVideo === 'delivered' && !isBlocked && foundProject.linkVideo ? (
+                      <a href={foundProject.linkVideo} target="_blank" className="block w-full bg-stone-900 text-white text-center py-3 rounded-xl font-bold hover:bg-stone-800 transition shadow-lg transform active:scale-95">Télécharger le Film</a>
+                  ) : foundProject.statusVideo === 'delivered' ? (
+                       <button disabled className="block w-full bg-stone-200 text-stone-400 text-center py-3 rounded-xl font-bold cursor-not-allowed">Lien en cours de génération...</button>
+                  ) : null}
                 </div>
               )}
           </div>
@@ -146,9 +159,13 @@ export default function ClientPortal({ projects, onBack }: { projects: Project[]
 
           {foundProject.statusVideo !== 'none' && (
              <div className="bg-purple-50 p-6 rounded-2xl border border-purple-100 shadow-md">
-                <h3 className="font-bold text-purple-900 flex items-center gap-2 mb-4"><Music/> Musique & Montage</h3>
-                <textarea className="w-full p-4 rounded-xl border border-purple-200 mb-3 focus:ring-2 ring-purple-500 outline-none" rows={3} placeholder="Collez vos liens Youtube / Spotify ici..." value={musicLinks} onChange={e => setMusicLinks(e.target.value)}/>
-                <input className="w-full p-4 rounded-xl border border-purple-200 mb-4 focus:ring-2 ring-purple-500 outline-none" placeholder="Instructions particulières..." value={musicInstructions} onChange={e => setMusicInstructions(e.target.value)}/>
+                <h3 className="font-bold text-purple-900 flex items-center gap-2 mb-4"><Music/> Brief Montage & Musique</h3>
+                <p className="text-sm text-purple-700 mb-3 font-medium">Ajoutez ici vos titres de chansons préférés ou vos demandes spécifiques de modification <span className="underline">avant le début du montage</span>.</p>
+                
+                <textarea className="w-full p-4 rounded-xl border border-purple-200 mb-3 focus:ring-2 ring-purple-500 outline-none min-h-[100px]" rows={3} placeholder="Ex: Musique d'ouverture : Perfect - Ed Sheeran. Merci de couper la scène du discours de l'oncle..." value={musicInstructions} onChange={e => setMusicInstructions(e.target.value)}/>
+                
+                <input className="w-full p-4 rounded-xl border border-purple-200 mb-4 focus:ring-2 ring-purple-500 outline-none" placeholder="Lien Spotify / Youtube playlist..." value={musicLinks} onChange={e => setMusicLinks(e.target.value)}/>
+                
                 <button onClick={handleSaveMusic} disabled={savingMusic} className="bg-purple-600 hover:bg-purple-700 text-white px-6 py-3 rounded-xl font-bold transition shadow-lg disabled:opacity-50">Enregistrer mes choix</button>
              </div>
           )}
@@ -156,7 +173,9 @@ export default function ClientPortal({ projects, onBack }: { projects: Project[]
           
           {!foundProject.isPriority && (
               <div className="bg-stone-900 text-white p-8 rounded-3xl flex flex-col md:flex-row justify-between items-center gap-6 shadow-xl">
-                  <div><h4 className="font-bold text-2xl flex items-center gap-2 text-amber-400"><Rocket/> Option Fast Track</h4><p className="text-stone-400">Passez en priorité et recevez vos images en 1 semaine.</p></div>
+                  <div><h4 className="font-bold text-2xl flex items-center gap-2 text-amber-400"><Rocket/> Option Fast Track</h4>
+                  <p className="text-stone-400">Passez en priorité et recevez vos images en 14 jours.</p>
+                  </div>
                   <a href={STRIPE_PRIORITY_LINK} className="bg-amber-500 text-stone-900 px-8 py-4 rounded-full font-black hover:scale-105 transition-transform shadow-lg shadow-amber-500/20">Activer (290 €)</a>
               </div>
           )}
@@ -168,7 +187,6 @@ export default function ClientPortal({ projects, onBack }: { projects: Project[]
   // --- ECRAN DE CONNEXION (LOGIN) ---
   return (
     <div className="h-screen flex items-center justify-center bg-stone-100 p-4 relative">
-       {/* BOUTON RETOUR AJOUTÉ ICI 👇 */}
        <button onClick={onBack} className="absolute top-6 left-6 p-3 bg-white rounded-full shadow-md text-stone-500 hover:text-stone-900 hover:scale-105 transition-all z-20">
           <X className="w-6 h-6"/>
        </button>

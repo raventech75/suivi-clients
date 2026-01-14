@@ -1,8 +1,8 @@
 'use client';
 import React, { useState, useEffect } from 'react';
-import { Camera, Search, Lock, HardDrive, Clock, Rocket, ShieldCheck, LogOut, CheckCircle, History, Loader2 } from 'lucide-react';
+import { Camera, Search, Lock, HardDrive, Clock, Rocket, ShieldCheck, LogOut, CheckCircle, History, Loader2, AlertCircle } from 'lucide-react';
 import { signInAnonymously, onAuthStateChanged, signOut } from 'firebase/auth';
-import { collection, doc, getDoc, setDoc, addDoc, serverTimestamp, query, onSnapshot } from 'firebase/firestore';
+import { collection, doc, getDoc, setDoc, addDoc, serverTimestamp, query, onSnapshot, getDocs, where } from 'firebase/firestore';
 import { auth, db, appId } from '../lib/firebase';
 import { DEFAULT_STAFF, COLLECTION_NAME, LEADS_COLLECTION, SETTINGS_COLLECTION, STRIPE_ARCHIVE_LINK, Project } from '../lib/config';
 import AdminDashboard from '../components/AdminDashboard';
@@ -29,7 +29,15 @@ export default function WeddingTracker() {
     const q = query(collection(db, colPath));
     const unsubscribeData = onSnapshot(q, (snapshot) => {
       const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as Project[];
-      setProjects(data.sort((a, b) => new Date(b.weddingDate).getTime() - new Date(a.weddingDate).getTime()));
+      
+      // 👇 NOUVEAU TRI : Fast Track en premier, puis date la plus récente
+      const sortedData = data.sort((a, b) => {
+        if (a.isPriority && !b.isPriority) return -1; // a passe devant
+        if (!a.isPriority && b.isPriority) return 1;  // b passe devant
+        return new Date(b.weddingDate).getTime() - new Date(a.weddingDate).getTime(); // Sinon tri par date
+      });
+
+      setProjects(sortedData);
       setLoading(false);
     });
 
