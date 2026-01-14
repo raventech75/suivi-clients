@@ -49,12 +49,13 @@ export interface Project {
   clientEmail2?: string;
   clientPhone?: string;
   clientPhone2?: string;
-  clientAddress?: string; // NOUVEAU
-  clientCity?: string;    // NOUVEAU
-  adminNotes?: string;    // NOUVEAU (Notes internes)
+  clientAddress?: string;
+  clientCity?: string;
+  adminNotes?: string;
+  weddingVenue?: string; // NOUVEAU
 
   weddingDate: string;
-  code: string;
+  code: string; // LE FAMEUX CODE
   
   statusPhoto: 'waiting' | 'culling' | 'editing' | 'exporting' | 'delivered' | 'none';
   statusVideo: 'waiting' | 'cutting' | 'grading' | 'mixing' | 'delivered' | 'none';

@@ -2,8 +2,8 @@
 import React, { useState, useEffect } from 'react';
 import { 
   ChevronRight, Search, AlertTriangle, ImageIcon, Film, Calendar, 
-  Music, Rocket, Star, CheckCircle, CheckSquare, BookOpen, 
-  Copy, ClipboardCheck, ExternalLink
+  Music, Rocket, CheckCircle, CheckSquare, BookOpen, 
+  Copy, ClipboardCheck, X
 } from 'lucide-react';
 import { doc, updateDoc, serverTimestamp } from 'firebase/firestore';
 import { db, appId } from '../lib/firebase';
@@ -32,7 +32,7 @@ export default function ClientPortal({ projects, onBack }: { projects: Project[]
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
     const p = projects.find(p => p.code === searchCode.trim().toUpperCase());
-    if (p) { setFoundProject(p); setError(''); } else setError('Code invalide');
+    if (p) { setFoundProject(p); setError(''); } else setError('Code introuvable. Vérifiez les majuscules.');
   };
 
   const handleSaveMusic = async () => {
@@ -40,11 +40,12 @@ export default function ClientPortal({ projects, onBack }: { projects: Project[]
       setSavingMusic(true);
       const colPath = typeof appId !== 'undefined' ? `artifacts/${appId}/public/data/${COLLECTION_NAME}` : COLLECTION_NAME;
       await updateDoc(doc(db, colPath, foundProject.id), { musicLinks, musicInstructions, lastUpdated: serverTimestamp() });
-      alert("Enregistré !"); setSavingMusic(false);
+      alert("Vos choix musicaux ont été enregistrés !");
+      setSavingMusic(false);
   };
 
   const confirmDelivery = async () => {
-      if(!foundProject || !confirm("Confirmer la bonne réception de tous les fichiers ?")) return;
+      if(!foundProject || !confirm("Confirmez-vous avoir bien récupéré tous vos fichiers ?")) return;
       const colPath = typeof appId !== 'undefined' ? `artifacts/${appId}/public/data/${COLLECTION_NAME}` : COLLECTION_NAME;
       await updateDoc(doc(db, colPath, foundProject.id), { deliveryConfirmed: true, deliveryConfirmationDate: serverTimestamp() });
   };
@@ -54,6 +55,7 @@ export default function ClientPortal({ projects, onBack }: { projects: Project[]
     setEmailCopied(true); setTimeout(() => setEmailCopied(false), 2000);
   };
 
+  // --- ECRAN PROJET (Connecté) ---
   if (foundProject) {
     const isBlocked = ((foundProject.totalPrice || 0) - (foundProject.depositAmount || 0)) > 0 && (foundProject.totalPrice || 0) > 0;
     const defaultImage = 'https://images.unsplash.com/photo-1519741497674-611481863552?auto=format&fit=crop&q=80';
@@ -62,19 +64,19 @@ export default function ClientPortal({ projects, onBack }: { projects: Project[]
       <div className="min-h-screen bg-stone-50 pb-20">
         <div className="bg-stone-900 text-white p-10 text-center relative h-[40vh] flex flex-col justify-center items-center overflow-hidden">
              <img src={foundProject.coverImage || defaultImage} className="absolute inset-0 w-full h-full object-cover opacity-40" />
-             <button onClick={onBack} className="absolute top-6 left-6 text-white/70 hover:text-white flex gap-2 items-center z-10"><ChevronRight className="rotate-180 w-4 h-4"/> Retour</button>
+             <button onClick={onBack} className="absolute top-6 left-6 text-white/70 hover:text-white flex gap-2 items-center z-10 transition-colors"><ChevronRight className="rotate-180 w-4 h-4"/> Retour Accueil</button>
              <h2 className="text-4xl font-serif mb-2 relative z-10">{foundProject.clientNames}</h2>
-             <span className="bg-white/20 px-4 py-1 rounded-full text-sm relative z-10 backdrop-blur-md">{new Date(foundProject.weddingDate).toLocaleDateString()}</span>
+             <span className="bg-white/20 px-4 py-1 rounded-full text-sm relative z-10 backdrop-blur-md">{new Date(foundProject.weddingDate).toLocaleDateString()} • {foundProject.clientCity || 'Mariage'}</span>
         </div>
         
         <div className="max-w-4xl mx-auto px-4 -mt-16 space-y-8 relative z-10">
           
-          {/* CONFIRMATION DE LIVRAISON */}
+          {/* CONFIRMATION LIVRAISON */}
           {(foundProject.statusPhoto === 'delivered' || foundProject.statusVideo === 'delivered') && !foundProject.deliveryConfirmed && !isBlocked && (
               <div className="bg-green-50 border border-green-200 rounded-2xl p-6 flex flex-col md:flex-row items-center justify-between gap-4 shadow-lg animate-fade-in">
                   <div>
                       <h3 className="font-bold text-green-900 text-lg flex items-center gap-2"><CheckCircle className="w-5 h-5"/> Confirmation de réception</h3>
-                      <p className="text-green-800 text-sm">Avez-vous bien téléchargé et vérifié vos fichiers ?</p>
+                      <p className="text-green-800 text-sm">Avez-vous bien téléchargé et sauvegardé vos fichiers ?</p>
                   </div>
                   <button onClick={confirmDelivery} className="bg-green-600 hover:bg-green-700 text-white px-6 py-3 rounded-xl font-bold transition-colors shadow-md flex items-center gap-2">
                       <CheckSquare className="w-5 h-5"/> Je confirme la bonne réception
@@ -106,8 +108,8 @@ export default function ClientPortal({ projects, onBack }: { projects: Project[]
                       <p className="text-right text-xs mt-1 text-stone-400">{PHOTO_STEPS[foundProject.statusPhoto].label}</p>
                   </div>
                   {foundProject.estimatedDeliveryPhoto && <div className="mb-4 bg-amber-50 text-amber-800 text-xs p-3 rounded-lg flex items-center gap-2"><Calendar className="w-4 h-4"/> Livraison estimée : <strong>{new Date(foundProject.estimatedDeliveryPhoto).toLocaleDateString()}</strong></div>}
-                  {foundProject.statusPhoto === 'delivered' && !isBlocked && <a href={foundProject.linkPhoto} target="_blank" className="block w-full bg-stone-900 text-white text-center py-3 rounded-xl font-bold hover:bg-stone-800 transition">Voir la Galerie</a>}
-                </div>
+                  {foundProject.statusPhoto === 'delivered' && !isBlocked && <a href={foundProject.linkPhoto} target="_blank" className="block w-full bg-stone-900 text-white text-center py-3 rounded-xl font-bold hover:bg-stone-800 transition shadow-lg transform active:scale-95">Voir la Galerie</a>}
+              </div>
               )}
 
               {foundProject.statusVideo !== 'none' && (
@@ -119,7 +121,7 @@ export default function ClientPortal({ projects, onBack }: { projects: Project[]
                       <p className="text-right text-xs mt-1 text-stone-400">{VIDEO_STEPS[foundProject.statusVideo].label}</p>
                   </div>
                   {foundProject.estimatedDeliveryVideo && <div className="mb-4 bg-blue-50 text-blue-800 text-xs p-3 rounded-lg flex items-center gap-2"><Calendar className="w-4 h-4"/> Livraison estimée : <strong>{new Date(foundProject.estimatedDeliveryVideo).toLocaleDateString()}</strong></div>}
-                  {foundProject.statusVideo === 'delivered' && !isBlocked && <a href={foundProject.linkVideo} target="_blank" className="block w-full bg-stone-900 text-white text-center py-3 rounded-xl font-bold hover:bg-stone-800 transition">Télécharger le Film</a>}
+                  {foundProject.statusVideo === 'delivered' && !isBlocked && <a href={foundProject.linkVideo} target="_blank" className="block w-full bg-stone-900 text-white text-center py-3 rounded-xl font-bold hover:bg-stone-800 transition shadow-lg transform active:scale-95">Télécharger le Film</a>}
                 </div>
               )}
           </div>
@@ -163,16 +165,23 @@ export default function ClientPortal({ projects, onBack }: { projects: Project[]
     );
   }
 
+  // --- ECRAN DE CONNEXION (LOGIN) ---
   return (
-    <div className="h-screen flex items-center justify-center bg-stone-100 p-4">
-       <div className="bg-white p-10 rounded-[2rem] shadow-2xl w-full max-w-md text-center">
+    <div className="h-screen flex items-center justify-center bg-stone-100 p-4 relative">
+       {/* BOUTON RETOUR AJOUTÉ ICI 👇 */}
+       <button onClick={onBack} className="absolute top-6 left-6 p-3 bg-white rounded-full shadow-md text-stone-500 hover:text-stone-900 hover:scale-105 transition-all z-20">
+          <X className="w-6 h-6"/>
+       </button>
+
+       <div className="bg-white p-10 rounded-[2rem] shadow-2xl w-full max-w-md text-center relative z-10">
           <div className="w-16 h-16 bg-stone-100 rounded-full flex items-center justify-center mx-auto mb-6"><Search className="w-6 h-6 text-stone-400"/></div>
-          <h2 className="text-3xl font-serif mb-8 text-stone-800">Accès Mariés</h2>
+          <h2 className="text-3xl font-serif mb-2 text-stone-800">Accès Mariés</h2>
+          <p className="text-stone-500 mb-8 text-sm">Entrez votre code personnel pour accéder à votre espace.</p>
           <form onSubmit={handleSearch} className="space-y-4">
-             <input className="w-full p-5 border-2 rounded-2xl text-center text-xl uppercase tracking-widest font-bold focus:border-stone-900 outline-none transition-colors" placeholder="VOTRE CODE" value={searchCode} onChange={e => setSearchCode(e.target.value)}/>
+             <input className="w-full p-5 border-2 rounded-2xl text-center text-xl uppercase tracking-widest font-bold focus:border-stone-900 outline-none transition-colors" placeholder="EX: JULIE-884" value={searchCode} onChange={e => setSearchCode(e.target.value)}/>
              <button className="w-full bg-stone-900 text-white py-5 rounded-2xl font-bold text-lg hover:bg-black transition-transform active:scale-95 shadow-xl">Voir l'avancement</button>
           </form>
-          {error && <p className="text-red-500 mt-6 font-bold bg-red-50 p-3 rounded-xl">{error}</p>}
+          {error && <div className="mt-6 font-bold bg-red-50 text-red-500 p-4 rounded-xl flex items-center justify-center gap-2 animate-pulse"><AlertTriangle className="w-5 h-5"/> {error}</div>}
        </div>
     </div>
   );

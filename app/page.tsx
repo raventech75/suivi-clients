@@ -54,7 +54,6 @@ export default function WeddingTracker() {
   );
 }
 
-// --- Vue Accueil ---
 function LandingView({ setView }: { setView: (v: any) => void }) {
   return (
     <div className="min-h-screen bg-white text-stone-900 font-sans selection:bg-amber-100 selection:text-amber-900">
@@ -106,7 +105,7 @@ function LandingView({ setView }: { setView: (v: any) => void }) {
   );
 }
 
-// --- Vue Archive ---
+// --- Vue Archive (MODE FORMULAIRE) ---
 function ArchiveView({ onBack }: { onBack: () => void }) {
   const [step, setStep] = useState(1);
   const [date, setDate] = useState('');
@@ -119,11 +118,18 @@ function ArchiveView({ onBack }: { onBack: () => void }) {
 
   const handleCaptureLead = async (e: React.FormEvent) => {
     e.preventDefault(); setLoading(true);
+    // On enregistre juste la demande
     const colPath = typeof appId !== 'undefined' ? `artifacts/${appId}/public/data/${LEADS_COLLECTION}` : LEADS_COLLECTION;
-    await addDoc(collection(db, colPath), { name: leadName, email: leadEmail, phone: leadPhone, weddingDate: date, createdAt: serverTimestamp(), source: 'archive_check' });
+    await addDoc(collection(db, colPath), { 
+        name: leadName, 
+        email: leadEmail, 
+        phone: leadPhone, 
+        weddingDate: date, 
+        createdAt: serverTimestamp(), 
+        source: 'archive_request' 
+    });
     setLoading(false);
-    const year = new Date(date).getFullYear();
-    if (year < 2022) { setStep(3); } else { setStep(2); }
+    setStep(2); // On va direct au message de succès "On vérifie"
   };
 
   return (
@@ -134,31 +140,29 @@ function ArchiveView({ onBack }: { onBack: () => void }) {
               <form onSubmit={handleCheck} className="space-y-6">
                 <div className="text-center"><h2 className="text-2xl font-bold">Archives</h2><p>Vérifiez la disponibilité de vos fichiers.</p></div>
                 <input required type="date" value={date} onChange={(e) => setDate(e.target.value)} className="w-full p-4 border rounded-xl" />
-                <button type="submit" className="w-full bg-stone-900 text-white py-4 rounded-xl font-bold">Vérifier</button>
+                <button type="submit" className="w-full bg-stone-900 text-white py-4 rounded-xl font-bold">Continuer</button>
               </form>
             )}
             {step === 1.5 && (
                <form onSubmit={handleCaptureLead} className="space-y-4">
-                  <div className="text-center mb-6"><h3 className="font-bold">Coordonnées</h3><p className="text-sm">Pour voir le résultat.</p></div>
+                  <div className="text-center mb-6"><h3 className="font-bold">Vos Coordonnées</h3><p className="text-sm">Nous vérifierons manuellement sur nos serveurs.</p></div>
                   <input required placeholder="Nom" value={leadName} onChange={(e) => setLeadName(e.target.value)} className="w-full p-3 border rounded-lg" />
                   <input required placeholder="Email" value={leadEmail} onChange={(e) => setLeadEmail(e.target.value)} className="w-full p-3 border rounded-lg" />
                   <input required placeholder="Téléphone" value={leadPhone} onChange={(e) => setLeadPhone(e.target.value)} className="w-full p-3 border rounded-lg" />
-                  <button disabled={loading} type="submit" className="w-full bg-stone-900 text-white py-4 rounded-xl font-bold">{loading ? <Loader2 className="w-5 h-5 animate-spin"/> : 'Voir Résultat'}</button>
+                  <button disabled={loading} type="submit" className="w-full bg-stone-900 text-white py-4 rounded-xl font-bold">{loading ? <Loader2 className="w-5 h-5 animate-spin"/> : 'Lancer la recherche'}</button>
                </form>
             )}
             {step === 2 && (
               <div className="text-center space-y-6">
-                <CheckCircle className="w-16 h-16 text-green-500 mx-auto"/>
-                <h3 className="text-2xl font-bold">Fichiers trouvés !</h3>
-                <a href={STRIPE_ARCHIVE_LINK} target="_blank" className="block w-full bg-green-600 text-white py-4 rounded-xl font-bold">Sécuriser (199 €)</a>
+                <div className="w-16 h-16 bg-blue-50 text-blue-600 rounded-full flex items-center justify-center mx-auto"><History className="w-8 h-8"/></div>
+                <h3 className="text-xl font-bold">Demande reçue</h3>
+                <p className="text-stone-500">Nous allons vérifier la disponibilité de vos archives sur nos serveurs sécurisés (NAS).</p>
+                <div className="bg-stone-50 p-4 rounded-xl text-sm font-medium">
+                    Vous recevrez une réponse par email sous 24h à l'adresse : <br/>
+                    <span className="text-blue-600">{leadEmail}</span>
+                </div>
+                <button onClick={onBack} className="block w-full border py-3 rounded-xl font-bold hover:bg-stone-50">Retour à l'accueil</button>
               </div>
-            )}
-            {step === 3 && (
-               <div className="text-center space-y-6">
-                 <History className="w-16 h-16 text-red-500 mx-auto"/>
-                 <h3 className="text-xl font-bold">Archives Purgées</h3>
-                 <p className="text-sm">Désolé, les fichiers sont introuvables.</p>
-               </div>
             )}
        </div>
     </div>
