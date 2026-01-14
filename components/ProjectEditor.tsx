@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { 
   Camera, Video, Ban, ChevronRight, Rocket, Mail, 
   BookOpen, Trash2, Image as ImageIcon, CheckSquare, 
-  Upload, Loader2, MapPin, FileText 
+  Upload, Loader2, MapPin, FileText, Users // 👈 J'ai ajouté "Users" ici
 } from 'lucide-react';
 import { doc, updateDoc, deleteDoc, serverTimestamp } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
