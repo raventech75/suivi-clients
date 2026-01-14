@@ -638,6 +638,26 @@ function AdminDashboard({ projects, user, onLogout, staffList, setStaffList }: {
 
   const isSuperAdmin = SUPER_ADMINS.includes(user?.email);
 
+  // --- AJOUT DE LA LOGIQUE DES COMPTEURS ICI ---
+  const counts = {
+    all: projects.length,
+    active: projects.filter(p => 
+      (p.statusPhoto !== 'delivered' && p.statusPhoto !== 'none') || 
+      (p.statusVideo !== 'delivered' && p.statusVideo !== 'none')
+    ).length,
+    late: projects.filter(p => {
+      // On définit le retard à partir de 60 jours après le mariage
+      const limitDate = new Date(p.weddingDate).getTime() + (60 * 24 * 60 * 60 * 1000); 
+      const isFinished = (p.statusPhoto === 'delivered' || p.statusPhoto === 'none') && 
+                         (p.statusVideo === 'delivered' || p.statusVideo === 'none');
+      return Date.now() > limitDate && !isFinished;
+    }).length
+  };
+  // ----------------------------------------------
+
+  const handleLogin = async (e: React.FormEvent) => {
+
+
   // Fonction d'export CSV
   const exportCSV = () => {
     const headers = ["Mariés", "Email 1", "Email 2", "Téléphone 1", "Téléphone 2", "Date Mariage", "Statut Photo", "Statut Vidéo"];
@@ -805,6 +825,28 @@ function AdminDashboard({ projects, user, onLogout, staffList, setStaffList }: {
                           {staffList.map(s => <option key={s} value={s}>{s}</option>)}
                       </select>
                   )}
+                  <div className="flex gap-2 mb-6 overflow-x-auto pb-2 scrollbar-hide">
+  <button 
+    onClick={() => setFilter('all')} 
+    className={`px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap ${filter === 'all' ? 'bg-stone-800 text-white' : 'bg-white text-stone-600'}`}
+  >
+    Tous ({counts.all})
+  </button>
+  
+  <button 
+    onClick={() => setFilter('active')} 
+    className={`px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap ${filter === 'active' ? 'bg-blue-600 text-white' : 'bg-white text-stone-600'}`}
+  >
+    En cours ({counts.active})
+  </button>
+  
+  <button 
+    onClick={() => setFilter('late')} 
+    className={`px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap ${filter === 'late' ? 'bg-red-500 text-white' : 'bg-white text-stone-600'}`}
+  >
+    En retard ({counts.late})
+  </button>
+</div>
                 </div>
                 <div className="p-3 bg-stone-50 rounded-lg border border-stone-100">
                   <label className="flex items-center gap-2 mb-2 font-medium text-sm"><input type="checkbox" checked={newProject.hasVideo} onChange={e => setNewProject({...newProject, hasVideo: e.target.checked})} className="w-5 h-5 accent-sky-600" /> Vidéo</label>
