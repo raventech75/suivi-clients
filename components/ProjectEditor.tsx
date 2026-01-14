@@ -3,14 +3,14 @@ import React, { useState, useEffect } from 'react';
 import { 
   Camera, Video, Ban, ChevronRight, Rocket, Mail, 
   BookOpen, Trash2, Image as ImageIcon, CheckSquare, 
-  Upload, Loader2, MapPin, FileText, Users, Calendar, Eye, Timer, Music, Briefcase // 👈 Ajout de Briefcase
+  Upload, Loader2, MapPin, FileText, Users, Calendar, Eye, Timer, Music, Briefcase, History, PenTool
 } from 'lucide-react';
 import { doc, updateDoc, deleteDoc, serverTimestamp } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { db, storage, appId } from '../lib/firebase';
 import { 
   COLLECTION_NAME, MAKE_WEBHOOK_URL, PHOTO_STEPS, 
-  VIDEO_STEPS, ALBUM_FORMATS, ALBUM_STATUSES, Project 
+  VIDEO_STEPS, ALBUM_FORMATS, ALBUM_STATUSES, Project, HistoryLog 
 } from '../lib/config';
 import ChatBox from './ChatSystem';
 
@@ -20,6 +20,12 @@ const formatDateFR = (dateString: string) => {
     return new Date(dateString).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric' });
 };
 
+// UTILITAIRE POUR LA DATE ET L'HEURE DU LOG
+const formatDateTimeFR = (dateString: string) => {
+    if (!dateString) return "";
+    return new Date(dateString).toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute:'2-digit' });
+};
+
 export default function ProjectEditor({ project, isSuperAdmin, staffList, user }: { project: Project, isSuperAdmin: boolean, staffList: string[], user: any }) {
   const [isExpanded, setIsExpanded] = useState(false);
   const [localData, setLocalData] = useState(project);
@@ -27,8 +33,9 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, user }
   const [newAlbum, setNewAlbum] = useState({ name: 'Album', format: '30x30', price: 0 });
   const [uploading, setUploading] = useState(false);
 
-  const isManager = user?.email && project.managerEmail && user.email.toLowerCase() === project.managerEmail.toLowerCase();
-  const canEdit = isSuperAdmin || isManager;
+  // 🟢 PERMISSION : TOUT LE MONDE CONNECTÉ A LE DROIT D'ÉCRIRE MAINTENANT
+  // (On garde isManager/isSuperAdmin juste pour des actions destructrices si besoin, mais l'édition est ouverte)
+  const canEdit = !!user; 
 
   // --- LOGIQUE FAST TRACK ---
   const now = Date.now();
@@ -96,10 +103,67 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, user }
     } catch (error: any) { alert(`Erreur: ${error.message}`); } finally { setUploading(false); }
   };
 
+  // --- LOGIQUE DE DÉTECTION DES CHANGEMENTS (AUDIT LOG) ---
+  const detectChanges = (): string[] => {
+      const changes: string[] = [];
+      const labels: Record<string, string> = {
+          clientNames: 'Noms Mariés', clientEmail: 'Email 1', clientPhone: 'Tel 1',
+          clientEmail2: 'Email 2', clientPhone2: 'Tel 2', weddingDate: 'Date Mariage',
+          weddingVenue: 'Lieu', clientAddress: 'Adresse', clientCity: 'Ville',
+          adminNotes: 'Notes Admin', statusPhoto: 'Statut Photo', statusVideo: 'Statut Vidéo',
+          photographerName: 'Photographe', videographerName: 'Vidéaste', managerName: 'Responsable',
+          isPriority: 'Fast Track'
+      };
+
+      // Comparaison champs simples
+      Object.keys(labels).forEach(key => {
+          // @ts-ignore
+          const oldVal = project[key];
+          // @ts-ignore
+          const newVal = localData[key];
+
+          if (oldVal != newVal) {
+              // Cas speciaux pour affichage propre
+              let displayOld = oldVal;
+              let displayNew = newVal;
+
+              if (key === 'statusPhoto') { displayOld = PHOTO_STEPS[oldVal]?.label; displayNew = PHOTO_STEPS[newVal]?.label; }
+              if (key === 'statusVideo') { displayOld = VIDEO_STEPS[oldVal]?.label; displayNew = VIDEO_STEPS[newVal]?.label; }
+              if (key === 'isPriority') { displayOld = oldVal ? 'Oui' : 'Non'; displayNew = newVal ? 'Oui' : 'Non'; }
+
+              changes.push(`${labels[key]} : ${displayOld || 'Vide'} ➔ ${displayNew || 'Vide'}`);
+          }
+      });
+
+      return changes;
+  };
+
   const save = async () => {
+      // 1. Détection des modifs pour l'historique
+      const changesList = detectChanges();
+      let updatedHistory = [...(localData.history || [])];
+
+      if (changesList.length > 0) {
+          const newEntry: HistoryLog = {
+              date: new Date().toISOString(),
+              user: user.email ? user.email.split('@')[0] : 'Inconnu', // On prend la partie avant @ du mail
+              action: changesList.join(' | ')
+          };
+          // On ajoute en haut de la liste (le plus récent d'abord)
+          updatedHistory = [newEntry, ...updatedHistory];
+      }
+
+      // 2. Préparation des données finales
+      const finalData = { 
+          ...localData, 
+          history: updatedHistory,
+          lastUpdated: serverTimestamp() 
+      };
+
       const colPath = typeof appId !== 'undefined' ? `artifacts/${appId}/public/data/${COLLECTION_NAME}` : COLLECTION_NAME;
-      await updateDoc(doc(db, colPath, project.id), { ...localData, lastUpdated: serverTimestamp() });
+      await updateDoc(doc(db, colPath, project.id), finalData);
       
+      // 3. Webhook (si changement d'étape et email valide)
       if (localData.statusPhoto !== project.statusPhoto || localData.statusVideo !== project.statusVideo) {
           if (localData.clientEmail && localData.clientEmail.includes('@')) {
               fetch(MAKE_WEBHOOK_URL, {
@@ -113,8 +177,6 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, user }
                       url: window.location.origin 
                   })
               }).catch(console.error);
-          } else {
-              console.warn("Pas d'email client renseigné : Notification Make annulée.");
           }
       }
       setHasChanges(false); setIsExpanded(false);
@@ -234,11 +296,9 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, user }
                     {/* COLONNE DROITE : PRODUCTION */}
                     <div className="space-y-6">
                         
-                        {/* 🟢 NOUVEAU BLOC : GESTION ÉQUIPE & RESPONSABLES */}
                         <div className="bg-white p-6 rounded-xl border border-stone-200 shadow-sm">
                             <h4 className="font-bold text-stone-800 mb-4 flex items-center gap-2"><Briefcase className="w-5 h-5 text-stone-400"/> Équipe & Responsables</h4>
                             <div className="space-y-4">
-                                {/* RESPONSABLE DU DOSSIER (MANAGER) */}
                                 <div>
                                     <label className="text-[10px] uppercase font-bold text-stone-400">Responsable Dossier (Accès Admin)</label>
                                     <select disabled={!isSuperAdmin} className="w-full p-2 border rounded bg-stone-50 font-medium" value={localData.managerName || ''} onChange={e=>updateField('managerName', e.target.value)}>
@@ -246,14 +306,11 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, user }
                                         {staffList.map(s => <option key={s} value={s}>{s}</option>)}
                                     </select>
                                 </div>
-                                {/* EMAIL DU RESPONSABLE (Important pour les droits) */}
                                 <div>
                                     <label className="text-[10px] uppercase font-bold text-stone-400">Email du Responsable (Pour Connexion)</label>
                                     <input disabled={!isSuperAdmin} className="w-full p-2 border rounded bg-stone-50 text-sm" value={localData.managerEmail || ''} onChange={e=>updateField('managerEmail', e.target.value)} placeholder="email@raventech.fr" />
                                 </div>
-
                                 <div className="grid grid-cols-2 gap-4 pt-2">
-                                    {/* PHOTOGRAPHE JOUR J */}
                                     <div>
                                         <label className="text-[10px] uppercase font-bold text-stone-400">Photographe J-J</label>
                                         <select disabled={!canEdit} className="w-full p-2 border rounded bg-stone-50 text-sm" value={localData.photographerName || ''} onChange={e=>updateField('photographerName', e.target.value)}>
@@ -261,7 +318,6 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, user }
                                             {staffList.map(s => <option key={s} value={s}>{s}</option>)}
                                         </select>
                                     </div>
-                                    {/* VIDEASTE JOUR J */}
                                     <div>
                                         <label className="text-[10px] uppercase font-bold text-stone-400">Vidéaste J-J</label>
                                         <select disabled={!canEdit} className="w-full p-2 border rounded bg-stone-50 text-sm" value={localData.videographerName || ''} onChange={e=>updateField('videographerName', e.target.value)}>
@@ -275,8 +331,6 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, user }
 
                         <div className="bg-white p-6 rounded-xl border border-stone-200 shadow-sm">
                             <h4 className="font-bold text-stone-800 mb-4 flex items-center gap-2"><Camera className="w-5 h-5 text-stone-400"/> Suivi Production</h4>
-                            
-                            {/* PHOTO */}
                             <div className="mb-6 pb-6 border-b border-stone-100">
                                 <div className="flex justify-between mb-2"><span className="font-bold text-stone-600">Photo</span><span className="text-xs bg-stone-100 px-2 py-1 rounded">{localData.progressPhoto}%</span></div>
                                 <select disabled={!canEdit} className="w-full p-2 border rounded mb-2 text-sm font-medium" value={localData.statusPhoto} onChange={e=>updateField('statusPhoto', e.target.value)}>{Object.entries(PHOTO_STEPS).map(([k,v])=><option key={k} value={k}>{v.label}</option>)}</select>
@@ -285,8 +339,6 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, user }
                                     <div className="flex-1"><label className="text-[10px] font-bold text-stone-400">LIEN GALERIE</label><input disabled={!canEdit} className="w-full p-2 border rounded text-xs" placeholder="https://..." value={localData.linkPhoto || ''} onChange={e=>updateField('linkPhoto', e.target.value)}/></div>
                                 </div>
                             </div>
-
-                            {/* VIDEO */}
                             <div>
                                 <div className="flex justify-between mb-2"><span className="font-bold text-stone-600">Vidéo</span><span className="text-xs bg-stone-100 px-2 py-1 rounded">{localData.progressVideo}%</span></div>
                                 <select disabled={!canEdit} className="w-full p-2 border rounded mb-2 text-sm font-medium" value={localData.statusVideo} onChange={e=>updateField('statusVideo', e.target.value)}>{Object.entries(VIDEO_STEPS).map(([k,v])=><option key={k} value={k}>{v.label}</option>)}</select>
@@ -317,7 +369,6 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, user }
                             )}
                         </div>
 
-                        {/* BRIEF CLIENT (LECTURE SEULE) */}
                         <div className="bg-purple-50 p-6 rounded-xl border border-purple-100 shadow-sm">
                             <h4 className="font-bold text-purple-900 mb-4 flex items-center gap-2"><Music className="w-5 h-5"/> Brief Créatif (Rempli par le client)</h4>
                             <div className="space-y-4">
@@ -332,6 +383,34 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, user }
                             </div>
                         </div>
 
+                    </div>
+                </div>
+                
+                {/* 👇 NOUVEAU BLOC : HISTORIQUE DES MODIFICATIONS */}
+                <div className="mt-8 bg-stone-100 p-6 rounded-xl border border-stone-200">
+                    <h4 className="font-bold text-stone-700 mb-4 flex items-center gap-2">
+                        <History className="w-5 h-5"/> Historique des modifications
+                    </h4>
+                    <div className="space-y-3 max-h-60 overflow-y-auto pr-2">
+                        {localData.history && localData.history.length > 0 ? (
+                            localData.history.map((log, i) => (
+                                <div key={i} className="flex gap-3 text-sm items-start bg-white p-3 rounded-lg border border-stone-200 shadow-sm">
+                                    <div className="min-w-[120px] text-xs font-mono text-stone-400 pt-0.5">
+                                        {formatDateTimeFR(log.date)}
+                                    </div>
+                                    <div className="flex-1">
+                                        <div className="font-bold text-stone-800 flex items-center gap-2">
+                                            <span className="bg-stone-100 px-1.5 rounded text-xs border border-stone-200">{log.user}</span>
+                                        </div>
+                                        <div className="text-stone-600 mt-1 pl-1 border-l-2 border-stone-200 text-xs">
+                                            {log.action}
+                                        </div>
+                                    </div>
+                                </div>
+                            ))
+                        ) : (
+                            <p className="text-stone-400 italic text-sm text-center py-4">Aucune modification enregistrée pour le moment.</p>
+                        )}
                     </div>
                 </div>
 

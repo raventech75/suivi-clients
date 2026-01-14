@@ -3,7 +3,6 @@ export const SUPER_ADMINS = ["admin@raventech.fr", "irzzenproductions@gmail.com"
 export const STRIPE_ARCHIVE_LINK = "https://buy.stripe.com/3cI3cv3jq2j37x9eFy5gc0b";
 export const STRIPE_PRIORITY_LINK = "https://buy.stripe.com/VOTRE_LIEN_PRIORITE"; 
 
-// 👇 LISTE MISE À JOUR ICI 👇
 export const DEFAULT_STAFF = [
   "Feridun", "Volkan", "Ali", "Yunus", "Serife", "Emir", 
   "Celine", "Goksel", "Emirkan", "Steeven", "Taner", "Halil"
@@ -45,6 +44,13 @@ export const ALBUM_STATUSES = {
 export interface Message { id: string; author: 'client' | 'admin'; text: string; date: any; }
 export interface Remuneration { name: string; amount: number; note: string; paid?: boolean; }
 export interface AlbumOrder { id: string; name: string; format: string; price: number; status: string; stripeLink?: string; paid: boolean; }
+
+// 👇 NOUVEAU TYPE POUR L'HISTORIQUE
+export interface HistoryLog {
+    date: string; // ISO String pour facilité
+    user: string;
+    action: string;
+}
 
 export interface Project {
   id: string;
@@ -96,6 +102,9 @@ export interface Project {
   
   isPriority?: boolean; 
   fastTrackActivationDate?: any;
+  
+  history?: HistoryLog[]; // 👈 AJOUT DU CHAMP HISTORIQUE ICI
+
   createdAt: any;
   lastUpdated?: any;
 }
