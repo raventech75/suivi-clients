@@ -107,7 +107,14 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, user }
           if (localData.clientEmail && localData.clientEmail.includes('@')) {
               fetch(MAKE_WEBHOOK_URL, {
                   method: 'POST', headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ type: 'step_update', clientName: localData.clientNames, clientEmail: localData.clientEmail, stepName: localData.statusPhoto !== project.statusPhoto ? PHOTO_STEPS[localData.statusPhoto].label : VIDEO_STEPS[localData.statusVideo].label, url: window.location.origin })
+                  body: JSON.stringify({ 
+                      type: 'step_update', 
+                      clientName: localData.clientNames, 
+                      clientEmail: localData.clientEmail, 
+                      projectCode: localData.code, // 👈 C'EST ICI QUE JE L'AI RAJOUTÉ !
+                      stepName: localData.statusPhoto !== project.statusPhoto ? PHOTO_STEPS[localData.statusPhoto].label : VIDEO_STEPS[localData.statusVideo].label, 
+                      url: window.location.origin 
+                  })
               }).catch(console.error);
           } else {
               console.warn("Pas d'email client renseigné : Notification Make annulée pour éviter l'erreur.");
