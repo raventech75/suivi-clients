@@ -14,6 +14,12 @@ import {
 } from '../lib/config';
 import ChatBox from './ChatSystem';
 
+// PETIT UTILITAIRE POUR LES DATES FR
+const formatDateFR = (dateString: string) => {
+    if (!dateString) return "";
+    return new Date(dateString).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+};
+
 export default function ProjectEditor({ project, isSuperAdmin, staffList, user }: { project: Project, isSuperAdmin: boolean, staffList: string[], user: any }) {
   const [isExpanded, setIsExpanded] = useState(false);
   const [localData, setLocalData] = useState(project);
@@ -24,13 +30,15 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, user }
   const isManager = user?.email && project.managerEmail && user.email.toLowerCase() === project.managerEmail.toLowerCase();
   const canEdit = isSuperAdmin || isManager;
 
-  // --- LOGIQUE FAST TRACK & COMPTE A REBOURS ---
+  // --- LOGIQUE FAST TRACK CORRIGÉE ---
   const now = Date.now();
   const wedDate = new Date(project.weddingDate).getTime();
   const isFinished = (project.statusPhoto === 'delivered' || project.statusPhoto === 'none') && (project.statusVideo === 'delivered' || project.statusVideo === 'none');
   
-  // Calcul du délai Fast Track (14 jours après le mariage)
-  const fastTrackDeadline = wedDate + (14 * 24 * 60 * 60 * 1000);
+  // CALCUL: Si activé, on prend la date d'activation, sinon "maintenant" (pour simulation)
+  const activationTime = project.fastTrackActivationDate ? new Date(project.fastTrackActivationDate).getTime() : now;
+  // Le délai est de 14 jours APRES l'activation
+  const fastTrackDeadline = activationTime + (14 * 24 * 60 * 60 * 1000);
   const daysRemaining = Math.ceil((fastTrackDeadline - now) / (1000 * 60 * 60 * 24));
   
   // Style de base
@@ -41,10 +49,10 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, user }
   if (localData.isPriority && !isFinished) {
       borderStyle = 'border-l-8 border-l-orange-500 border-y-2 border-r-2 border-orange-400 ring-2 ring-orange-200 shadow-xl shadow-orange-100/50';
       bgStyle = 'bg-orange-50/40';
-  } else if (!isFinished && now > wedDate + (60 * 24 * 3600 * 1000)) { // Urgent classique > 60j
+  } else if (!isFinished && now > wedDate + (60 * 24 * 3600 * 1000)) { 
       borderStyle = 'border-l-4 border-l-red-500 border-y border-r border-red-200';
       bgStyle = 'bg-red-50/30';
-  } else if (!isFinished && now > wedDate + (15 * 24 * 3600 * 1000)) { // Retard classique > 15j
+  } else if (!isFinished && now > wedDate + (15 * 24 * 3600 * 1000)) { 
       borderStyle = 'border-l-4 border-l-orange-300 border-y border-r border-orange-200';
       bgStyle = 'bg-orange-50/20';
   }
@@ -60,6 +68,14 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, user }
         return newState;
     });
     setHasChanges(true); 
+  };
+
+  // FONCTION SPÉCIALE POUR ACTIVER FAST TRACK AVEC DATE
+  const toggleFastTrack = () => {
+      const isActive = !localData.isPriority;
+      // On met à jour le booléen ET la date d'activation (si on active, on met Now, si on désactive, on met null)
+      updateField('isPriority', isActive);
+      updateField('fastTrackActivationDate', isActive ? new Date().toISOString() : null);
   };
 
   const addAlbum = () => {
@@ -135,7 +151,8 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, user }
                         <MapPin className="w-3 h-3"/> {project.clientCity || 'Ville?'}
                     </p>
                 </div>
-                <div className="hidden md:block text-sm text-stone-500 font-mono bg-stone-50 px-2 py-1 rounded">{project.weddingDate}</div>
+                {/* DATE FORMATÉE EN FR ICI 👇 */}
+                <div className="hidden md:block text-sm text-stone-500 font-mono bg-stone-50 px-2 py-1 rounded">{formatDateFR(project.weddingDate)}</div>
                 <div className="hidden md:flex gap-4">
                     {project.statusPhoto !== 'none' && <span className={`text-xs px-2 py-1 rounded-full font-bold ${project.statusPhoto === 'delivered' ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'}`}>PHOTO: {PHOTO_STEPS[project.statusPhoto].label}</span>}
                     {project.statusVideo !== 'none' && <span className={`text-xs px-2 py-1 rounded-full font-bold ${project.statusVideo === 'delivered' ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'}`}>VIDEO: {VIDEO_STEPS[project.statusVideo].label}</span>}
@@ -153,7 +170,7 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, user }
                 {/* BARRE D'ACTION HAUTE */}
                 <div className="flex flex-col md:flex-row justify-between items-center gap-4 bg-white p-4 rounded-xl border border-stone-100 shadow-sm">
                     <div className="flex items-center gap-4 w-full md:w-auto">
-                        <button onClick={() => updateField('isPriority', !localData.isPriority)} className={`flex-1 md:flex-none flex items-center justify-center gap-2 px-6 py-3 rounded-xl font-bold transition-all ${localData.isPriority ? 'bg-orange-500 text-white shadow-lg shadow-orange-200 transform scale-105' : 'bg-stone-100 text-stone-400 hover:bg-stone-200'}`}>
+                        <button onClick={toggleFastTrack} className={`flex-1 md:flex-none flex items-center justify-center gap-2 px-6 py-3 rounded-xl font-bold transition-all ${localData.isPriority ? 'bg-orange-500 text-white shadow-lg shadow-orange-200 transform scale-105' : 'bg-stone-100 text-stone-400 hover:bg-stone-200'}`}>
                             <Rocket className="w-5 h-5"/> {localData.isPriority ? 'FAST TRACK ACTIF' : 'Activer Fast Track'}
                         </button>
                     </div>
@@ -176,6 +193,9 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, user }
                                     <div><label className="text-[10px] uppercase font-bold text-stone-400">Email 1</label><input disabled={!canEdit} className="w-full p-2 border rounded bg-stone-50" value={localData.clientEmail} onChange={e=>updateField('clientEmail', e.target.value)} /></div>
                                     <div><label className="text-[10px] uppercase font-bold text-stone-400">Tel 1</label><input disabled={!canEdit} className="w-full p-2 border rounded bg-stone-50" value={localData.clientPhone} onChange={e=>updateField('clientPhone', e.target.value)} /></div>
                                 </div>
+                                {/* DATE DE MARIAGE (INPUT RESTE YYYY-MM-DD POUR LE NAVIGATEUR, MAIS L'AFFICHAGE LISTE EST FR) */}
+                                <div><label className="text-[10px] uppercase font-bold text-stone-400">Date Mariage</label><input required type="date" disabled={!canEdit} className="w-full p-2 border rounded bg-stone-50" value={localData.weddingDate} onChange={e=>updateField('weddingDate', e.target.value)} /></div>
+                                
                                 <div><label className="text-[10px] uppercase font-bold text-stone-400">Salle de Mariage (Lieu)</label><input disabled={!canEdit} className="w-full p-2 border rounded bg-stone-50" placeholder="Château de..." value={localData.weddingVenue || ''} onChange={e=>updateField('weddingVenue', e.target.value)} /></div>
                                 <div className="grid grid-cols-2 gap-4">
                                     <div><label className="text-[10px] uppercase font-bold text-stone-400">Adresse Postale</label><input disabled={!canEdit} className="w-full p-2 border rounded bg-stone-50" placeholder="12 rue..." value={localData.clientAddress || ''} onChange={e=>updateField('clientAddress', e.target.value)} /></div>

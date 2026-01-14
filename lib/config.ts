@@ -90,6 +90,7 @@ export interface Project {
   financeNotes?: string;
   
   isPriority?: boolean; 
+  fastTrackActivationDate?: any;
   createdAt: any;
   lastUpdated?: any;
 }

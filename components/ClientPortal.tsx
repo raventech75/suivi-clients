@@ -13,6 +13,12 @@ import {
 } from '../lib/config';
 import ChatBox from './ChatSystem';
 
+// UTILITAIRE DATE FR
+const formatDateFR = (dateString: string) => {
+    if (!dateString) return "";
+    return new Date(dateString).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+};
+
 export default function ClientPortal({ projects, onBack }: { projects: Project[], onBack: () => void }) {
   const [searchCode, setSearchCode] = useState('');
   const [foundProject, setFoundProject] = useState<Project | null>(null);
@@ -69,7 +75,8 @@ export default function ClientPortal({ projects, onBack }: { projects: Project[]
              <img src={foundProject.coverImage || defaultImage} className="absolute inset-0 w-full h-full object-cover opacity-40" />
              <button onClick={onBack} className="absolute top-6 left-6 text-white/70 hover:text-white flex gap-2 items-center z-10 transition-colors"><ChevronRight className="rotate-180 w-4 h-4"/> Retour Accueil</button>
              <h2 className="text-4xl font-serif mb-2 relative z-10">{foundProject.clientNames}</h2>
-             <span className="bg-white/20 px-4 py-1 rounded-full text-sm relative z-10 backdrop-blur-md">{new Date(foundProject.weddingDate).toLocaleDateString()} • {foundProject.clientCity || 'Mariage'}</span>
+             {/* DATE FR ICI 👇 */}
+             <span className="bg-white/20 px-4 py-1 rounded-full text-sm relative z-10 backdrop-blur-md">{formatDateFR(foundProject.weddingDate)} • {foundProject.clientCity || 'Mariage'}</span>
         </div>
         
         <div className="max-w-4xl mx-auto px-4 -mt-16 space-y-8 relative z-10">
@@ -89,7 +96,7 @@ export default function ClientPortal({ projects, onBack }: { projects: Project[]
 
           {foundProject.deliveryConfirmed && (
               <div className="bg-stone-100 border border-stone-200 rounded-xl p-4 flex items-center justify-center gap-2 text-stone-500 text-sm italic">
-                  <CheckCircle className="w-4 h-4"/> Réception confirmée le {new Date(foundProject.deliveryConfirmationDate?.seconds * 1000).toLocaleDateString()}
+                  <CheckCircle className="w-4 h-4"/> Réception confirmée le {new Date(foundProject.deliveryConfirmationDate?.seconds * 1000).toLocaleDateString('fr-FR')}
               </div>
           )}
 
@@ -110,7 +117,8 @@ export default function ClientPortal({ projects, onBack }: { projects: Project[]
                       <div className="h-3 bg-stone-100 rounded-full overflow-hidden"><div className="h-full bg-amber-500 transition-all duration-1000" style={{ width: `${foundProject.progressPhoto}%` }} /></div>
                       <p className="text-right text-xs mt-1 text-stone-400">{PHOTO_STEPS[foundProject.statusPhoto].label}</p>
                   </div>
-                  {foundProject.estimatedDeliveryPhoto && <div className="mb-4 bg-amber-50 text-amber-800 text-xs p-3 rounded-lg flex items-center gap-2"><Calendar className="w-4 h-4"/> Livraison estimée : <strong>{new Date(foundProject.estimatedDeliveryPhoto).toLocaleDateString()}</strong></div>}
+                  {/* DATE ESTIMÉE EN FR 👇 */}
+                  {foundProject.estimatedDeliveryPhoto && <div className="mb-4 bg-amber-50 text-amber-800 text-xs p-3 rounded-lg flex items-center gap-2"><Calendar className="w-4 h-4"/> Livraison estimée : <strong>{formatDateFR(foundProject.estimatedDeliveryPhoto)}</strong></div>}
                   
                   {/* BOUTON SÉCURISÉ */}
                   {canViewGallery ? (
@@ -129,7 +137,8 @@ export default function ClientPortal({ projects, onBack }: { projects: Project[]
                       <div className="h-3 bg-stone-100 rounded-full overflow-hidden"><div className="h-full bg-blue-500 transition-all duration-1000" style={{ width: `${foundProject.progressVideo}%` }} /></div>
                       <p className="text-right text-xs mt-1 text-stone-400">{VIDEO_STEPS[foundProject.statusVideo].label}</p>
                   </div>
-                  {foundProject.estimatedDeliveryVideo && <div className="mb-4 bg-blue-50 text-blue-800 text-xs p-3 rounded-lg flex items-center gap-2"><Calendar className="w-4 h-4"/> Livraison estimée : <strong>{new Date(foundProject.estimatedDeliveryVideo).toLocaleDateString()}</strong></div>}
+                  {/* DATE ESTIMÉE EN FR 👇 */}
+                  {foundProject.estimatedDeliveryVideo && <div className="mb-4 bg-blue-50 text-blue-800 text-xs p-3 rounded-lg flex items-center gap-2"><Calendar className="w-4 h-4"/> Livraison estimée : <strong>{formatDateFR(foundProject.estimatedDeliveryVideo)}</strong></div>}
                   {foundProject.statusVideo === 'delivered' && !isBlocked && foundProject.linkVideo ? (
                       <a href={foundProject.linkVideo} target="_blank" className="block w-full bg-stone-900 text-white text-center py-3 rounded-xl font-bold hover:bg-stone-800 transition shadow-lg transform active:scale-95">Télécharger le Film</a>
                   ) : foundProject.statusVideo === 'delivered' ? (
