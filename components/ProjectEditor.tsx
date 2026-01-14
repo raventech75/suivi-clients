@@ -12,7 +12,7 @@ import {
   COLLECTION_NAME, MAKE_WEBHOOK_URL, PHOTO_STEPS, 
   VIDEO_STEPS, ALBUM_FORMATS, ALBUM_STATUSES, Project 
 } from '../lib/config';
-import ChatBox from './ChatBox';
+import ChatBox from './ChatSystem';
 
 export default function ProjectEditor({ project, isSuperAdmin, staffList, user }: { project: Project, isSuperAdmin: boolean, staffList: string[], user: any }) {
   const [isExpanded, setIsExpanded] = useState(false);
