@@ -1,14 +1,15 @@
 'use client';
 import React, { useState } from 'react';
-import { Users, Lock, Download, Settings, LogOut, Plus, Trash2 } from 'lucide-react';
+import { Users, Lock, Download, Settings, LogOut, Plus, Trash2, Search as SearchIcon } from 'lucide-react';
 import { signInWithEmailAndPassword } from 'firebase/auth';
 import { collection, addDoc, setDoc, doc, serverTimestamp } from 'firebase/firestore';
 import { auth, db, appId } from '../lib/firebase';
 import { COLLECTION_NAME, SETTINGS_COLLECTION, SUPER_ADMINS, Project } from '../lib/config';
-import ProjectEditor from './ProjectEditor'; // Import du composant créé avant
+import ProjectEditor from './ProjectEditor';
 
 export default function AdminDashboard({ projects, user, onLogout, staffList, setStaffList }: { projects: Project[], user: any, onLogout: () => void, staffList: string[], setStaffList: any }) {
   const [filter, setFilter] = useState<'all' | 'active' | 'completed' | 'late' | 'urgent'>('all');
+  const [searchTerm, setSearchTerm] = useState('');
   const [isAdding, setIsAdding] = useState(false);
   const [showTeamModal, setShowTeamModal] = useState(false);
   const [newMember, setNewMember] = useState('');
@@ -43,9 +44,10 @@ export default function AdminDashboard({ projects, user, onLogout, staffList, se
   };
 
   const exportCSV = () => {
-    const headers = ["Mariés", "Email 1", "Email 2", "Tel 1", "Tel 2", "Date Mariage", "Prevu Photo", "Prevu Video", "Statut Photo", "Statut Video", "Validé Client ?"];
+    const headers = ["Mariés", "Email 1", "Email 2", "Tel 1", "Tel 2", "Adresse", "Ville", "Date Mariage", "Prevu Photo", "Prevu Video", "Statut Photo", "Statut Video", "Validé Client ?"];
     const rows = projects.map(p => [
         p.clientNames, p.clientEmail, p.clientEmail2, p.clientPhone, p.clientPhone2, 
+        p.clientAddress, p.clientCity,
         new Date(p.weddingDate).toLocaleDateString(), 
         p.estimatedDeliveryPhoto ? new Date(p.estimatedDeliveryPhoto).toLocaleDateString() : "",
         p.estimatedDeliveryVideo ? new Date(p.estimatedDeliveryVideo).toLocaleDateString() : "",
@@ -96,27 +98,38 @@ export default function AdminDashboard({ projects, user, onLogout, staffList, se
   );
 
   return (
-    <div className="min-h-screen bg-gray-50 pb-20">
-      <header className="bg-white border-b sticky top-0 z-20 shadow-sm p-4 flex justify-between items-center">
+    <div className="min-h-screen bg-stone-100 pb-20">
+      <header className="bg-white border-b sticky top-0 z-20 shadow-sm px-6 py-4 flex justify-between items-center">
         <div className="flex items-center gap-3"><div className="bg-stone-900 text-white p-2 rounded-lg"><Users className="w-5 h-5" /></div><h1 className="font-bold text-stone-900 text-lg">Dashboard</h1></div>
         <div className="flex gap-2">
-          {isSuperAdmin && <button onClick={exportCSV} className="p-2 border rounded-lg hover:bg-stone-100 text-stone-600"><Download className="w-5 h-5"/></button>}
-          <button onClick={() => setShowTeamModal(true)} className="p-2 border rounded-lg hover:bg-stone-100 text-stone-600"><Settings className="w-5 h-5"/></button>
-          <button onClick={onLogout} className="p-2 border rounded-lg hover:bg-stone-100 text-stone-600"><LogOut className="w-5 h-5"/></button>
-          <button onClick={() => setIsAdding(true)} className="bg-blue-600 hover:bg-blue-700 text-white px-4 rounded-lg flex items-center gap-2 font-bold shadow-md transition"><Plus className="w-4 h-4"/> Nouveau</button>
+          {isSuperAdmin && <button onClick={exportCSV} className="p-2 border rounded-lg hover:bg-stone-50 text-stone-600"><Download className="w-5 h-5"/></button>}
+          <button onClick={() => setShowTeamModal(true)} className="p-2 border rounded-lg hover:bg-stone-50 text-stone-600"><Settings className="w-5 h-5"/></button>
+          <button onClick={onLogout} className="p-2 border rounded-lg hover:bg-stone-50 text-stone-600"><LogOut className="w-5 h-5"/></button>
+          <button onClick={() => setIsAdding(true)} className="bg-stone-900 hover:bg-black text-white px-4 rounded-lg flex items-center gap-2 font-bold shadow-md transition"><Plus className="w-4 h-4"/> Nouveau</button>
         </div>
       </header>
       
-      <main className="max-w-6xl mx-auto px-4 py-6">
-        <div className="flex gap-2 mb-6 overflow-x-auto pb-2 scrollbar-hide">
-            <button onClick={()=>setFilter('all')} className={`px-4 py-2 rounded-full text-sm font-bold whitespace-nowrap ${filter==='all'?'bg-stone-800 text-white':'bg-white text-stone-600 border'}`}>Tous ({counts.all})</button>
-            <button onClick={()=>setFilter('active')} className={`px-4 py-2 rounded-full text-sm font-bold whitespace-nowrap ${filter==='active'?'bg-blue-600 text-white':'bg-white text-stone-600 border'}`}>Récents ({counts.active})</button>
-            <button onClick={()=>setFilter('late')} className={`px-4 py-2 rounded-full text-sm font-bold whitespace-nowrap ${filter==='late'?'bg-orange-500 text-white':'bg-white text-stone-600 border'}`}>Attention +15j ({counts.late})</button>
-            <button onClick={()=>setFilter('urgent')} className={`px-4 py-2 rounded-full text-sm font-bold whitespace-nowrap ${filter==='urgent'?'bg-red-600 text-white':'bg-white text-stone-600 border'}`}>Urgent +60j ({counts.urgent})</button>
+      <main className="max-w-6xl mx-auto px-4 py-8">
+        {/* FILTRES & RECHERCHE */}
+        <div className="flex flex-col md:flex-row justify-between items-center gap-4 mb-8">
+            <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide w-full md:w-auto">
+                <button onClick={()=>setFilter('all')} className={`px-4 py-2 rounded-full text-sm font-bold whitespace-nowrap transition-colors ${filter==='all'?'bg-stone-800 text-white':'bg-white text-stone-500 border border-stone-200'}`}>Tous ({counts.all})</button>
+                <button onClick={()=>setFilter('active')} className={`px-4 py-2 rounded-full text-sm font-bold whitespace-nowrap transition-colors ${filter==='active'?'bg-blue-600 text-white':'bg-white text-stone-500 border border-stone-200'}`}>En cours ({counts.active})</button>
+                <button onClick={()=>setFilter('late')} className={`px-4 py-2 rounded-full text-sm font-bold whitespace-nowrap transition-colors ${filter==='late'?'bg-orange-500 text-white':'bg-white text-stone-500 border border-stone-200'}`}>Attention ({counts.late})</button>
+                <button onClick={()=>setFilter('urgent')} className={`px-4 py-2 rounded-full text-sm font-bold whitespace-nowrap transition-colors ${filter==='urgent'?'bg-red-600 text-white':'bg-white text-stone-500 border border-stone-200'}`}>Urgent ({counts.urgent})</button>
+            </div>
+            <div className="relative w-full md:w-64">
+                <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-stone-400"/>
+                <input type="text" placeholder="Rechercher..." className="w-full pl-10 pr-4 py-2 rounded-lg border border-stone-200 focus:ring-2 focus:ring-stone-200 outline-none" value={searchTerm} onChange={e=>setSearchTerm(e.target.value)}/>
+            </div>
         </div>
-        <div className="grid gap-4">
+
+        {/* LISTE VERTICALE ÉPURÉE */}
+        <div className="flex flex-col gap-3">
             {projects.filter(p => {
                 const status = getProjectStatus(p);
+                const matchesSearch = p.clientNames.toLowerCase().includes(searchTerm.toLowerCase());
+                if(!matchesSearch) return false;
                 if(filter === 'all') return true;
                 if(filter === 'completed') return status === 'completed';
                 return status === filter;
@@ -130,7 +143,7 @@ export default function AdminDashboard({ projects, user, onLogout, staffList, se
               <div className="bg-white rounded-2xl p-6 w-full max-w-lg shadow-2xl max-h-[90vh] overflow-y-auto">
                   <h3 className="text-xl font-bold mb-6">Nouveau Dossier</h3>
                   <form onSubmit={createProject} className="space-y-4">
-                      <input required placeholder="Mariés" className="w-full p-3 border rounded-lg" onChange={e => setNewProject({...newProject, clientNames: e.target.value})}/>
+                      <input required placeholder="Mariés (ex: Julie & Thomas)" className="w-full p-3 border rounded-lg" onChange={e => setNewProject({...newProject, clientNames: e.target.value})}/>
                       <div className="grid grid-cols-2 gap-4">
                           <input type="email" placeholder="Email 1" className="p-3 border rounded-lg" onChange={e => setNewProject({...newProject, clientEmail: e.target.value})}/>
                           <input type="tel" placeholder="Tel 1" className="p-3 border rounded-lg" onChange={e => setNewProject({...newProject, clientPhone: e.target.value})}/>
@@ -150,8 +163,8 @@ export default function AdminDashboard({ projects, user, onLogout, staffList, se
                           <label className="flex items-center gap-2 font-bold cursor-pointer"><input type="checkbox" className="w-5 h-5 accent-blue-600" checked={newProject.hasVideo} onChange={e=>setNewProject({...newProject, hasVideo:e.target.checked})}/> Vidéo</label>
                       </div>
                       <div className="pt-4 flex gap-3">
-                          <button type="button" onClick={() => setIsAdding(false)} className="flex-1 py-3 border rounded-xl font-bold text-stone-500">Annuler</button>
-                          <button className="flex-1 bg-blue-600 text-white py-3 rounded-xl font-bold shadow-lg hover:bg-blue-700">Créer</button>
+                          <button type="button" onClick={() => setIsAdding(false)} className="flex-1 py-3 border rounded-xl font-bold text-stone-500 hover:bg-stone-50">Annuler</button>
+                          <button className="flex-1 bg-stone-900 text-white py-3 rounded-xl font-bold shadow-lg hover:bg-black">Créer</button>
                       </div>
                   </form>
               </div>

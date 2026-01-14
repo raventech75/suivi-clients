@@ -1,5 +1,3 @@
-// --- CONFIGURATION CONSTANTES ET TYPES ---
-
 export const MAKE_WEBHOOK_URL = "https://hook.eu2.make.com/iwf8nbt3tywmywp6u89xgn7e2nar0bbs"; 
 export const SUPER_ADMINS = ["admin@raventech.fr", "irzzenproductions@gmail.com"]; 
 export const STRIPE_ARCHIVE_LINK = "https://buy.stripe.com/3cI3cv3jq2j37x9eFy5gc0b";
@@ -46,10 +44,15 @@ export interface AlbumOrder { id: string; name: string; format: string; price: n
 export interface Project {
   id: string;
   clientNames: string;
+  // Infos Contacts
   clientEmail?: string;
   clientEmail2?: string;
   clientPhone?: string;
   clientPhone2?: string;
+  clientAddress?: string; // NOUVEAU
+  clientCity?: string;    // NOUVEAU
+  adminNotes?: string;    // NOUVEAU (Notes internes)
+
   weddingDate: string;
   code: string;
   
