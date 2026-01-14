@@ -1,13 +1,13 @@
 'use client';
 import React, { useState } from 'react';
-import { Users, Lock, Download, Settings, LogOut, Plus, Trash2, Search as SearchIcon } from 'lucide-react';
+import { Users, Lock, Download, Settings, LogOut, Plus, Trash2, Search as SearchIcon, BarChart3 } from 'lucide-react';
 import { signInWithEmailAndPassword } from 'firebase/auth';
 import { collection, addDoc, setDoc, doc, serverTimestamp } from 'firebase/firestore';
 import { auth, db, appId } from '../lib/firebase';
 import { COLLECTION_NAME, SETTINGS_COLLECTION, SUPER_ADMINS, Project } from '../lib/config';
 import ProjectEditor from './ProjectEditor';
 
-export default function AdminDashboard({ projects, user, onLogout, staffList, setStaffList }: { projects: Project[], user: any, onLogout: () => void, staffList: string[], setStaffList: any }) {
+export default function AdminDashboard({ projects, user, onLogout, staffList, setStaffList, onStats }: { projects: Project[], user: any, onLogout: () => void, staffList: string[], setStaffList: any, onStats: () => void }) {
   const [filter, setFilter] = useState<'all' | 'active' | 'completed' | 'late' | 'urgent'>('all');
   const [searchTerm, setSearchTerm] = useState('');
   const [isAdding, setIsAdding] = useState(false);
@@ -102,7 +102,10 @@ export default function AdminDashboard({ projects, user, onLogout, staffList, se
       <header className="bg-white border-b sticky top-0 z-20 shadow-sm px-6 py-4 flex justify-between items-center">
         <div className="flex items-center gap-3"><div className="bg-stone-900 text-white p-2 rounded-lg"><Users className="w-5 h-5" /></div><h1 className="font-bold text-stone-900 text-lg">Dashboard</h1></div>
         <div className="flex gap-2">
-          {isSuperAdmin && <button onClick={exportCSV} className="p-2 border rounded-lg hover:bg-stone-50 text-stone-600"><Download className="w-5 h-5"/></button>}
+          {isSuperAdmin && <button onClick={exportCSV} className="p-2 border rounded-lg hover:bg-stone-50 text-stone-600" title="Export CSV"><Download className="w-5 h-5"/></button>}
+          {/* BOUTON STATS AJOUTÉ ICI 👇 */}
+          {isSuperAdmin && <button onClick={onStats} className="p-2 border rounded-lg hover:bg-stone-50 text-stone-600" title="Statistiques"><BarChart3 className="w-5 h-5"/></button>}
+          
           <button onClick={() => setShowTeamModal(true)} className="p-2 border rounded-lg hover:bg-stone-50 text-stone-600"><Settings className="w-5 h-5"/></button>
           <button onClick={onLogout} className="p-2 border rounded-lg hover:bg-stone-50 text-stone-600"><LogOut className="w-5 h-5"/></button>
           <button onClick={() => setIsAdding(true)} className="bg-stone-900 hover:bg-black text-white px-4 rounded-lg flex items-center gap-2 font-bold shadow-md transition"><Plus className="w-4 h-4"/> Nouveau</button>

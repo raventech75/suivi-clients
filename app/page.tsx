@@ -7,10 +7,12 @@ import { auth, db, appId } from '../lib/firebase';
 import { DEFAULT_STAFF, COLLECTION_NAME, LEADS_COLLECTION, SETTINGS_COLLECTION, STRIPE_ARCHIVE_LINK, Project } from '../lib/config';
 import AdminDashboard from '../components/AdminDashboard';
 import ClientPortal from '../components/ClientPortal';
+import StatsDashboard from '../components/StatsDashboard';
 
 export default function WeddingTracker() {
   const [user, setUser] = useState<any>(null);
-  const [view, setView] = useState<'landing' | 'client' | 'admin' | 'archive'>('landing');
+  // AJOUT DE 'stats' DANS LE TYPE DE VUE 👇
+  const [view, setView] = useState<'landing' | 'client' | 'admin' | 'archive' | 'stats'>('landing');
   const [projects, setProjects] = useState<Project[]>([]);
   const [staffList, setStaffList] = useState<string[]>(DEFAULT_STAFF);
   const [loading, setLoading] = useState(true);
@@ -30,11 +32,11 @@ export default function WeddingTracker() {
     const unsubscribeData = onSnapshot(q, (snapshot) => {
       const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as Project[];
       
-      // 👇 NOUVEAU TRI : Fast Track en premier, puis date la plus récente
+      // Tri : Fast Track en premier, puis date la plus récente
       const sortedData = data.sort((a, b) => {
-        if (a.isPriority && !b.isPriority) return -1; // a passe devant
-        if (!a.isPriority && b.isPriority) return 1;  // b passe devant
-        return new Date(b.weddingDate).getTime() - new Date(a.weddingDate).getTime(); // Sinon tri par date
+        if (a.isPriority && !b.isPriority) return -1;
+        if (!a.isPriority && b.isPriority) return 1;
+        return new Date(b.weddingDate).getTime() - new Date(a.weddingDate).getTime();
       });
 
       setProjects(sortedData);
@@ -56,8 +58,11 @@ export default function WeddingTracker() {
     <div className="min-h-screen bg-stone-50 font-sans text-stone-800">
       {view === 'landing' && <LandingView setView={setView} />}
       {view === 'client' && <ClientPortal projects={projects} onBack={() => setView('landing')} />}
-      {view === 'admin' && <AdminDashboard projects={projects} staffList={staffList} setStaffList={setStaffList} user={user} onLogout={() => { signOut(auth); setView('landing'); }} />}
+      {/* ON PASSE LA FONCTION onStats 👇 */}
+      {view === 'admin' && <AdminDashboard projects={projects} staffList={staffList} setStaffList={setStaffList} user={user} onLogout={() => { signOut(auth); setView('landing'); }} onStats={() => setView('stats')} />}
       {view === 'archive' && <ArchiveView onBack={() => setView('landing')} />}
+      {/* AFFICHAGE DU DASHBOARD STATS 👇 */}
+      {view === 'stats' && <StatsDashboard projects={projects} onBack={() => setView('admin')} />}
     </div>
   );
 }
