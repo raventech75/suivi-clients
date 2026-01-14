@@ -9,7 +9,7 @@ import {
   UserCheck, Users as UsersIcon, ImagePlus, Hourglass,
   Upload, Loader2, AtSign, MessageSquare, Send,
   Copy, ClipboardCheck, BookOpen, ArrowRight, HardDrive, ShieldCheck, History,
-  Euro, Eye, AlertTriangle, CreditCard, X, Phone, Rocket, Star, Mail, Settings, AlertOctagon, Music, Disc, Layers
+  Euro, Eye, AlertTriangle, CreditCard, X, Phone, Rocket, Star, Mail, Settings, AlertOctagon, Music, Disc, Download
 } from 'lucide-react';
 
 // --- Configuration Firebase ---
@@ -135,7 +135,6 @@ export default function WeddingTracker() {
   const [user, setUser] = useState<any>(null);
   const [view, setView] = useState<'landing' | 'client' | 'admin' | 'archive'>('landing');
   const [projects, setProjects] = useState<Project[]>([]);
-  // Initialisation avec la liste par défaut pour éviter le vide
   const [staffList, setStaffList] = useState<string[]>(DEFAULT_STAFF);
   const [loading, setLoading] = useState(true);
 
@@ -157,13 +156,17 @@ export default function WeddingTracker() {
     const q = query(colRef);
     const unsubscribeData = onSnapshot(q, (snapshot) => {
       const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as Project[];
-      // Tri par date de mariage (plus récent en premier)
-      const sortedData = data.sort((a, b) => new Date(b.weddingDate).getTime() - new Date(a.weddingDate).getTime());
+      const sortedData = data.sort((a, b) => {
+          if (a.hasUnreadMessage && !b.hasUnreadMessage) return -1;
+          if (!a.hasUnreadMessage && b.hasUnreadMessage) return 1;
+          if (a.isPriority && !b.isPriority) return -1;
+          if (!a.isPriority && b.isPriority) return 1;
+          return new Date(b.weddingDate).getTime() - new Date(a.weddingDate).getTime();
+      });
       setProjects(sortedData);
       setLoading(false);
     });
 
-    // Chargement Staff depuis la base de données
     let settingsRef;
     if (typeof __app_id !== 'undefined') { settingsRef = doc(db, 'artifacts', appId, 'public', 'data', SETTINGS_COLLECTION, 'general'); } 
     else { settingsRef = doc(db, SETTINGS_COLLECTION, 'general'); }
@@ -172,7 +175,6 @@ export default function WeddingTracker() {
         if(docSnap.exists() && docSnap.data().staff && docSnap.data().staff.length > 0) {
             setStaffList(docSnap.data().staff);
         } else {
-            // Si pas de données, on sauvegarde la liste par défaut pour la prochaine fois
             setDoc(settingsRef, { staff: DEFAULT_STAFF }, { merge: true });
         }
     });
@@ -196,7 +198,7 @@ export default function WeddingTracker() {
   );
 }
 
-// --- Vue Accueil (Landing Page) ---
+// --- Vue Accueil ---
 function LandingView({ setView }: { setView: (v: any) => void }) {
   return (
     <div className="min-h-screen bg-white text-stone-900 font-sans selection:bg-amber-100 selection:text-amber-900">
@@ -258,7 +260,7 @@ function LandingView({ setView }: { setView: (v: any) => void }) {
   );
 }
 
-// --- Vue Archive (Lead Capture) ---
+// --- Vue Archive ---
 function ArchiveView({ onBack }: { onBack: () => void }) {
   const [step, setStep] = useState(1);
   const [date, setDate] = useState('');
@@ -354,7 +356,7 @@ function ArchiveView({ onBack }: { onBack: () => void }) {
 }
 
 // --- Composant Chat ---
-function ChatBox({ project, userType }: { project: Project, userType: 'admin' | 'client' }) {
+function ChatBox({ project, userType, disabled }: { project: Project, userType: 'admin' | 'client', disabled?: boolean }) {
     const [msgText, setMsgText] = useState('');
     const [sending, setSending] = useState(false);
     const scrollRef = useRef<HTMLDivElement>(null);
@@ -376,17 +378,18 @@ function ChatBox({ project, userType }: { project: Project, userType: 'admin' | 
 
         await updateDoc(docRef, updates);
 
-        // NOUVEAU : Envoi notif message
-        if (MAKE_WEBHOOK_URL) {
+        if (MAKE_WEBHOOK_URL && !MAKE_WEBHOOK_URL.includes('VOTRE_URL')) {
             const targetEmail = userType === 'client' ? (project.managerEmail || 'admin@raventech.fr') : project.clientEmail;
             if (targetEmail) {
                 fetch(MAKE_WEBHOOK_URL, {
                     method: 'POST', headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ type: 'new_message', author: userType, targetEmail, clientName: project.clientNames, msg: msgText, url: window.location.origin })
-                }).catch(err => console.error(err));
+                    body: JSON.stringify({ 
+                        type: 'new_message', author: userType, targetEmail: targetEmail, 
+                        clientName: project.clientNames, msg: msgText, url: window.location.origin 
+                    })
+                }).catch(err => console.error("Erreur notif", err));
             }
         }
-
         setMsgText('');
         setSending(false);
     };
@@ -409,16 +412,19 @@ function ChatBox({ project, userType }: { project: Project, userType: 'admin' | 
                     <div key={idx} className={`flex ${m.author === userType ? 'justify-end' : 'justify-start'}`}>
                         <div className={`max-w-[85%] p-3 rounded-2xl text-sm relative group ${m.author === 'admin' ? 'bg-blue-600 text-white rounded-tr-none' : 'bg-white border border-stone-200 rounded-tl-none text-stone-800 shadow-sm'}`}>
                             <p className="whitespace-pre-wrap">{m.text}</p>
-                            <span className={`text-[9px] block mt-1 text-right ${m.author === 'admin' ? 'text-blue-200' : 'text-stone-400'}`}>{new Date(m.date).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
-                            {userType === 'admin' && (<button onClick={() => handleDeleteMessage(m)} className="absolute -top-2 -right-2 bg-red-100 text-red-500 p-1 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"><X className="w-3 h-3" /></button>)}
+                            <span className={`text-[9px] block mt-1 opacity-60 text-right ${m.author === 'admin' ? 'text-blue-100' : 'text-stone-400'}`}>{new Date(m.date).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
+                            {userType === 'admin' && !disabled && (<button onClick={() => handleDeleteMessage(m)} className="absolute -top-2 -right-2 bg-red-100 text-red-500 p-1 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"><X className="w-3 h-3" /></button>)}
                         </div>
                     </div>
                 ))}
             </div>
-            <div className="p-2 bg-white border-t border-stone-100 flex gap-2">
-                <input className="flex-1 bg-stone-100 rounded-full px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-stone-200" placeholder="Votre message..." value={msgText} onChange={e => setMsgText(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleSend()} />
-                <button onClick={handleSend} disabled={sending} className="bg-stone-800 text-white p-3 rounded-full hover:bg-stone-700 transition-colors disabled:opacity-50">{sending ? <Loader2 className="w-4 h-4 animate-spin"/> : <Send className="w-4 h-4"/>}</button>
-            </div>
+            {!disabled && (
+                <div className="p-2 bg-white border-t border-stone-100 flex gap-2">
+                    <input className="flex-1 bg-stone-100 rounded-full px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-stone-200" placeholder="Votre message..." value={msgText} onChange={e => setMsgText(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleSend()} />
+                    <button onClick={handleSend} disabled={sending} className="bg-blue-600 text-white p-3 rounded-full hover:bg-blue-700 transition-colors disabled:opacity-50">{sending ? <Loader2 className="w-4 h-4 animate-spin"/> : <Send className="w-4 h-4"/>}</button>
+                </div>
+            )}
+            {disabled && <div className="p-3 bg-stone-50 text-center text-xs text-stone-400">Lecture seule (Non assigné)</div>}
         </div>
     );
 }
@@ -440,6 +446,27 @@ function AdminDashboard({ projects, user, onLogout, staffList, setStaffList }: {
   const [filter, setFilter] = useState<'all' | 'active' | 'completed' | 'late'>('all');
 
   const isSuperAdmin = SUPER_ADMINS.includes(user?.email);
+
+  // Fonction d'export CSV
+  const exportCSV = () => {
+    const headers = ["Mariés", "Email", "Téléphone", "Date Mariage", "Statut Photo", "Statut Vidéo"];
+    const rows = projects.map((p: Project) => [
+      p.clientNames,
+      p.clientEmail || "",
+      p.clientPhone || "",
+      new Date(p.weddingDate).toLocaleDateString(),
+      p.statusPhoto,
+      p.statusVideo
+    ]);
+    const csvContent = [headers.join(","), ...rows.map((r: string[]) => r.map(c => `"${c}"`).join(","))].join("\n");
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(blob);
+    link.setAttribute("download", "marketing_clients.csv");
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
 
   const handleLogin = async (e: React.FormEvent) => {
       e.preventDefault();
@@ -500,25 +527,12 @@ function AdminDashboard({ projects, user, onLogout, staffList, setStaffList }: {
     setIsAdding(false);
   };
 
-  // Logique de filtres CORRIGÉE pour les compteurs
-  const counts = {
-      all: projects.length,
-      active: projects.filter(p => (p.statusPhoto !== 'delivered' && p.statusPhoto !== 'none') || (p.statusVideo !== 'delivered' && p.statusVideo !== 'none')).length,
-      late: projects.filter(p => {
-          const limit = new Date(p.weddingDate).getTime() + (60 * 24 * 60 * 60 * 1000);
-          const isFinished = (p.statusPhoto === 'delivered' || p.statusPhoto === 'none') && (p.statusVideo === 'delivered' || p.statusVideo === 'none');
-          return Date.now() > limit && !isFinished;
-      }).length
-  };
-
   const filteredProjects = projects.filter(p => {
     const isFinished = (p.statusPhoto === 'delivered' || p.statusPhoto === 'none') && (p.statusVideo === 'delivered' || p.statusVideo === 'none');
+    const isLate = new Date().getTime() - new Date(p.weddingDate).getTime() > (60 * 24 * 60 * 60 * 1000) && !isFinished;
     if (filter === 'completed') return isFinished;
     if (filter === 'active') return !isFinished;
-    if (filter === 'late') {
-        const limit = new Date(p.weddingDate).getTime() + (60 * 24 * 60 * 60 * 1000);
-        return Date.now() > limit && !isFinished;
-    }
+    if (filter === 'late') return isLate;
     return true; 
   });
 
@@ -538,7 +552,8 @@ function AdminDashboard({ projects, user, onLogout, staffList, setStaffList }: {
           </div>
           
           <div className="hidden md:flex items-center gap-2">
-            <button onClick={() => setShowTeamModal(true)} className="text-stone-500 hover:text-stone-800 px-3 py-2 text-sm font-medium transition flex items-center gap-1 border rounded-lg mr-2"><Settings className="w-4 h-4"/> Gérer l'équipe</button>
+            {isSuperAdmin && <button onClick={exportCSV} className="text-stone-500 hover:text-stone-800 px-3 py-2 text-sm font-medium transition flex items-center gap-1 border rounded-lg mr-2"><Download className="w-4 h-4"/> CSV</button>}
+            <button onClick={() => setShowTeamModal(true)} className="text-stone-500 hover:text-stone-800 px-3 py-2 text-sm font-medium transition flex items-center gap-1 border rounded-lg mr-2"><Settings className="w-4 h-4"/> Équipe</button>
             <button onClick={onLogout} className="text-stone-500 hover:text-stone-800 px-3 py-2 text-sm font-medium transition flex items-center gap-1"><LogOut className="w-4 h-4"/> Déconnexion</button>
             <button onClick={() => setIsAdding(true)} className="bg-blue-600 text-white px-4 py-2 rounded-lg flex gap-2 text-sm font-medium hover:bg-blue-700 transition"><Plus className="w-4 h-4" /> Nouveau</button>
           </div>
@@ -547,12 +562,12 @@ function AdminDashboard({ projects, user, onLogout, staffList, setStaffList }: {
       
       <main className="max-w-6xl mx-auto px-4 py-6">
         <div className="flex gap-2 mb-6 overflow-x-auto pb-2 scrollbar-hide">
-          <button onClick={() => setFilter('all')} className={`px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap ${filter === 'all' ? 'bg-stone-800 text-white' : 'bg-white text-stone-600'}`}>Tous ({counts.all})</button>
-          <button onClick={() => setFilter('active')} className={`px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap ${filter === 'active' ? 'bg-blue-600 text-white' : 'bg-white text-stone-600'}`}>En cours ({counts.active})</button>
-          <button onClick={() => setFilter('late')} className={`px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap ${filter === 'late' ? 'bg-red-500 text-white' : 'bg-white text-stone-600'}`}>En retard ({counts.late})</button>
+          <button onClick={() => setFilter('all')} className={`px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap ${filter === 'all' ? 'bg-stone-800 text-white' : 'bg-white text-stone-600'}`}>Tous ({projects.length})</button>
+          <button onClick={() => setFilter('active')} className={`px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap ${filter === 'active' ? 'bg-blue-600 text-white' : 'bg-white text-stone-600'}`}>En cours</button>
+          <button onClick={() => setFilter('late')} className={`px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap ${filter === 'late' ? 'bg-red-500 text-white' : 'bg-white text-stone-600'}`}>En retard</button>
         </div>
         <div className="grid gap-4 md:gap-6">
-          {filteredProjects.map(p => <ProjectEditor key={p.id} project={p} isSuperAdmin={isSuperAdmin} staffList={staffList} />)}
+          {filteredProjects.map(p => <ProjectEditor key={p.id} project={p} isSuperAdmin={isSuperAdmin} staffList={staffList} user={user} />)}
         </div>
       </main>
       
@@ -636,7 +651,7 @@ function AdminDashboard({ projects, user, onLogout, staffList, setStaffList }: {
 }
 
 // --- Editeur de Projet (Admin) ---
-function ProjectEditor({ project, isSuperAdmin, staffList }: { project: Project, isSuperAdmin: boolean, staffList: string[] }) {
+function ProjectEditor({ project, isSuperAdmin, staffList, user }: { project: Project, isSuperAdmin: boolean, staffList: string[], user: any }) {
   const [isExpanded, setIsExpanded] = useState(false);
   const [localData, setLocalData] = useState(project);
   const [hasChanges, setHasChanges] = useState(false);
@@ -648,9 +663,16 @@ function ProjectEditor({ project, isSuperAdmin, staffList }: { project: Project,
   const [newPayName, setNewPayName] = useState('');
   const [newPayAmount, setNewPayAmount] = useState('');
 
+  // SÉCURITÉ : DÉTERMINER SI L'UTILISATEUR PEUT MODIFIER
+  const isManager = user?.email && project.managerEmail && user.email.toLowerCase() === project.managerEmail.toLowerCase();
+  
+  // Droit de modif : Super Admin OU Manager désigné
+  const canEdit = isSuperAdmin || isManager;
+
   useEffect(() => { if (!hasChanges) setLocalData(project); }, [project]);
 
   const updateField = (k: keyof Project, v: any) => { 
+    if (!canEdit) return; // Sécurité Front
     setLocalData(p => {
       const newState = { ...p, [k]: v };
       if (k === 'statusPhoto') newState.progressPhoto = PHOTO_STEPS[v as keyof typeof PHOTO_STEPS].percent;
@@ -661,6 +683,7 @@ function ProjectEditor({ project, isSuperAdmin, staffList }: { project: Project,
   };
 
   const toggleTeamMember = (member: string) => {
+      if (!canEdit) return;
       const currentTeam = localData.onSiteTeam || [];
       const newTeam = currentTeam.includes(member) ? currentTeam.filter(m => m !== member) : [...currentTeam, member];
       updateField('onSiteTeam', newTeam);
@@ -668,18 +691,20 @@ function ProjectEditor({ project, isSuperAdmin, staffList }: { project: Project,
 
   // Finance Helpers
   const addPayment = () => {
-      if(!newPayName || !newPayAmount) return;
+      if(!newPayName || !newPayAmount || !canEdit) return;
       const payments = localData.teamPayments || [];
       updateField('teamPayments', [...payments, { name: newPayName, amount: parseFloat(newPayAmount), note: '', paid: false }]);
       setNewPayName(''); setNewPayAmount('');
   };
   const removePayment = (idx: number) => {
+      if (!canEdit) return;
       const payments = [...(localData.teamPayments || [])];
       payments.splice(idx, 1);
       updateField('teamPayments', payments);
   };
   
   const handleSave = async () => {
+    if (!canEdit) return;
     const { id, ...data } = localData;
     let docRef;
     if (typeof __app_id !== 'undefined') { docRef = doc(db, 'artifacts', typeof __app_id !== 'undefined' ? __app_id : 'default-app-id', 'public', 'data', COLLECTION_NAME, project.id); } 
@@ -704,7 +729,7 @@ function ProjectEditor({ project, isSuperAdmin, staffList }: { project: Project,
     }
 
     // Webhook : Update Manager
-    if(localData.managerEmail && MAKE_WEBHOOK_URL) {
+    if(localData.managerEmail && MAKE_WEBHOOK_URL && !MAKE_WEBHOOK_URL.includes('VOTRE_URL')) {
         fetch(MAKE_WEBHOOK_URL, {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ type: 'update_manager', clientName: localData.clientNames, managerEmail: localData.managerEmail, status: 'Mise à jour dossier' })
@@ -723,6 +748,7 @@ function ProjectEditor({ project, isSuperAdmin, staffList }: { project: Project,
   };
 
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!canEdit) return;
     const file = e.target.files?.[0]; if (!file) return;
     try {
       setUploading(true);
@@ -734,6 +760,7 @@ function ProjectEditor({ project, isSuperAdmin, staffList }: { project: Project,
   };
 
   const sendInviteViaWebhook = async () => {
+      // Pas de restriction pour envoyer une invit, c'est utile
       if (!localData.clientEmail) { alert("Veuillez renseigner l'email du client."); return; }
       if (MAKE_WEBHOOK_URL.includes('VOTRE_URL_ICI')) { alert("Configurez le Webhook Make dans le code !"); return; }
       setSendingInvite(true);
@@ -778,6 +805,8 @@ function ProjectEditor({ project, isSuperAdmin, staffList }: { project: Project,
           <div>
              <div className="flex flex-wrap items-center gap-2">
                  <h3 className="font-bold text-lg text-stone-900">{project.clientNames}</h3>
+                 {/* BADGE LECTURE SEULE */}
+                 {!canEdit && <span className="bg-stone-200 text-stone-600 text-[10px] px-2 py-0.5 rounded-full font-bold flex items-center gap-1"><Ban className="w-3 h-3"/> Lecture Seule</span>}
                  {isInactive && <span className="bg-red-100 text-red-600 text-[10px] px-2 py-0.5 rounded-full font-bold flex items-center gap-1 border border-red-200 animate-pulse"><AlertOctagon className="w-3 h-3"/> Inactif +7j</span>}
                  {project.isPriority && <span className="bg-amber-100 text-amber-700 text-[10px] px-2 py-0.5 rounded-full font-bold flex items-center gap-1"><Rocket className="w-3 h-3"/> PRIO</span>}
                  {project.hasUnreadMessage && <span className="bg-red-500 text-white text-[10px] px-2 py-0.5 rounded-full font-bold animate-bounce">MSG</span>}
@@ -785,7 +814,6 @@ function ProjectEditor({ project, isSuperAdmin, staffList }: { project: Project,
              <div className="text-sm text-stone-500 flex flex-wrap items-center gap-3 mt-1">
                <span className="font-mono bg-stone-100 px-1.5 py-0.5 rounded text-stone-600 select-all">{project.code}</span>
                <span>{new Date(project.weddingDate).toLocaleDateString()}</span>
-               {/* AFFICHAGE DU RESPONSABLE DIRECTEMENT SUR LA CARTE */}
                <span className="flex items-center gap-1 font-bold text-stone-700"><UserCheck className="w-3 h-3"/> {project.managerName || 'Non assigné'}</span>
                {isSuperAdmin && remaining > 0 && <span className="bg-red-100 text-red-600 px-2 rounded-full text-xs font-bold">Reste: {remaining}€</span>}
              </div>
@@ -805,7 +833,7 @@ function ProjectEditor({ project, isSuperAdmin, staffList }: { project: Project,
            <div className="mb-6 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
               <div className="flex flex-wrap gap-2 w-full md:w-auto">
                   <button onClick={() => setViewAsClient(true)} className="flex-1 md:flex-none justify-center text-xs flex items-center gap-2 bg-stone-800 text-white px-3 py-2 rounded-lg hover:bg-stone-700 transition-colors"><Eye className="w-3 h-3"/> Voir comme le client</button>
-                  <label className="flex-1 md:flex-none justify-center flex items-center gap-2 text-xs font-bold text-amber-700 cursor-pointer bg-amber-50 border border-amber-200 px-3 py-2 rounded-lg hover:bg-amber-100"><input type="checkbox" checked={localData.isPriority || false} onChange={e => updateField('isPriority', e.target.checked)} className="accent-amber-600" /> <Rocket className="w-3 h-3"/> Fast Track</label>
+                  <label className={`flex-1 md:flex-none justify-center flex items-center gap-2 text-xs font-bold text-amber-700 cursor-pointer bg-amber-50 border border-amber-200 px-3 py-2 rounded-lg hover:bg-amber-100 ${!canEdit ? 'opacity-50 cursor-not-allowed' : ''}`}><input disabled={!canEdit} type="checkbox" checked={localData.isPriority || false} onChange={e => updateField('isPriority', e.target.checked)} className="accent-amber-600" /> <Rocket className="w-3 h-3"/> Fast Track</label>
               </div>
               <div className="flex gap-2 w-full md:w-auto">
                   <button onClick={sendInviteViaWebhook} disabled={sendingInvite} className="flex-1 md:flex-none justify-center text-xs flex items-center gap-2 bg-blue-600 text-white px-3 py-2 rounded-lg hover:bg-blue-700 transition-colors">{sendingInvite ? <Loader2 className="w-3 h-3 animate-spin"/> : <Mail className="w-3 h-3"/>} Inviter (Email)</button>
@@ -813,7 +841,6 @@ function ProjectEditor({ project, isSuperAdmin, staffList }: { project: Project,
               </div>
            </div>
 
-           {/* SECTION VISIBILITE MUSIQUE & INSTRUCTIONS (NOUVEAU) */}
            <div className="bg-purple-50 p-4 rounded-xl border border-purple-100 grid md:grid-cols-2 gap-6 mb-6">
                <div>
                    <h4 className="font-bold text-purple-900 flex items-center gap-2 mb-2"><Music className="w-4 h-4"/> Musiques Choisies</h4>
@@ -831,20 +858,20 @@ function ProjectEditor({ project, isSuperAdmin, staffList }: { project: Project,
                     <div>
                         <label className="text-xs font-semibold text-stone-500 uppercase block mb-1">Responsable</label>
                         <div className="flex gap-2">
-                            <select className="w-full text-sm border-b border-stone-200 py-1 bg-transparent" value={localData.managerName} onChange={e => updateField('managerName', e.target.value)}>
+                            <select disabled={!canEdit} className="w-full text-sm border-b border-stone-200 py-1 bg-transparent disabled:opacity-50" value={localData.managerName} onChange={e => updateField('managerName', e.target.value)}>
                                 <option value="" disabled>-- Choisir dans la liste --</option>
                                 {staffList.map(s => <option key={s} value={s}>{s}</option>)}
                             </select>
-                            <input className="w-full text-sm border-b border-stone-200 py-1 bg-transparent" placeholder="Email notif" value={localData.managerEmail || ''} onChange={e => updateField('managerEmail', e.target.value)} />
+                            <input disabled={!canEdit} className="w-full text-sm border-b border-stone-200 py-1 bg-transparent disabled:opacity-50" placeholder="Email notif" value={localData.managerEmail || ''} onChange={e => updateField('managerEmail', e.target.value)} />
                         </div>
                     </div>
                     <div>
                         <label className="text-xs font-semibold text-stone-500 uppercase block mb-2">Équipe (Tags)</label>
-                        <div className="flex flex-wrap gap-2">{staffList.map(member => (<button key={member} onClick={() => toggleTeamMember(member)} className={`text-xs px-3 py-2 rounded-full border transition-all ${(localData.onSiteTeam || []).includes(member) ? 'bg-stone-800 text-white border-stone-800' : 'bg-white text-stone-500 border-stone-200 hover:border-stone-400'}`}>{member}</button>))}</div>
+                        <div className="flex flex-wrap gap-2">{staffList.map(member => (<button disabled={!canEdit} key={member} onClick={() => toggleTeamMember(member)} className={`text-xs px-3 py-2 rounded-full border transition-all ${!canEdit ? 'opacity-50 cursor-not-allowed' : ''} ${(localData.onSiteTeam || []).includes(member) ? 'bg-stone-800 text-white border-stone-800' : 'bg-white text-stone-500 border-stone-200 hover:border-stone-400'}`}>{member}</button>))}</div>
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div><label className="text-xs font-semibold text-stone-500 uppercase flex items-center gap-1 mb-1"><AtSign className="w-3 h-3" /> Email Mariés</label><input className="w-full text-sm border-b border-stone-200 py-1 focus:outline-none focus:border-stone-500 bg-transparent" value={localData.clientEmail || ''} onChange={e => updateField('clientEmail', e.target.value)} /></div>
-                        <div><label className="text-xs font-semibold text-stone-500 uppercase flex items-center gap-1 mb-1"><Phone className="w-3 h-3" /> Téléphone</label><input className="w-full text-sm border-b border-stone-200 py-1 focus:outline-none focus:border-stone-500 bg-transparent" value={localData.clientPhone || ''} onChange={e => updateField('clientPhone', e.target.value)} /></div>
+                        <div><label className="text-xs font-semibold text-stone-500 uppercase flex items-center gap-1 mb-1"><AtSign className="w-3 h-3" /> Email Mariés</label><input disabled={!canEdit} className="w-full text-sm border-b border-stone-200 py-1 focus:outline-none focus:border-stone-500 bg-transparent disabled:opacity-50" value={localData.clientEmail || ''} onChange={e => updateField('clientEmail', e.target.value)} /></div>
+                        <div><label className="text-xs font-semibold text-stone-500 uppercase flex items-center gap-1 mb-1"><Phone className="w-3 h-3" /> Téléphone</label><input disabled={!canEdit} className="w-full text-sm border-b border-stone-200 py-1 focus:outline-none focus:border-stone-500 bg-transparent disabled:opacity-50" value={localData.clientPhone || ''} onChange={e => updateField('clientPhone', e.target.value)} /></div>
                     </div>
                </div>
 
@@ -896,20 +923,20 @@ function ProjectEditor({ project, isSuperAdmin, staffList }: { project: Project,
                <div className="flex flex-col md:flex-row gap-4">
                    <div className="flex-1">
                        <label className="text-xs font-semibold text-stone-500 uppercase block mb-1">Format Album</label>
-                       <select className="w-full text-sm border rounded p-2 bg-white" value={localData.albumFormat || ''} onChange={e => updateField('albumFormat', e.target.value)}>
+                       <select disabled={!canEdit} className="w-full text-sm border rounded p-2 bg-white disabled:opacity-50" value={localData.albumFormat || ''} onChange={e => updateField('albumFormat', e.target.value)}>
                            <option value="">Aucun album</option>
                            {ALBUM_FORMATS.map(f => <option key={f} value={f}>{f}</option>)}
                        </select>
                    </div>
                    <div className="flex-1">
                        <label className="text-xs font-semibold text-stone-500 uppercase block mb-1">État Avancement</label>
-                       <select className="w-full text-sm border rounded p-2 bg-white" value={localData.albumStatus || 'none'} onChange={e => updateField('albumStatus', e.target.value as any)}>
+                       <select disabled={!canEdit} className="w-full text-sm border rounded p-2 bg-white disabled:opacity-50" value={localData.albumStatus || 'none'} onChange={e => updateField('albumStatus', e.target.value as any)}>
                            {Object.entries(ALBUM_STEPS).map(([k,v]) => <option key={k} value={k}>{v}</option>)}
                        </select>
                    </div>
                    <div className="flex-[2]">
                        <label className="text-xs font-semibold text-stone-500 uppercase block mb-1">Notes Album</label>
-                       <input className="w-full text-sm border rounded p-2 bg-white" placeholder="Détails (couverture, pages supp...)" value={localData.albumNotes || ''} onChange={e => updateField('albumNotes', e.target.value)} />
+                       <input disabled={!canEdit} className="w-full text-sm border rounded p-2 bg-white disabled:opacity-50" placeholder="Détails (couverture, pages supp...)" value={localData.albumNotes || ''} onChange={e => updateField('albumNotes', e.target.value)} />
                    </div>
                </div>
            </div>
@@ -918,9 +945,9 @@ function ProjectEditor({ project, isSuperAdmin, staffList }: { project: Project,
                 <label className="text-xs font-semibold text-stone-500 uppercase flex items-center gap-1 mb-1"><ImagePlus className="w-3 h-3" /> Photo de Couverture</label>
                 <div className="flex items-start gap-3">
                     {localData.coverImage ? (
-                    <div className="relative w-16 h-16 rounded-lg overflow-hidden border border-stone-200 shrink-0 group"><img src={localData.coverImage} className="w-full h-full object-cover" alt="Preview" /><button onClick={() => updateField('coverImage', '')} className="absolute inset-0 bg-black/50 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity text-white"><Trash2 className="w-4 h-4" /></button></div>
+                    <div className="relative w-16 h-16 rounded-lg overflow-hidden border border-stone-200 shrink-0 group"><img src={localData.coverImage} className="w-full h-full object-cover" alt="Preview" /><button disabled={!canEdit} onClick={() => updateField('coverImage', '')} className="absolute inset-0 bg-black/50 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity text-white"><Trash2 className="w-4 h-4" /></button></div>
                     ) : (<div className="w-16 h-16 rounded-lg bg-stone-100 flex items-center justify-center border border-dashed border-stone-300 shrink-0"><ImageIcon className="w-6 h-6 text-stone-300" /></div>)}
-                    <label className={`mt-2 inline-flex items-center gap-2 cursor-pointer bg-stone-800 hover:bg-stone-700 text-white text-xs px-3 py-2 rounded-lg transition-colors ${uploading ? 'opacity-50 cursor-not-allowed' : ''}`}><input type="file" className="hidden" accept="image/*" disabled={uploading} onChange={handleImageUpload} />{uploading ? <Loader2 className="w-3 h-3 animate-spin"/> : <Upload className="w-3 h-3"/>} {uploading ? 'Envoi...' : 'Choisir une photo'}</label>
+                    <label className={`mt-2 inline-flex items-center gap-2 cursor-pointer bg-stone-800 hover:bg-stone-700 text-white text-xs px-3 py-2 rounded-lg transition-colors ${!canEdit ? 'opacity-50 cursor-not-allowed' : ''}`}><input disabled={!canEdit} type="file" className="hidden" accept="image/*" onChange={handleImageUpload} />{uploading ? <Loader2 className="w-3 h-3 animate-spin"/> : <Upload className="w-3 h-3"/>} {uploading ? 'Envoi...' : 'Choisir une photo'}</label>
                 </div>
            </div>
 
@@ -930,13 +957,13 @@ function ProjectEditor({ project, isSuperAdmin, staffList }: { project: Project,
                  <div className="flex items-center justify-between mb-4"><h4 className="font-bold text-stone-700 flex items-center gap-2"><Camera className="w-4 h-4 text-amber-500"/> Photo</h4><span className="text-xs font-bold bg-amber-100 text-amber-700 px-2 py-1 rounded-full">{localData.progressPhoto}%</span></div>
                  <div className="space-y-3">
                    <div><label className="text-xs font-semibold text-stone-500 uppercase">Photographe</label>
-                   <select className="w-full text-sm border-b border-stone-200 py-1 focus:outline-none focus:border-amber-500 bg-transparent h-8" value={localData.photographerName} onChange={e => updateField('photographerName', e.target.value)}>
+                   <select disabled={!canEdit} className="w-full text-sm border-b border-stone-200 py-1 focus:outline-none focus:border-amber-500 bg-transparent h-8 disabled:opacity-50" value={localData.photographerName} onChange={e => updateField('photographerName', e.target.value)}>
                         <option value="">Choisir...</option>
                         {staffList.map(s => <option key={s} value={s}>{s}</option>)}
                    </select>
                    </div>
-                   <div><label className="text-xs font-semibold text-stone-500 uppercase">Étape</label><div className="flex gap-2"><select className="flex-1 mt-1 p-2 bg-stone-50 border rounded-lg text-sm focus:ring-2 focus:ring-amber-500 outline-none" value={localData.statusPhoto} onChange={e => updateField('statusPhoto', e.target.value as any)}>{Object.entries(PHOTO_STEPS).filter(([k]) => k !== 'none').map(([k, s]) => (<option key={k} value={k}>{s.label}</option>))}</select></div></div>
-                   <div><label className="text-xs font-semibold text-stone-500 uppercase flex items-center gap-1"><LinkIcon className="w-3 h-3"/> Lien Livraison</label><input className="w-full mt-1 p-2 bg-stone-50 border rounded-lg text-sm focus:ring-2 focus:ring-amber-500 outline-none" placeholder="https://..." value={localData.linkPhoto || ''} onChange={e => updateField('linkPhoto', e.target.value)} /></div>
+                   <div><label className="text-xs font-semibold text-stone-500 uppercase">Étape</label><div className="flex gap-2"><select disabled={!canEdit} className="flex-1 mt-1 p-2 bg-stone-50 border rounded-lg text-sm focus:ring-2 focus:ring-amber-500 outline-none disabled:opacity-50" value={localData.statusPhoto} onChange={e => updateField('statusPhoto', e.target.value as any)}>{Object.entries(PHOTO_STEPS).filter(([k]) => k !== 'none').map(([k, s]) => (<option key={k} value={k}>{s.label}</option>))}</select></div></div>
+                   <div><label className="text-xs font-semibold text-stone-500 uppercase flex items-center gap-1"><LinkIcon className="w-3 h-3"/> Lien Livraison</label><input disabled={!canEdit} className="w-full mt-1 p-2 bg-stone-50 border rounded-lg text-sm focus:ring-2 focus:ring-amber-500 outline-none disabled:opacity-50" placeholder="https://..." value={localData.linkPhoto || ''} onChange={e => updateField('linkPhoto', e.target.value)} /></div>
                  </div>
                </div>
              )}
@@ -945,13 +972,13 @@ function ProjectEditor({ project, isSuperAdmin, staffList }: { project: Project,
                  <div className="flex items-center justify-between mb-4"><h4 className="font-bold text-stone-700 flex items-center gap-2"><Video className="w-4 h-4 text-sky-500"/> Vidéo</h4><span className="text-xs font-bold bg-sky-100 text-sky-700 px-2 py-1 rounded-full">{localData.progressVideo}%</span></div>
                  <div className="space-y-3">
                    <div><label className="text-xs font-semibold text-stone-500 uppercase">Vidéaste</label>
-                   <select className="w-full text-sm border-b border-stone-200 py-1 focus:outline-none focus:border-sky-500 bg-transparent h-8" value={localData.videographerName} onChange={e => updateField('videographerName', e.target.value)}>
+                   <select disabled={!canEdit} className="w-full text-sm border-b border-stone-200 py-1 focus:outline-none focus:border-sky-500 bg-transparent h-8 disabled:opacity-50" value={localData.videographerName} onChange={e => updateField('videographerName', e.target.value)}>
                         <option value="">Choisir...</option>
                         {staffList.map(s => <option key={s} value={s}>{s}</option>)}
                    </select>
                    </div>
-                   <div><label className="text-xs font-semibold text-stone-500 uppercase">Étape</label><div className="flex gap-2"><select className="flex-1 mt-1 p-2 bg-stone-50 border rounded-lg text-sm focus:ring-2 focus:ring-sky-500 outline-none" value={localData.statusVideo} onChange={e => updateField('statusVideo', e.target.value as any)}>{Object.entries(VIDEO_STEPS).filter(([k]) => k !== 'none').map(([k, s]) => (<option key={k} value={k}>{s.label}</option>))}</select></div></div>
-                   <div><label className="text-xs font-semibold text-stone-500 uppercase flex items-center gap-1"><LinkIcon className="w-3 h-3"/> Lien Livraison</label><input className="w-full mt-1 p-2 bg-stone-50 border rounded-lg text-sm focus:ring-2 focus:ring-sky-500 outline-none" placeholder="https://..." value={localData.linkVideo || ''} onChange={e => updateField('linkVideo', e.target.value)} /></div>
+                   <div><label className="text-xs font-semibold text-stone-500 uppercase">Étape</label><div className="flex gap-2"><select disabled={!canEdit} className="flex-1 mt-1 p-2 bg-stone-50 border rounded-lg text-sm focus:ring-2 focus:ring-sky-500 outline-none disabled:opacity-50" value={localData.statusVideo} onChange={e => updateField('statusVideo', e.target.value as any)}>{Object.entries(VIDEO_STEPS).filter(([k]) => k !== 'none').map(([k, s]) => (<option key={k} value={k}>{s.label}</option>))}</select></div></div>
+                   <div><label className="text-xs font-semibold text-stone-500 uppercase flex items-center gap-1"><LinkIcon className="w-3 h-3"/> Lien Livraison</label><input disabled={!canEdit} className="w-full mt-1 p-2 bg-stone-50 border rounded-lg text-sm focus:ring-2 focus:ring-sky-500 outline-none disabled:opacity-50" placeholder="https://..." value={localData.linkVideo || ''} onChange={e => updateField('linkVideo', e.target.value)} /></div>
                  </div>
                </div>
              )}
@@ -959,8 +986,7 @@ function ProjectEditor({ project, isSuperAdmin, staffList }: { project: Project,
 
            {/* --- CHAT ADMIN LIVE --- */}
            <div className="mt-8">
-               {/* Important: On passe le projet LIVE pour que les messages soient synchronisés */}
-               <ChatBox project={project} userType="admin" />
+               <ChatBox project={project} userType="admin" disabled={!canEdit} />
            </div>
            
            <div className="flex justify-between items-center pt-6 mt-6 border-t border-stone-200">
@@ -969,7 +995,7 @@ function ProjectEditor({ project, isSuperAdmin, staffList }: { project: Project,
              ) : <div></div>}
              <div className="flex gap-3">
                {hasChanges && <button onClick={() => { setLocalData(project); setHasChanges(false); }} className="px-4 py-2 text-stone-600 hover:bg-stone-100 rounded-lg text-sm">Annuler</button>}
-               <button onClick={handleSave} disabled={!hasChanges} className={`px-6 py-2 rounded-lg font-medium shadow-sm transition-all text-sm ${hasChanges ? 'bg-blue-600 text-white hover:bg-blue-700 hover:shadow-md' : 'bg-stone-200 text-stone-400 cursor-not-allowed'}`}>Enregistrer</button>
+               {canEdit && <button onClick={handleSave} disabled={!hasChanges} className={`px-6 py-2 rounded-lg font-medium shadow-sm transition-all text-sm ${hasChanges ? 'bg-blue-600 text-white hover:bg-blue-700 hover:shadow-md' : 'bg-stone-200 text-stone-400 cursor-not-allowed'}`}>Enregistrer</button>}
              </div>
            </div>
         </div>
