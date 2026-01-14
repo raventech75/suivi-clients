@@ -24,6 +24,11 @@ import {
   getStorage, ref, uploadBytes, getDownloadURL 
 } from 'firebase/storage';
 
+// --- DÉCLARATION DES GLOBALES (Le Fix est ici) ---
+declare const __firebase_config: string | undefined;
+declare const __initial_auth_token: string | undefined;
+declare const __app_id: string | undefined;
+
 // --- Configuration Firebase ---
 const getFirebaseConfig = () => {
   if (typeof __firebase_config !== 'undefined') {
@@ -43,12 +48,13 @@ const app = !getApps().length ? initializeApp(getFirebaseConfig()) : getApp();
 const auth = getAuth(app);
 const db = getFirestore(app);
 const storage = getStorage(app);
+const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
 
 // --- CONFIGURATION ---
 const MAKE_WEBHOOK_URL = "https://hook.eu2.make.com/iwf8nbt3tywmywp6u89xgn7e2nar0bbs"; 
 const SUPER_ADMINS = ["admin@raventech.fr", "irzzenproductions@gmail.com"]; 
 const STRIPE_ARCHIVE_LINK = "https://buy.stripe.com/3cI3cv3jq2j37x9eFy5gc0b";
-const STRIPE_PRIORITY_LINK = "https://buy.stripe.com/VOTRE_LIEN_PRIORITE"; // Mettre le vrai lien ici
+const STRIPE_PRIORITY_LINK = "https://buy.stripe.com/VOTRE_LIEN_PRIORITE"; 
 
 const DEFAULT_STAFF = ["Feridun", "Volkan", "Ali", "Steeven", "Taner", "Yunus", "Emir", "Serife"];
 const ALBUM_FORMATS = ["30x20", "30x30", "40x30", "40x30 + 2x 18x24", "Autre"];
