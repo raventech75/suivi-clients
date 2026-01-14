@@ -108,3 +108,17 @@ export interface Project {
   createdAt: any;
   lastUpdated?: any;
 }
+
+export interface Project {
+  id: string;
+  clientNames: string;
+  // ... (tous les autres champs)
+  isPriority?: boolean; 
+  fastTrackActivationDate?: any;
+  
+  history?: HistoryLog[];
+  isArchived?: boolean; // 👈 AJOUTEZ CETTE LIGNE
+
+  createdAt: any;
+  lastUpdated?: any;
+}

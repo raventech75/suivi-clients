@@ -1,6 +1,6 @@
 'use client';
 import React, { useState } from 'react';
-import { Users, Lock, Download, Settings, LogOut, Plus, Trash2, Search as SearchIcon, BarChart3 } from 'lucide-react';
+import { Users, Lock, Download, Settings, LogOut, Plus, Trash2, Search as SearchIcon, BarChart3, Archive } from 'lucide-react';
 import { signInWithEmailAndPassword } from 'firebase/auth';
 import { collection, addDoc, setDoc, doc, serverTimestamp } from 'firebase/firestore';
 import { auth, db, appId } from '../lib/firebase';
@@ -8,7 +8,8 @@ import { COLLECTION_NAME, SETTINGS_COLLECTION, SUPER_ADMINS, Project } from '../
 import ProjectEditor from './ProjectEditor';
 
 export default function AdminDashboard({ projects, user, onLogout, staffList, setStaffList, onStats }: { projects: Project[], user: any, onLogout: () => void, staffList: string[], setStaffList: any, onStats: () => void }) {
-  const [filter, setFilter] = useState<'all' | 'active' | 'completed' | 'late' | 'urgent'>('all');
+  // AJOUT DU FILTRE 'archived'
+  const [filter, setFilter] = useState<'all' | 'active' | 'completed' | 'late' | 'urgent' | 'archived'>('all');
   const [searchTerm, setSearchTerm] = useState('');
   const [isAdding, setIsAdding] = useState(false);
   const [showTeamModal, setShowTeamModal] = useState(false);
@@ -26,6 +27,7 @@ export default function AdminDashboard({ projects, user, onLogout, staffList, se
 
   // --- LOGIQUE COMPTEURS ---
   const getProjectStatus = (p: Project) => {
+      if (p.isArchived) return 'archived'; // Priorité à l'archive
       const now = Date.now();
       const wedDate = new Date(p.weddingDate).getTime();
       const isDone = (p.statusPhoto === 'delivered' || p.statusPhoto === 'none') && (p.statusVideo === 'delivered' || p.statusVideo === 'none');
@@ -37,10 +39,12 @@ export default function AdminDashboard({ projects, user, onLogout, staffList, se
   };
 
   const counts = {
-    all: projects.length,
-    active: projects.filter(p => getProjectStatus(p) === 'active').length,
-    late: projects.filter(p => getProjectStatus(p) === 'late').length,
-    urgent: projects.filter(p => getProjectStatus(p) === 'urgent').length,
+    // 'all' ne compte QUE les actifs non archivés
+    all: projects.filter(p => !p.isArchived).length,
+    active: projects.filter(p => !p.isArchived && getProjectStatus(p) === 'active').length,
+    late: projects.filter(p => !p.isArchived && getProjectStatus(p) === 'late').length,
+    urgent: projects.filter(p => !p.isArchived && getProjectStatus(p) === 'urgent').length,
+    archived: projects.filter(p => p.isArchived).length
   };
 
   const exportCSV = () => {
@@ -73,7 +77,7 @@ export default function AdminDashboard({ projects, user, onLogout, staffList, se
       const list = staffList.filter(m => m !== member);
       setStaffList(list);
       const colPath = typeof appId !== 'undefined' ? `artifacts/${appId}/public/data/${SETTINGS_COLLECTION}` : SETTINGS_COLLECTION;
-      await setDoc(doc(db, colPath, 'general'), {staff:list}, {merge:true});
+      await setDoc(doc(db, colPath, 'general'), {staff:list}, {merge:true}); 
   };
   
   const createProject = async (e:any) => {
@@ -103,7 +107,6 @@ export default function AdminDashboard({ projects, user, onLogout, staffList, se
         <div className="flex items-center gap-3"><div className="bg-stone-900 text-white p-2 rounded-lg"><Users className="w-5 h-5" /></div><h1 className="font-bold text-stone-900 text-lg">Dashboard</h1></div>
         <div className="flex gap-2">
           {isSuperAdmin && <button onClick={exportCSV} className="p-2 border rounded-lg hover:bg-stone-50 text-stone-600" title="Export CSV"><Download className="w-5 h-5"/></button>}
-          {/* BOUTON STATS AJOUTÉ ICI 👇 */}
           {isSuperAdmin && <button onClick={onStats} className="p-2 border rounded-lg hover:bg-stone-50 text-stone-600" title="Statistiques"><BarChart3 className="w-5 h-5"/></button>}
           
           <button onClick={() => setShowTeamModal(true)} className="p-2 border rounded-lg hover:bg-stone-50 text-stone-600"><Settings className="w-5 h-5"/></button>
@@ -120,6 +123,10 @@ export default function AdminDashboard({ projects, user, onLogout, staffList, se
                 <button onClick={()=>setFilter('active')} className={`px-4 py-2 rounded-full text-sm font-bold whitespace-nowrap transition-colors ${filter==='active'?'bg-blue-600 text-white':'bg-white text-stone-500 border border-stone-200'}`}>En cours ({counts.active})</button>
                 <button onClick={()=>setFilter('late')} className={`px-4 py-2 rounded-full text-sm font-bold whitespace-nowrap transition-colors ${filter==='late'?'bg-orange-500 text-white':'bg-white text-stone-500 border border-stone-200'}`}>Attention ({counts.late})</button>
                 <button onClick={()=>setFilter('urgent')} className={`px-4 py-2 rounded-full text-sm font-bold whitespace-nowrap transition-colors ${filter==='urgent'?'bg-red-600 text-white':'bg-white text-stone-500 border border-stone-200'}`}>Urgent ({counts.urgent})</button>
+                
+                {/* ONGLETS SEPARATEUR */}
+                <div className="w-px bg-stone-300 mx-2"></div>
+                <button onClick={()=>setFilter('archived')} className={`px-4 py-2 rounded-full text-sm font-bold whitespace-nowrap transition-colors flex items-center gap-2 ${filter==='archived'?'bg-stone-400 text-white':'bg-stone-200 text-stone-500 hover:bg-stone-300'}`}><Archive className="w-4 h-4"/> Archives ({counts.archived})</button>
             </div>
             <div className="relative w-full md:w-64">
                 <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-stone-400"/>
@@ -130,13 +137,22 @@ export default function AdminDashboard({ projects, user, onLogout, staffList, se
         {/* LISTE VERTICALE ÉPURÉE */}
         <div className="flex flex-col gap-3">
             {projects.filter(p => {
-                const status = getProjectStatus(p);
                 const matchesSearch = p.clientNames.toLowerCase().includes(searchTerm.toLowerCase());
                 if(!matchesSearch) return false;
+
+                // Si on est dans l'onglet ARCHIVES, on ne montre QUE les archivés
+                if (filter === 'archived') return p.isArchived;
+
+                // Pour tous les autres onglets, on CACHE les archivés
+                if (p.isArchived) return false;
+
+                const status = getProjectStatus(p);
                 if(filter === 'all') return true;
                 if(filter === 'completed') return status === 'completed';
                 return status === filter;
             }).map(p => <ProjectEditor key={p.id} project={p} isSuperAdmin={isSuperAdmin} staffList={staffList} user={user} />)}
+            
+            {projects.length === 0 && <div className="text-center py-10 text-stone-400">Aucun dossier trouvé.</div>}
         </div>
       </main>
 
