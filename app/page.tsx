@@ -52,7 +52,7 @@ const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
 const MAKE_WEBHOOK_URL = "https://hook.eu2.make.com/iwf8nbt3tywmywp6u89xgn7e2nar0bbs"; 
 const SUPER_ADMINS = ["admin@raventech.fr", "irzzenproductions@gmail.com"]; 
 const STRIPE_ARCHIVE_LINK = "https://buy.stripe.com/3cI3cv3jq2j37x9eFy5gc0b";
-const STRIPE_PRIORITY_LINK = "https://buy.stripe.com/VOTRE_LIEN_PRIORITE";
+const STRIPE_PRIORITY_LINK = "https://buy.stripe.com/fZu4gz07eaPzcRt54Y5gc0c";
 
 const DEFAULT_STAFF = ["Feridun", "Volkan", "Ali", "Steeven", "Taner", "Yunus", "Emir", "Serife"];
 const ALBUM_FORMATS = ["30x20", "30x30", "40x30", "40x30 + 2x 18x24", "Autre"];
