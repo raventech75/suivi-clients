@@ -138,15 +138,83 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, user }
   };
 
   const save = async () => {
-      // 🛑 VALIDATION : DATE LIVRAISON OBLIGATOIRE
+      console.log("💾 [DEBUG] Bouton Enregistrer cliqué");
+
+      // 1. Validation Date
       if (localData.statusPhoto !== 'none' && localData.statusPhoto !== 'waiting' && !localData.estimatedDeliveryPhoto) {
-          alert("❌ Attention : Vous devez indiquer une date de livraison prévue pour la PHOTO avant d'enregistrer.");
+          alert("❌ Date livraison Photo manquante");
           return;
       }
       if (localData.statusVideo !== 'none' && localData.statusVideo !== 'waiting' && !localData.estimatedDeliveryVideo) {
-          alert("❌ Attention : Vous devez indiquer une date de livraison prévue pour la VIDÉO avant d'enregistrer.");
+          alert("❌ Date livraison Vidéo manquante");
           return;
       }
+
+      // 2. Sauvegarde Firebase
+      const changesList = detectChanges();
+      let updatedHistory = [...(localData.history || [])];
+      if (changesList.length > 0) {
+          updatedHistory = [{
+              date: new Date().toISOString(),
+              user: user.email ? user.email.split('@')[0] : 'Inconnu',
+              action: changesList.join(' | ')
+          }, ...updatedHistory];
+      }
+      
+      const finalData = { ...localData, history: updatedHistory, lastUpdated: serverTimestamp() };
+      const colPath = typeof appId !== 'undefined' ? `artifacts/${appId}/public/data/${COLLECTION_NAME}` : COLLECTION_NAME;
+      
+      console.log("⏳ [DEBUG] Envoi vers Firebase...");
+      await updateDoc(doc(db, colPath, project.id), finalData);
+      console.log("✅ [DEBUG] Firebase mis à jour avec succès.");
+
+      // 3. Logique Webhook (C'est ici qu'on vérifie)
+      const hasPhotoChanged = localData.statusPhoto !== project.statusPhoto;
+      const hasVideoChanged = localData.statusVideo !== project.statusVideo;
+      
+      console.log("🧐 [DEBUG] Vérification conditions Webhook :");
+      console.log(`- Changement Photo ? ${hasPhotoChanged} (Avant: ${project.statusPhoto} -> Après: ${localData.statusPhoto})`);
+      console.log(`- Changement Vidéo ? ${hasVideoChanged} (Avant: ${project.statusVideo} -> Après: ${localData.statusVideo})`);
+      console.log(`- Email Client présent ? ${localData.clientEmail}`);
+
+      if (hasPhotoChanged || hasVideoChanged) {
+          if (localData.clientEmail && localData.clientEmail.includes('@')) {
+              console.log("🚀 [DEBUG] Conditions remplies ! Tentative d'envoi vers Make...");
+              console.log("👉 URL:", MAKE_WEBHOOK_URL);
+              
+              try {
+                  const response = await fetch(MAKE_WEBHOOK_URL, {
+                      method: 'POST', 
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ 
+                          type: 'step_update', 
+                          clientName: localData.clientNames, 
+                          clientEmail: localData.clientEmail, 
+                          projectCode: localData.code,
+                          managerEmail: localData.managerEmail,
+                          photographerEmail: localData.photographerEmail,
+                          videographerEmail: localData.videographerEmail,
+                          stepName: hasPhotoChanged ? PHOTO_STEPS[localData.statusPhoto].label : VIDEO_STEPS[localData.statusVideo].label, 
+                          url: window.location.origin 
+                      })
+                  });
+                  console.log("🎉 [DEBUG] Réponse Make :", response.status, response.statusText);
+                  alert("Sauvegarde + Notification envoyée !");
+              } catch (error) {
+                  console.error("❌ [DEBUG] Erreur réseau vers Make :", error);
+                  alert("Erreur d'envoi vers Make (voir console)");
+              }
+          } else {
+              console.warn("⚠️ [DEBUG] Annulé : Pas d'email client valide.");
+              alert("Sauvegardé, mais PAS de notification (Email client manquant)");
+          }
+      } else {
+          console.log("ℹ️ [DEBUG] Annulé : Aucun changement de statut détecté.");
+          alert("Sauvegardé (Aucun changement d'étape détecté)");
+      }
+      
+      setHasChanges(false); setIsExpanded(false);
+  };
 
       const changesList = detectChanges();
       let updatedHistory = [...(localData.history || [])];
