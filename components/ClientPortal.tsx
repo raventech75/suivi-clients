@@ -49,14 +49,12 @@ export default function ClientPortal({ projects, onBack }: { projects: Project[]
       setSavingMusic(false);
   };
 
-  // 👇 CONFIRMATION SPÉCIFIQUE PHOTO
   const confirmPhoto = async () => {
       if(!foundProject || !confirm("⚠️ ATTENTION :\n\nEn confirmant, vous certifiez avoir téléchargé TOUS vos fichiers photos sur un disque dur personnel.\n\nConfirmer la bonne réception ?")) return;
       const colPath = typeof appId !== 'undefined' ? `artifacts/${appId}/public/data/${COLLECTION_NAME}` : COLLECTION_NAME;
       await updateDoc(doc(db, colPath, foundProject.id), { deliveryConfirmedPhoto: true, deliveryConfirmedPhotoDate: serverTimestamp() });
   };
 
-  // 👇 CONFIRMATION SPÉCIFIQUE VIDÉO
   const confirmVideo = async () => {
       if(!foundProject || !confirm("⚠️ ATTENTION :\n\nEn confirmant, vous certifiez avoir téléchargé votre film sur un disque dur personnel.\n\nConfirmer la bonne réception ?")) return;
       const colPath = typeof appId !== 'undefined' ? `artifacts/${appId}/public/data/${COLLECTION_NAME}` : COLLECTION_NAME;
@@ -68,7 +66,6 @@ export default function ClientPortal({ projects, onBack }: { projects: Project[]
     setEmailCopied(true); setTimeout(() => setEmailCopied(false), 2000);
   };
 
-  // --- ECRAN PROJET (Connecté) ---
   if (foundProject) {
     const isBlocked = ((foundProject.totalPrice || 0) - (foundProject.depositAmount || 0)) > 0 && (foundProject.totalPrice || 0) > 0;
     const defaultImage = 'https://images.unsplash.com/photo-1519741497674-611481863552?auto=format&fit=crop&q=80';
@@ -76,7 +73,6 @@ export default function ClientPortal({ projects, onBack }: { projects: Project[]
     const canViewGallery = foundProject.statusPhoto === 'delivered' && !isBlocked && foundProject.linkPhoto && foundProject.linkPhoto.length > 5;
     const canViewVideo = foundProject.statusVideo === 'delivered' && !isBlocked && foundProject.linkVideo && foundProject.linkVideo.length > 5;
     
-    // On vérifie s'il y a au moins un élément livré pour afficher le bandeau d'urgence
     const hasDelivery = foundProject.statusPhoto === 'delivered' || foundProject.statusVideo === 'delivered';
     const allConfirmed = foundProject.deliveryConfirmedPhoto && foundProject.deliveryConfirmedVideo;
 
@@ -91,7 +87,6 @@ export default function ClientPortal({ projects, onBack }: { projects: Project[]
         
         <div className="max-w-4xl mx-auto px-4 -mt-16 space-y-8 relative z-10">
           
-          {/* 🚨 BANDEAU D'URGENCE ROUGE (Apparaît si livré mais pas encore tout confirmé) */}
           {hasDelivery && !allConfirmed && (
               <div className="bg-red-600 text-white p-6 rounded-2xl shadow-xl border-2 border-red-400 flex flex-col md:flex-row gap-4 items-start animate-fade-in">
                   <div className="bg-white/20 p-3 rounded-full shrink-0">
@@ -118,7 +113,6 @@ export default function ClientPortal({ projects, onBack }: { projects: Project[]
               </div>
           )}
 
-          {/* ÉQUIPE DÉDIÉE */}
           {(foundProject.managerName || foundProject.photographerName || foundProject.videographerName) && (
               <div className="bg-white p-6 rounded-2xl border border-stone-200 shadow-md">
                   <h3 className="font-bold text-lg text-stone-800 flex items-center gap-2 mb-4"><Users className="w-5 h-5 text-amber-500"/> Votre Équipe RavenTech</h3>
@@ -145,21 +139,21 @@ export default function ClientPortal({ projects, onBack }: { projects: Project[]
               </div>
           )}
 
-          {/* CARTES PHOTO / VIDEO AVEC CONFIRMATION DISTINCTE */}
           <div className="grid md:grid-cols-2 gap-6">
               
-              {/* --- CARTE PHOTO --- */}
               {foundProject.statusPhoto !== 'none' && (
                 <div className="bg-white rounded-2xl p-6 shadow-md border border-stone-100 flex flex-col h-full">
                   <div className="flex items-center gap-4 mb-4"><div className="w-12 h-12 bg-amber-100 text-amber-600 rounded-xl flex items-center justify-center"><ImageIcon className="w-6 h-6"/></div><h3 className="font-bold text-xl">Photos</h3></div>
                   <div className="mb-4 flex-1">
                       <div className="flex justify-between text-sm font-bold text-stone-500 mb-1"><span>Progression</span><span>{foundProject.progressPhoto}%</span></div>
                       <div className="h-3 bg-stone-100 rounded-full overflow-hidden"><div className="h-full bg-amber-500 transition-all duration-1000" style={{ width: `${foundProject.progressPhoto}%` }} /></div>
-                      <p className="text-right text-xs mt-1 text-stone-400">{PHOTO_STEPS[foundProject.statusPhoto].label}</p>
+                      
+                      {/* 👇 CORRECTIF DE SÉCURITÉ ICI (V49) */}
+                      <p className="text-right text-xs mt-1 text-stone-400">{(PHOTO_STEPS as any)[foundProject.statusPhoto]?.label || foundProject.statusPhoto}</p>
+                      
                       {foundProject.estimatedDeliveryPhoto && <div className="mt-4 bg-amber-50 text-amber-800 text-xs p-3 rounded-lg flex items-center gap-2"><Calendar className="w-4 h-4"/> Livraison estimée : <strong>{formatDateFR(foundProject.estimatedDeliveryPhoto)}</strong></div>}
                   </div>
                   
-                  {/* ACTIONS PHOTO */}
                   <div className="space-y-3 mt-auto pt-4 border-t border-stone-50">
                       {canViewGallery ? (
                           <>
@@ -182,18 +176,19 @@ export default function ClientPortal({ projects, onBack }: { projects: Project[]
               </div>
               )}
 
-              {/* --- CARTE VIDEO --- */}
               {foundProject.statusVideo !== 'none' && (
                 <div className="bg-white rounded-2xl p-6 shadow-md border border-stone-100 flex flex-col h-full">
                   <div className="flex items-center gap-4 mb-4"><div className="w-12 h-12 bg-blue-100 text-blue-600 rounded-xl flex items-center justify-center"><Film className="w-6 h-6"/></div><h3 className="font-bold text-xl">Vidéo</h3></div>
                   <div className="mb-4 flex-1">
                       <div className="flex justify-between text-sm font-bold text-stone-500 mb-1"><span>Progression</span><span>{foundProject.progressVideo}%</span></div>
                       <div className="h-3 bg-stone-100 rounded-full overflow-hidden"><div className="h-full bg-blue-500 transition-all duration-1000" style={{ width: `${foundProject.progressVideo}%` }} /></div>
-                      <p className="text-right text-xs mt-1 text-stone-400">{VIDEO_STEPS[foundProject.statusVideo].label}</p>
+                      
+                      {/* 👇 CORRECTIF DE SÉCURITÉ ICI (V49) */}
+                      <p className="text-right text-xs mt-1 text-stone-400">{(VIDEO_STEPS as any)[foundProject.statusVideo]?.label || foundProject.statusVideo}</p>
+                      
                       {foundProject.estimatedDeliveryVideo && <div className="mt-4 bg-blue-50 text-blue-800 text-xs p-3 rounded-lg flex items-center gap-2"><Calendar className="w-4 h-4"/> Livraison estimée : <strong>{formatDateFR(foundProject.estimatedDeliveryVideo)}</strong></div>}
                   </div>
 
-                  {/* ACTIONS VIDEO */}
                   <div className="space-y-3 mt-auto pt-4 border-t border-stone-50">
                       {canViewVideo ? (
                           <>
@@ -217,7 +212,6 @@ export default function ClientPortal({ projects, onBack }: { projects: Project[]
               )}
           </div>
 
-          {/* ALBUMS */}
           {foundProject.albums && foundProject.albums.length > 0 && (
               <div className="bg-white p-6 rounded-2xl border border-stone-200 shadow-md">
                   <h3 className="font-bold text-lg text-stone-800 flex items-center gap-2 mb-4"><BookOpen className="w-5 h-5"/> Commandes Albums</h3>
@@ -259,7 +253,6 @@ export default function ClientPortal({ projects, onBack }: { projects: Project[]
     );
   }
 
-  // --- ECRAN DE CONNEXION (LOGIN) ---
   return (
     <div className="h-screen flex items-center justify-center bg-stone-100 p-4 relative">
        <button onClick={onBack} className="absolute top-6 left-6 p-3 bg-white rounded-full shadow-md text-stone-500 hover:text-stone-900 hover:scale-105 transition-all z-20">
