@@ -5,11 +5,11 @@ import {
   BookOpen, Trash2, Image as ImageIcon, CheckSquare, 
   Upload, Loader2, MapPin, FileText, Users, Calendar, Eye, Timer, Music, Briefcase, History, Archive, RefreshCw, UserCheck
 } from 'lucide-react';
-import { doc, updateDoc, deleteDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, updateDoc, deleteDoc, serverTimestamp, setDoc } from 'firebase/firestore'; // Ajout setDoc
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { db, storage, appId } from '../lib/firebase';
 import { 
-  COLLECTION_NAME, MAKE_WEBHOOK_URL, PHOTO_STEPS, 
+  COLLECTION_NAME, MAKE_WEBHOOK_URL, PHOTO_STEPS, SETTINGS_COLLECTION,
   VIDEO_STEPS, ALBUM_FORMATS, ALBUM_STATUSES, Project, HistoryLog 
 } from '../lib/config';
 import ChatBox from './ChatSystem';
@@ -24,14 +24,14 @@ const formatDateTimeFR = (dateString: string) => {
     return new Date(dateString).toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute:'2-digit' });
 };
 
-export default function ProjectEditor({ project, isSuperAdmin, staffList, user }: { project: Project, isSuperAdmin: boolean, staffList: string[], user: any }) {
+// 👇 ON RECOIT staffDirectory EN PROPS
+export default function ProjectEditor({ project, isSuperAdmin, staffList, staffDirectory, user }: { project: Project, isSuperAdmin: boolean, staffList: string[], staffDirectory: Record<string, string>, user: any }) {
   const [isExpanded, setIsExpanded] = useState(false);
   const [localData, setLocalData] = useState(project);
   const [hasChanges, setHasChanges] = useState(false);
   const [newAlbum, setNewAlbum] = useState({ name: 'Album', format: '30x30', price: 0 });
   const [uploading, setUploading] = useState(false);
   
-  // DRAG & DROP STATES
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -63,6 +63,20 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, user }
   }
 
   useEffect(() => { if (!hasChanges) setLocalData(project); }, [project, hasChanges]);
+
+  // --- LOGIQUE AUTO-COMPLÉTION INTELLIGENTE ---
+  const handleStaffChange = (roleNameKey: 'photographerName' | 'videographerName' | 'managerName', roleEmailKey: 'photographerEmail' | 'videographerEmail' | 'managerEmail', name: string) => {
+      // 1. On met à jour le nom
+      let newData = { ...localData, [roleNameKey]: name };
+      
+      // 2. Si un email est connu pour ce nom et que le champ email est vide, on le remplit
+      if (staffDirectory && staffDirectory[name] && !localData[roleEmailKey]) {
+          newData = { ...newData, [roleEmailKey]: staffDirectory[name] };
+      }
+      
+      setLocalData(newData);
+      setHasChanges(true);
+  };
 
   const updateField = (k: keyof Project, v: any) => { 
     if(!canEdit) return;
@@ -107,26 +121,16 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, user }
       updateField('albums', albums);
   };
 
-  // --- GESTION UPLOAD IMAGE (CLICK & DROP) ---
   const processFile = async (file: File) => {
     if (!canEdit) return;
     try {
       setUploading(true);
-      // Correction du chemin de stockage pour éviter les conflits
       const fileName = `${project.id}_${Date.now()}`; 
       let storageRef = ref(storage, `covers/${fileName}`);
-      
       await uploadBytes(storageRef, file);
       const url = await getDownloadURL(storageRef);
-      
-      // Mise à jour immédiate de l'état local pour affichage
       updateField('coverImage', url);
-    } catch (error: any) { 
-        alert(`Erreur upload: ${error.message}`); 
-    } finally { 
-        setUploading(false); 
-        setIsDragging(false); 
-    }
+    } catch (error: any) { alert(`Erreur upload: ${error.message}`); } finally { setUploading(false); setIsDragging(false); }
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -168,7 +172,6 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, user }
   };
 
   const save = async () => {
-      // Validation dates
       if (localData.statusPhoto !== 'none' && localData.statusPhoto !== 'waiting' && !localData.estimatedDeliveryPhoto) {
           alert("❌ Date livraison Photo manquante !"); return;
       }
@@ -203,6 +206,19 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, user }
           console.error("Erreur Sauvegarde:", error);
           alert("Erreur de connexion. Modifications non enregistrées.");
           return;
+      }
+
+      // --- APPRENTISSAGE : MISE A JOUR DE L'ANNUAIRE ---
+      // Si on a un nom ET un email, on met à jour le répertoire global
+      const newEntries: Record<string, string> = {};
+      if (localData.managerName && localData.managerEmail) newEntries[localData.managerName] = localData.managerEmail;
+      if (localData.photographerName && localData.photographerEmail) newEntries[localData.photographerName] = localData.photographerEmail;
+      if (localData.videographerName && localData.videographerEmail) newEntries[localData.videographerName] = localData.videographerEmail;
+
+      if (Object.keys(newEntries).length > 0) {
+          const settingsPath = typeof appId !== 'undefined' ? `artifacts/${appId}/public/data/${SETTINGS_COLLECTION}` : SETTINGS_COLLECTION;
+          // On fusionne avec l'existant
+          setDoc(doc(db, settingsPath, 'general'), { directory: newEntries }, { merge: true }).catch(console.error);
       }
       
       const hasPhotoChanged = localData.statusPhoto !== project.statusPhoto;
@@ -246,89 +262,36 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, user }
 
   return (
     <div className={`rounded-lg transition-all duration-200 mb-4 ${borderStyle} ${bgStyle}`}>
-        {/* ENTÊTE LIGNE (LISTE) */}
+        {/* ... (La partie Affichage reste identique à V39) ... */}
         <div className="p-4 flex items-center justify-between cursor-pointer" onClick={(e) => { if(!(e.target as HTMLElement).closest('.avatar-uploader')) setIsExpanded(!isExpanded); }}>
             <div className="flex items-center gap-4 flex-1">
-                
-                {/* 🔴 AVATAR UPLOADER (CORRIGÉ) */}
                 <div 
                     className={`avatar-uploader w-12 h-12 rounded-full flex items-center justify-center text-xs font-bold shrink-0 overflow-hidden relative group transition-all duration-200 border-2 cursor-pointer ${isDragging ? 'border-blue-500 bg-blue-50 scale-110 shadow-lg' : 'border-transparent bg-stone-100 text-stone-400'}`}
-                    onDragEnter={handleDrag}
-                    onDragLeave={handleDrag}
-                    onDragOver={handleDrag}
-                    onDrop={handleDrop}
+                    onDragEnter={handleDrag} onDragLeave={handleDrag} onDragOver={handleDrag} onDrop={handleDrop}
                     onClick={() => canEdit && fileInputRef.current?.click()}
                     title="Cliquez ou déposez une image"
                 >
                     <input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={handleFileChange} />
-                    
-                    {uploading ? (
-                        <Loader2 className="w-5 h-5 text-stone-500 animate-spin"/>
-                    ) : localData.coverImage ? ( // 👈 C'est ici que j'ai corrigé : localData au lieu de project
-                        <img src={localData.coverImage} className={`w-full h-full object-cover transition-opacity ${isDragging ? 'opacity-50' : ''}`}/>
-                    ) : (
-                        <span className="text-lg">{localData.clientNames.charAt(0)}</span>
-                    )}
-
-                    {/* OVERLAY AU SURVOL */}
-                    {canEdit && !uploading && (
-                        <div className={`absolute inset-0 bg-black/50 flex items-center justify-center transition-opacity ${isDragging ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>
-                            <Upload className="w-4 h-4 text-white"/>
-                        </div>
-                    )}
+                    {uploading ? <Loader2 className="w-5 h-5 text-stone-500 animate-spin"/> : localData.coverImage ? <img src={localData.coverImage} className={`w-full h-full object-cover transition-opacity ${isDragging ? 'opacity-50' : ''}`}/> : <span className="text-lg">{localData.clientNames.charAt(0)}</span>}
+                    {canEdit && !uploading && <div className={`absolute inset-0 bg-black/50 flex items-center justify-center transition-opacity ${isDragging ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}><Upload className="w-4 h-4 text-white"/></div>}
                 </div>
-                
-                {/* INFO PRINCIPALE */}
                 <div className="min-w-[180px]">
                     <div className="flex items-center gap-2">
                         <span className="font-bold text-stone-800 text-lg">{project.clientNames}</span>
-                        {localData.isPriority && !isFinished && !localData.isArchived && (
-                             <div className="flex items-center gap-1 bg-orange-500 text-white px-2 py-0.5 rounded-md text-xs font-black animate-pulse shadow-sm">
-                                <Rocket className="w-3 h-3"/> {daysRemaining >= 0 ? `J-${daysRemaining}` : `RETARD J+${Math.abs(daysRemaining)}`}
-                             </div>
-                        )}
+                        {localData.isPriority && !isFinished && !localData.isArchived && <div className="flex items-center gap-1 bg-orange-500 text-white px-2 py-0.5 rounded-md text-xs font-black animate-pulse shadow-sm"><Rocket className="w-3 h-3"/> {daysRemaining >= 0 ? `J-${daysRemaining}` : `RETARD J+${Math.abs(daysRemaining)}`}</div>}
                         {localData.isArchived && <span className="bg-stone-200 text-stone-500 px-2 py-0.5 rounded text-xs font-bold flex items-center gap-1"><Archive className="w-3 h-3"/> ARCHIVÉ</span>}
                     </div>
-                    <p className="text-xs text-stone-500 flex items-center gap-2 mt-1">
-                        <span className="bg-stone-100 text-stone-600 px-1.5 py-0.5 rounded font-mono font-bold">{project.code}</span>
-                        <span>•</span>
-                        <MapPin className="w-3 h-3"/> {project.weddingVenue || 'Lieu non défini'}
-                    </p>
+                    <p className="text-xs text-stone-500 flex items-center gap-2 mt-1"><span className="bg-stone-100 text-stone-600 px-1.5 py-0.5 rounded font-mono font-bold">{project.code}</span><span>•</span><MapPin className="w-3 h-3"/> {project.weddingVenue || 'Lieu non défini'}</p>
                 </div>
-
-                {/* INFO EQUIPE DANS LA BULLE */}
                 <div className="hidden lg:flex items-center gap-4 text-xs text-stone-500 border-l border-r border-stone-100 px-4">
-                    <div className="flex flex-col items-center w-16 text-center" title="Responsable Dossier">
-                        <UserCheck className="w-4 h-4 mb-1 text-purple-400"/>
-                        <span className="truncate w-full font-bold">{project.managerName || '-'}</span>
-                    </div>
-                    <div className="flex flex-col items-center w-16 text-center" title="Photographe">
-                        <Camera className="w-4 h-4 mb-1 text-amber-400"/>
-                        <span className="truncate w-full font-bold">{project.photographerName || '-'}</span>
-                    </div>
-                    <div className="flex flex-col items-center w-16 text-center" title="Vidéaste">
-                        <Video className="w-4 h-4 mb-1 text-blue-400"/>
-                        <span className="truncate w-full font-bold">{project.videographerName || '-'}</span>
-                    </div>
+                    <div className="flex flex-col items-center w-16 text-center" title="Responsable Dossier"><UserCheck className="w-4 h-4 mb-1 text-purple-400"/><span className="truncate w-full font-bold">{project.managerName || '-'}</span></div>
+                    <div className="flex flex-col items-center w-16 text-center" title="Photographe"><Camera className="w-4 h-4 mb-1 text-amber-400"/><span className="truncate w-full font-bold">{project.photographerName || '-'}</span></div>
+                    <div className="flex flex-col items-center w-16 text-center" title="Vidéaste"><Video className="w-4 h-4 mb-1 text-blue-400"/><span className="truncate w-full font-bold">{project.videographerName || '-'}</span></div>
                 </div>
-
-                {/* DATE */}
                 <div className="hidden md:block text-sm text-stone-500 font-mono bg-stone-50 px-2 py-1 rounded">{formatDateFR(project.weddingDate)}</div>
-                
-                {/* STATUTS */}
                 <div className="hidden md:flex gap-4">
-                    {project.statusPhoto !== 'none' && (
-                        <div className={`text-xs px-3 py-1.5 rounded-full font-bold flex flex-col items-center leading-tight ${project.statusPhoto === 'delivered' ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'} ${localData.isArchived ? 'opacity-50' : ''}`}>
-                            <span>PHOTO: {PHOTO_STEPS[project.statusPhoto].label}</span>
-                            {project.estimatedDeliveryPhoto && <span className="text-[10px] opacity-75">{formatDateFR(project.estimatedDeliveryPhoto)}</span>}
-                        </div>
-                    )}
-                    {project.statusVideo !== 'none' && (
-                        <div className={`text-xs px-3 py-1.5 rounded-full font-bold flex flex-col items-center leading-tight ${project.statusVideo === 'delivered' ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'} ${localData.isArchived ? 'opacity-50' : ''}`}>
-                            <span>VIDEO: {VIDEO_STEPS[project.statusVideo].label}</span>
-                            {project.estimatedDeliveryVideo && <span className="text-[10px] opacity-75">{formatDateFR(project.estimatedDeliveryVideo)}</span>}
-                        </div>
-                    )}
+                    {project.statusPhoto !== 'none' && <div className={`text-xs px-3 py-1.5 rounded-full font-bold flex flex-col items-center leading-tight ${project.statusPhoto === 'delivered' ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'} ${localData.isArchived ? 'opacity-50' : ''}`}><span>PHOTO: {PHOTO_STEPS[project.statusPhoto].label}</span>{project.estimatedDeliveryPhoto && <span className="text-[10px] opacity-75">{formatDateFR(project.estimatedDeliveryPhoto)}</span>}</div>}
+                    {project.statusVideo !== 'none' && <div className={`text-xs px-3 py-1.5 rounded-full font-bold flex flex-col items-center leading-tight ${project.statusVideo === 'delivered' ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'} ${localData.isArchived ? 'opacity-50' : ''}`}><span>VIDEO: {VIDEO_STEPS[project.statusVideo].label}</span>{project.estimatedDeliveryVideo && <span className="text-[10px] opacity-75">{formatDateFR(project.estimatedDeliveryVideo)}</span>}</div>}
                 </div>
             </div>
             <div className="flex items-center gap-4">
@@ -342,20 +305,16 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, user }
                 
                 <div className="flex flex-col md:flex-row justify-between items-center gap-4 bg-white p-4 rounded-xl border border-stone-100 shadow-sm">
                     <div className="flex items-center gap-4 w-full md:w-auto">
-                        <button onClick={toggleFastTrack} className={`flex-1 md:flex-none flex items-center justify-center gap-2 px-6 py-3 rounded-xl font-bold transition-all ${localData.isPriority ? 'bg-orange-500 text-white shadow-lg shadow-orange-200 transform scale-105' : 'bg-stone-100 text-stone-400 hover:bg-stone-200'}`}>
-                            <Rocket className="w-5 h-5"/> {localData.isPriority ? 'FAST TRACK ACTIF' : 'Activer Fast Track'}
-                        </button>
+                        <button onClick={toggleFastTrack} className={`flex-1 md:flex-none flex items-center justify-center gap-2 px-6 py-3 rounded-xl font-bold transition-all ${localData.isPriority ? 'bg-orange-500 text-white shadow-lg shadow-orange-200 transform scale-105' : 'bg-stone-100 text-stone-400 hover:bg-stone-200'}`}><Rocket className="w-5 h-5"/> {localData.isPriority ? 'FAST TRACK ACTIF' : 'Activer Fast Track'}</button>
                     </div>
                     <div className="flex gap-2 w-full md:w-auto items-center">
-                         <div className="px-4 py-2 bg-stone-100 rounded-lg font-mono text-sm font-bold text-stone-600 border border-stone-200">
-                             CODE : <span className="text-black select-all">{localData.code}</span>
-                         </div>
+                         <div className="px-4 py-2 bg-stone-100 rounded-lg font-mono text-sm font-bold text-stone-600 border border-stone-200">CODE : <span className="text-black select-all">{localData.code}</span></div>
                         <button onClick={invite} className="px-4 py-3 bg-white border border-stone-200 rounded-xl text-sm font-bold hover:bg-stone-50 flex items-center justify-center gap-2"><Mail className="w-4 h-4"/> Inviter</button>
                     </div>
                 </div>
 
                 <div className="grid lg:grid-cols-2 gap-8">
-                    {/* COLONNE GAUCHE */}
+                    {/* COLONNE GAUCHE (Infos) */}
                     <div className="space-y-6">
                         <div className="bg-white p-6 rounded-xl border border-stone-200 shadow-sm">
                             <h4 className="font-bold text-stone-800 mb-4 flex items-center gap-2"><Users className="w-5 h-5 text-stone-400"/> Fiche Mariés</h4>
@@ -369,7 +328,6 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, user }
                                     <div><label className="text-[10px] uppercase font-bold text-stone-400">Email 2</label><input disabled={!canEdit} className="w-full p-2 border rounded bg-stone-50" value={localData.clientEmail2 || ''} onChange={e=>updateField('clientEmail2', e.target.value)} /></div>
                                     <div><label className="text-[10px] uppercase font-bold text-stone-400">Tel 2</label><input disabled={!canEdit} className="w-full p-2 border rounded bg-stone-50" value={localData.clientPhone2 || ''} onChange={e=>updateField('clientPhone2', e.target.value)} /></div>
                                 </div>
-                                
                                 <div className="pt-2 border-t border-dashed mt-2">
                                     <div className="grid grid-cols-3 gap-2">
                                         <div className="col-span-1"><label className="text-[10px] uppercase font-bold text-stone-400">Date Mariage</label><input required type="date" disabled={!canEdit} className="w-full p-2 border rounded bg-stone-50" value={localData.weddingDate} onChange={e=>updateField('weddingDate', e.target.value)} /></div>
@@ -379,47 +337,43 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, user }
                                 </div>
                             </div>
                         </div>
-
                         <div className="bg-amber-50 p-6 rounded-xl border border-amber-100">
                             <h4 className="font-bold text-amber-800 mb-2 flex items-center gap-2"><FileText className="w-5 h-5"/> Notes Internes</h4>
                             <textarea disabled={!canEdit} className="w-full p-3 rounded-xl border border-amber-200 bg-white text-sm min-h-[100px]" placeholder="Allergies, infos importantes, VIP..." value={localData.adminNotes || ''} onChange={e=>updateField('adminNotes', e.target.value)} />
                         </div>
                     </div>
 
-                    {/* COLONNE DROITE */}
+                    {/* COLONNE DROITE (Equipe & Prod) */}
                     <div className="space-y-6">
+                        
+                        {/* 🧠 BLOC EQUIPE INTELLIGENT */}
                         <div className="bg-white p-6 rounded-xl border border-stone-200 shadow-sm">
                             <h4 className="font-bold text-stone-800 mb-4 flex items-center gap-2"><Briefcase className="w-5 h-5 text-stone-400"/> Équipe & Contact</h4>
                             <div className="space-y-4">
-                                {/* MANAGER */}
                                 <div className="p-3 bg-stone-50 rounded-lg border border-stone-100">
                                     <label className="text-[10px] uppercase font-bold text-purple-600 block mb-1">Responsable Dossier</label>
                                     <div className="flex gap-2">
-                                        <select disabled={!isSuperAdmin} className="w-1/3 p-2 border rounded bg-white text-sm" value={localData.managerName || ''} onChange={e=>updateField('managerName', e.target.value)}>
+                                        <select disabled={!isSuperAdmin} className="w-1/3 p-2 border rounded bg-white text-sm" value={localData.managerName || ''} onChange={e=>handleStaffChange('managerName', 'managerEmail', e.target.value)}>
                                             <option value="">-- Nom --</option>
                                             {staffList.map(s => <option key={s} value={s}>{s}</option>)}
                                         </select>
                                         <input disabled={!isSuperAdmin} className="flex-1 p-2 border rounded bg-white text-sm" value={localData.managerEmail || ''} onChange={e=>updateField('managerEmail', e.target.value)} placeholder="Email du responsable" />
                                     </div>
                                 </div>
-
-                                {/* PHOTOGRAPHE */}
                                 <div className="p-3 bg-stone-50 rounded-lg border border-stone-100">
                                     <label className="text-[10px] uppercase font-bold text-amber-600 block mb-1">Photographe J-J</label>
                                     <div className="flex gap-2">
-                                        <select disabled={!canEdit} className="w-1/3 p-2 border rounded bg-white text-sm" value={localData.photographerName || ''} onChange={e=>updateField('photographerName', e.target.value)}>
+                                        <select disabled={!canEdit} className="w-1/3 p-2 border rounded bg-white text-sm" value={localData.photographerName || ''} onChange={e=>handleStaffChange('photographerName', 'photographerEmail', e.target.value)}>
                                             <option value="">-- Nom --</option>
                                             {staffList.map(s => <option key={s} value={s}>{s}</option>)}
                                         </select>
                                         <input disabled={!canEdit} className="flex-1 p-2 border rounded bg-white text-sm" value={localData.photographerEmail || ''} onChange={e=>updateField('photographerEmail', e.target.value)} placeholder="Email Photographe" />
                                     </div>
                                 </div>
-
-                                {/* VIDEASTE */}
                                 <div className="p-3 bg-stone-50 rounded-lg border border-stone-100">
                                     <label className="text-[10px] uppercase font-bold text-blue-600 block mb-1">Vidéaste J-J</label>
                                     <div className="flex gap-2">
-                                        <select disabled={!canEdit} className="w-1/3 p-2 border rounded bg-white text-sm" value={localData.videographerName || ''} onChange={e=>updateField('videographerName', e.target.value)}>
+                                        <select disabled={!canEdit} className="w-1/3 p-2 border rounded bg-white text-sm" value={localData.videographerName || ''} onChange={e=>handleStaffChange('videographerName', 'videographerEmail', e.target.value)}>
                                             <option value="">-- Nom --</option>
                                             {staffList.map(s => <option key={s} value={s}>{s}</option>)}
                                         </select>
@@ -429,16 +383,14 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, user }
                             </div>
                         </div>
 
+                        {/* ... (La suite Prod, Albums, Brief reste identique) ... */}
                         <div className="bg-white p-6 rounded-xl border border-stone-200 shadow-sm">
                             <h4 className="font-bold text-stone-800 mb-4 flex items-center gap-2"><Camera className="w-5 h-5 text-stone-400"/> Production</h4>
                             <div className="mb-6 pb-6 border-b border-stone-100">
                                 <div className="flex justify-between mb-2"><span className="font-bold text-stone-600">Photo</span><span className="text-xs bg-stone-100 px-2 py-1 rounded">{localData.progressPhoto}%</span></div>
                                 <select disabled={!canEdit} className="w-full p-2 border rounded mb-2 text-sm font-medium" value={localData.statusPhoto} onChange={e=>updateField('statusPhoto', e.target.value)}>{Object.entries(PHOTO_STEPS).map(([k,v])=><option key={k} value={k}>{v.label}</option>)}</select>
                                 <div className="flex gap-2 items-center">
-                                    <div className="w-1/3">
-                                        <label className="text-[10px] font-bold text-stone-400">PRÉVU <span className="text-red-500">*</span></label>
-                                        <input disabled={!canEdit} type="date" className={`w-full p-2 border rounded text-xs ${!localData.estimatedDeliveryPhoto && localData.statusPhoto !== 'none' ? 'border-red-400 bg-red-50' : 'bg-yellow-50 border-yellow-200'}`} value={localData.estimatedDeliveryPhoto || ''} onChange={e=>updateField('estimatedDeliveryPhoto', e.target.value)}/>
-                                    </div>
+                                    <div className="w-1/3"><label className="text-[10px] font-bold text-stone-400">PRÉVU <span className="text-red-500">*</span></label><input disabled={!canEdit} type="date" className={`w-full p-2 border rounded text-xs ${!localData.estimatedDeliveryPhoto && localData.statusPhoto !== 'none' ? 'border-red-400 bg-red-50' : 'bg-yellow-50 border-yellow-200'}`} value={localData.estimatedDeliveryPhoto || ''} onChange={e=>updateField('estimatedDeliveryPhoto', e.target.value)}/></div>
                                     <div className="flex-1"><label className="text-[10px] font-bold text-stone-400">LIEN GALERIE</label><input disabled={!canEdit} className="w-full p-2 border rounded text-xs" placeholder="https://..." value={localData.linkPhoto || ''} onChange={e=>updateField('linkPhoto', e.target.value)}/></div>
                                 </div>
                             </div>
@@ -446,16 +398,12 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, user }
                                 <div className="flex justify-between mb-2"><span className="font-bold text-stone-600">Vidéo</span><span className="text-xs bg-stone-100 px-2 py-1 rounded">{localData.progressVideo}%</span></div>
                                 <select disabled={!canEdit} className="w-full p-2 border rounded mb-2 text-sm font-medium" value={localData.statusVideo} onChange={e=>updateField('statusVideo', e.target.value)}>{Object.entries(VIDEO_STEPS).map(([k,v])=><option key={k} value={k}>{v.label}</option>)}</select>
                                 <div className="flex gap-2 items-center">
-                                    <div className="w-1/3">
-                                        <label className="text-[10px] font-bold text-stone-400">PRÉVU <span className="text-red-500">*</span></label>
-                                        <input disabled={!canEdit} type="date" className={`w-full p-2 border rounded text-xs ${!localData.estimatedDeliveryVideo && localData.statusVideo !== 'none' ? 'border-red-400 bg-red-50' : 'bg-yellow-50 border-yellow-200'}`} value={localData.estimatedDeliveryVideo || ''} onChange={e=>updateField('estimatedDeliveryVideo', e.target.value)}/>
-                                    </div>
+                                    <div className="w-1/3"><label className="text-[10px] font-bold text-stone-400">PRÉVU <span className="text-red-500">*</span></label><input disabled={!canEdit} type="date" className={`w-full p-2 border rounded text-xs ${!localData.estimatedDeliveryVideo && localData.statusVideo !== 'none' ? 'border-red-400 bg-red-50' : 'bg-yellow-50 border-yellow-200'}`} value={localData.estimatedDeliveryVideo || ''} onChange={e=>updateField('estimatedDeliveryVideo', e.target.value)}/></div>
                                     <div className="flex-1"><label className="text-[10px] font-bold text-stone-400">LIEN VIDÉO</label><input disabled={!canEdit} className="w-full p-2 border rounded text-xs" placeholder="https://..." value={localData.linkVideo || ''} onChange={e=>updateField('linkVideo', e.target.value)}/></div>
                                 </div>
                             </div>
                         </div>
 
-                        {/* ... (Albums et Brief Client restent identiques à V33) ... */}
                         <div className="bg-white p-6 rounded-xl border border-stone-200 shadow-sm">
                             <h4 className="font-bold text-stone-800 mb-4 flex items-center gap-2"><BookOpen className="w-5 h-5 text-stone-400"/> Albums</h4>
                             <div className="space-y-2">

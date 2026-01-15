@@ -7,8 +7,8 @@ import { auth, db, appId } from '../lib/firebase';
 import { COLLECTION_NAME, SETTINGS_COLLECTION, SUPER_ADMINS, Project } from '../lib/config';
 import ProjectEditor from './ProjectEditor';
 
-export default function AdminDashboard({ projects, user, onLogout, staffList, setStaffList, onStats }: { projects: Project[], user: any, onLogout: () => void, staffList: string[], setStaffList: any, onStats: () => void }) {
-  // AJOUT DU FILTRE 'archived'
+// 👇 ON RECOIT staffDirectory EN PROPS
+export default function AdminDashboard({ projects, user, onLogout, staffList, staffDirectory, setStaffList, onStats }: { projects: Project[], user: any, onLogout: () => void, staffList: string[], staffDirectory: Record<string, string>, setStaffList: any, onStats: () => void }) {
   const [filter, setFilter] = useState<'all' | 'active' | 'completed' | 'late' | 'urgent' | 'archived'>('all');
   const [searchTerm, setSearchTerm] = useState('');
   const [isAdding, setIsAdding] = useState(false);
@@ -25,21 +25,24 @@ export default function AdminDashboard({ projects, user, onLogout, staffList, se
 
   const isSuperAdmin = SUPER_ADMINS.includes(user?.email);
 
-  // --- LOGIQUE COMPTEURS ---
+  // --- FONCTION INTELLIGENTE : REMPLIT L'EMAIL SI CONNU ---
+  const handleManagerChange = (name: string) => {
+      const knownEmail = staffDirectory[name] || '';
+      setNewProject({ ...newProject, managerName: name, managerEmail: knownEmail });
+  };
+
   const getProjectStatus = (p: Project) => {
-      if (p.isArchived) return 'archived'; // Priorité à l'archive
+      if (p.isArchived) return 'archived';
       const now = Date.now();
       const wedDate = new Date(p.weddingDate).getTime();
       const isDone = (p.statusPhoto === 'delivered' || p.statusPhoto === 'none') && (p.statusVideo === 'delivered' || p.statusVideo === 'none');
-      
       if (isDone) return 'completed';
-      if (now > wedDate + (60 * 24 * 3600 * 1000)) return 'urgent'; // > 60j
-      if (now > wedDate + (15 * 24 * 3600 * 1000)) return 'late'; // > 15j
+      if (now > wedDate + (60 * 24 * 3600 * 1000)) return 'urgent';
+      if (now > wedDate + (15 * 24 * 3600 * 1000)) return 'late';
       return 'active';
   };
 
   const counts = {
-    // 'all' ne compte QUE les actifs non archivés
     all: projects.filter(p => !p.isArchived).length,
     active: projects.filter(p => !p.isArchived && getProjectStatus(p) === 'active').length,
     late: projects.filter(p => !p.isArchived && getProjectStatus(p) === 'late').length,
@@ -62,7 +65,6 @@ export default function AdminDashboard({ projects, user, onLogout, staffList, se
     link.download = "marketing_export.csv"; link.click();
   };
 
-  // HANDLERS
   const handleLogin = async (e:any) => { e.preventDefault(); await signInWithEmailAndPassword(auth, emailInput, passInput); };
   
   const addTeam = async () => { 
@@ -108,7 +110,6 @@ export default function AdminDashboard({ projects, user, onLogout, staffList, se
         <div className="flex gap-2">
           {isSuperAdmin && <button onClick={exportCSV} className="p-2 border rounded-lg hover:bg-stone-50 text-stone-600" title="Export CSV"><Download className="w-5 h-5"/></button>}
           {isSuperAdmin && <button onClick={onStats} className="p-2 border rounded-lg hover:bg-stone-50 text-stone-600" title="Statistiques"><BarChart3 className="w-5 h-5"/></button>}
-          
           <button onClick={() => setShowTeamModal(true)} className="p-2 border rounded-lg hover:bg-stone-50 text-stone-600"><Settings className="w-5 h-5"/></button>
           <button onClick={onLogout} className="p-2 border rounded-lg hover:bg-stone-50 text-stone-600"><LogOut className="w-5 h-5"/></button>
           <button onClick={() => setIsAdding(true)} className="bg-stone-900 hover:bg-black text-white px-4 rounded-lg flex items-center gap-2 font-bold shadow-md transition"><Plus className="w-4 h-4"/> Nouveau</button>
@@ -116,15 +117,12 @@ export default function AdminDashboard({ projects, user, onLogout, staffList, se
       </header>
       
       <main className="max-w-6xl mx-auto px-4 py-8">
-        {/* FILTRES & RECHERCHE */}
         <div className="flex flex-col md:flex-row justify-between items-center gap-4 mb-8">
             <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide w-full md:w-auto">
                 <button onClick={()=>setFilter('all')} className={`px-4 py-2 rounded-full text-sm font-bold whitespace-nowrap transition-colors ${filter==='all'?'bg-stone-800 text-white':'bg-white text-stone-500 border border-stone-200'}`}>Tous ({counts.all})</button>
                 <button onClick={()=>setFilter('active')} className={`px-4 py-2 rounded-full text-sm font-bold whitespace-nowrap transition-colors ${filter==='active'?'bg-blue-600 text-white':'bg-white text-stone-500 border border-stone-200'}`}>En cours ({counts.active})</button>
                 <button onClick={()=>setFilter('late')} className={`px-4 py-2 rounded-full text-sm font-bold whitespace-nowrap transition-colors ${filter==='late'?'bg-orange-500 text-white':'bg-white text-stone-500 border border-stone-200'}`}>Attention ({counts.late})</button>
                 <button onClick={()=>setFilter('urgent')} className={`px-4 py-2 rounded-full text-sm font-bold whitespace-nowrap transition-colors ${filter==='urgent'?'bg-red-600 text-white':'bg-white text-stone-500 border border-stone-200'}`}>Urgent ({counts.urgent})</button>
-                
-                {/* ONGLETS SEPARATEUR */}
                 <div className="w-px bg-stone-300 mx-2"></div>
                 <button onClick={()=>setFilter('archived')} className={`px-4 py-2 rounded-full text-sm font-bold whitespace-nowrap transition-colors flex items-center gap-2 ${filter==='archived'?'bg-stone-400 text-white':'bg-stone-200 text-stone-500 hover:bg-stone-300'}`}><Archive className="w-4 h-4"/> Archives ({counts.archived})</button>
             </div>
@@ -134,29 +132,21 @@ export default function AdminDashboard({ projects, user, onLogout, staffList, se
             </div>
         </div>
 
-        {/* LISTE VERTICALE ÉPURÉE */}
         <div className="flex flex-col gap-3">
             {projects.filter(p => {
                 const matchesSearch = p.clientNames.toLowerCase().includes(searchTerm.toLowerCase());
                 if(!matchesSearch) return false;
-
-                // Si on est dans l'onglet ARCHIVES, on ne montre QUE les archivés
                 if (filter === 'archived') return p.isArchived;
-
-                // Pour tous les autres onglets, on CACHE les archivés
                 if (p.isArchived) return false;
-
                 const status = getProjectStatus(p);
                 if(filter === 'all') return true;
                 if(filter === 'completed') return status === 'completed';
                 return status === filter;
-            }).map(p => <ProjectEditor key={p.id} project={p} isSuperAdmin={isSuperAdmin} staffList={staffList} user={user} />)}
-            
+            }).map(p => <ProjectEditor key={p.id} project={p} isSuperAdmin={isSuperAdmin} staffList={staffList} staffDirectory={staffDirectory} user={user} />)}
             {projects.length === 0 && <div className="text-center py-10 text-stone-400">Aucun dossier trouvé.</div>}
         </div>
       </main>
 
-      {/* MODAL CREATION */}
       {isAdding && (
           <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
               <div className="bg-white rounded-2xl p-6 w-full max-w-lg shadow-2xl max-h-[90vh] overflow-y-auto">
@@ -172,11 +162,14 @@ export default function AdminDashboard({ projects, user, onLogout, staffList, se
                           <input type="tel" placeholder="Tel 2" className="p-3 border rounded-lg" onChange={e => setNewProject({...newProject, clientPhone2: e.target.value})}/>
                       </div>
                       <input required type="date" className="w-full p-3 border rounded-lg" onChange={e => setNewProject({...newProject, weddingDate: e.target.value})}/>
-                      <select className="w-full p-3 border rounded-lg" onChange={e => setNewProject({...newProject, managerName: e.target.value})}>
+                      
+                      {/* 👇 SÉLECTION INTELLIGENTE RESPONSABLE 👇 */}
+                      <select className="w-full p-3 border rounded-lg" onChange={e => handleManagerChange(e.target.value)}>
                           <option value="">-- Responsable --</option>
                           {staffList.map(s => <option key={s} value={s}>{s}</option>)}
                       </select>
-                      <input type="email" placeholder="Email du Responsable" className="w-full p-3 border rounded-lg" onChange={e => setNewProject({...newProject, managerEmail: e.target.value})}/>
+                      <input type="email" placeholder="Email du Responsable" className="w-full p-3 border rounded-lg" value={newProject.managerEmail || ''} onChange={e => setNewProject({...newProject, managerEmail: e.target.value})}/>
+                      
                       <div className="flex gap-6 pt-2">
                           <label className="flex items-center gap-2 font-bold cursor-pointer"><input type="checkbox" className="w-5 h-5 accent-blue-600" checked={newProject.hasPhoto} onChange={e=>setNewProject({...newProject, hasPhoto:e.target.checked})}/> Photo</label>
                           <label className="flex items-center gap-2 font-bold cursor-pointer"><input type="checkbox" className="w-5 h-5 accent-blue-600" checked={newProject.hasVideo} onChange={e=>setNewProject({...newProject, hasVideo:e.target.checked})}/> Vidéo</label>
@@ -190,7 +183,6 @@ export default function AdminDashboard({ projects, user, onLogout, staffList, se
           </div>
       )}
 
-      {/* MODAL EQUIPE */}
       {showTeamModal && (
           <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
               <div className="bg-white rounded-2xl p-6 w-full max-w-sm shadow-2xl">

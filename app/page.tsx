@@ -11,10 +11,11 @@ import StatsDashboard from '../components/StatsDashboard';
 
 export default function WeddingTracker() {
   const [user, setUser] = useState<any>(null);
-  // AJOUT DE 'stats' DANS LE TYPE DE VUE 👇
   const [view, setView] = useState<'landing' | 'client' | 'admin' | 'archive' | 'stats'>('landing');
   const [projects, setProjects] = useState<Project[]>([]);
   const [staffList, setStaffList] = useState<string[]>(DEFAULT_STAFF);
+  // 👇 NOUVEL ÉTAT : L'annuaire des emails
+  const [staffDirectory, setStaffDirectory] = useState<Record<string, string>>({}); 
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -32,8 +33,12 @@ export default function WeddingTracker() {
     const unsubscribeData = onSnapshot(q, (snapshot) => {
       const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as Project[];
       
-      // Tri : Fast Track en premier, puis date la plus récente
       const sortedData = data.sort((a, b) => {
+        const isFinishedA = (a.statusPhoto === 'delivered' || a.statusPhoto === 'none') && (a.statusVideo === 'delivered' || a.statusVideo === 'none');
+        const isFinishedB = (b.statusPhoto === 'delivered' || b.statusPhoto === 'none') && (b.statusVideo === 'delivered' || b.statusVideo === 'none');
+
+        if (isFinishedA && !isFinishedB) return 1;
+        if (!isFinishedA && isFinishedB) return -1;
         if (a.isPriority && !b.isPriority) return -1;
         if (!a.isPriority && b.isPriority) return 1;
         return new Date(b.weddingDate).getTime() - new Date(a.weddingDate).getTime();
@@ -44,9 +49,14 @@ export default function WeddingTracker() {
     });
 
     const settingsPath = typeof appId !== 'undefined' ? `artifacts/${appId}/public/data/${SETTINGS_COLLECTION}` : SETTINGS_COLLECTION;
-    getDoc(doc(db, settingsPath, 'general')).then(docSnap => {
-        if(docSnap.exists() && docSnap.data().staff) setStaffList(docSnap.data().staff);
-        else setDoc(doc(db, settingsPath, 'general'), { staff: DEFAULT_STAFF }, { merge: true });
+    // 👇 ON CHARGE AUSSI L'ANNUAIRE D'EMAILS
+    onSnapshot(doc(db, settingsPath, 'general'), (docSnap) => {
+        if(docSnap.exists()) {
+            if(docSnap.data().staff) setStaffList(docSnap.data().staff);
+            if(docSnap.data().directory) setStaffDirectory(docSnap.data().directory);
+        } else {
+            setDoc(doc(db, settingsPath, 'general'), { staff: DEFAULT_STAFF, directory: {} }, { merge: true });
+        }
     });
 
     return () => unsubscribeData();
@@ -58,10 +68,9 @@ export default function WeddingTracker() {
     <div className="min-h-screen bg-stone-50 font-sans text-stone-800">
       {view === 'landing' && <LandingView setView={setView} />}
       {view === 'client' && <ClientPortal projects={projects} onBack={() => setView('landing')} />}
-      {/* ON PASSE LA FONCTION onStats 👇 */}
-      {view === 'admin' && <AdminDashboard projects={projects} staffList={staffList} setStaffList={setStaffList} user={user} onLogout={() => { signOut(auth); setView('landing'); }} onStats={() => setView('stats')} />}
+      {/* 👇 ON PASSE staffDirectory EN PROP À L'ADMIN */}
+      {view === 'admin' && <AdminDashboard projects={projects} staffList={staffList} staffDirectory={staffDirectory} setStaffList={setStaffList} user={user} onLogout={() => { signOut(auth); setView('landing'); }} onStats={() => setView('stats')} />}
       {view === 'archive' && <ArchiveView onBack={() => setView('landing')} />}
-      {/* AFFICHAGE DU DASHBOARD STATS 👇 */}
       {view === 'stats' && <StatsDashboard projects={projects} onBack={() => setView('admin')} />}
     </div>
   );
@@ -131,7 +140,6 @@ function ArchiveView({ onBack }: { onBack: () => void }) {
 
   const handleCaptureLead = async (e: React.FormEvent) => {
     e.preventDefault(); setLoading(true);
-    // On enregistre juste la demande
     const colPath = typeof appId !== 'undefined' ? `artifacts/${appId}/public/data/${LEADS_COLLECTION}` : LEADS_COLLECTION;
     await addDoc(collection(db, colPath), { 
         name: leadName, 
@@ -142,7 +150,7 @@ function ArchiveView({ onBack }: { onBack: () => void }) {
         source: 'archive_request' 
     });
     setLoading(false);
-    setStep(2); // On va direct au message de succès "On vérifie"
+    setStep(2);
   };
 
   return (
