@@ -1,49 +1,63 @@
-export const MAKE_WEBHOOK_URL = "https://hook.eu2.make.com/iwf8nbt3tywmywp6u89xgn7e2nar0bbs"; 
-export const SUPER_ADMINS = ["admin@raventech.fr", "irzzenproductions@gmail.com"]; 
-export const STRIPE_ARCHIVE_LINK = "https://buy.stripe.com/3cI3cv3jq2j37x9eFy5gc0b";
-export const STRIPE_PRIORITY_LINK = "https://buy.stripe.com/fZu4gz07eaPzcRt54Y5gc0c"; 
+import { Timestamp } from 'firebase/firestore';
 
 export const DEFAULT_STAFF = [
-  "Feridun", "Volkan", "Ali", "Yunus", "Serife", "Emir", 
-  "Celine", "Goksel", "Emirkan", "Steeven", "Taner", "Halil"
+    "Volkan", "Feridun", "Adem", "Burak", "Emre", "Yasin"
 ];
 
-export const ALBUM_FORMATS = ["30x20", "30x30", "40x30", "40x30 + 2x 18x24", "Autre"];
-
+// Configuration
 export const COLLECTION_NAME = 'wedding_projects';
 export const LEADS_COLLECTION = 'leads';
-export const SETTINGS_COLLECTION = 'settings'; 
+export const SETTINGS_COLLECTION = 'settings';
+export const MAKE_WEBHOOK_URL = 'https://hook.eu2.make.com/iwf8nbt3tywmywp6u89xgn7e2nar0bbs'; // Remplacez par votre URL Make
+export const STRIPE_PRIORITY_LINK = 'https://buy.stripe.com/test_...'; // Votre lien Stripe
 
-export const PHOTO_STEPS: Record<string, { label: string; percent: number }> = {
-  'waiting': { label: 'En attente', percent: 5 },
-  'culling': { label: 'Tri & Sélection', percent: 30 },
-  'editing': { label: 'Retouches & Colo', percent: 65 },
-  'exporting': { label: 'Export HD', percent: 90 },
-  'delivered': { label: 'Livré', percent: 100 },
-  'none': { label: 'Non inclus', percent: 0 }
+export const SUPER_ADMINS = ['irzzenproductions@gmail.com']; 
+
+export const PHOTO_STEPS = {
+    'none': { label: 'En attente', percent: 0 },
+    'waiting': { label: 'En attente des fichiers', percent: 10 },
+    'culling': { label: 'Tri & Sélection', percent: 30 },
+    'editing': { label: 'Retouches Colorimétrie', percent: 60 },
+    'export': { label: 'Export & Galerie', percent: 90 },
+    'delivered': { label: 'Livré', percent: 100 }
 };
 
-export const VIDEO_STEPS: Record<string, { label: string; percent: number }> = {
-  'waiting': { label: 'En attente', percent: 5 },
-  'cutting': { label: 'Montage', percent: 35 },
-  'grading': { label: 'Étalonnage', percent: 70 },
-  'mixing': { label: 'Finalisation', percent: 90 },
-  'delivered': { label: 'Livré', percent: 100 },
-  'none': { label: 'Non inclus', percent: 0 }
+export const VIDEO_STEPS = {
+    'none': { label: 'En attente', percent: 0 },
+    'waiting': { label: 'En attente des fichiers', percent: 10 },
+    'rushes': { label: 'Dérushage', percent: 25 },
+    'cutting': { label: 'Montage Ours', percent: 50 },
+    'grading': { label: 'Etalonnage & Mixage', percent: 75 },
+    'rendering': { label: 'Export Final', percent: 90 },
+    'delivered': { label: 'Livré', percent: 100 }
 };
 
 export const ALBUM_STATUSES = {
-  'pending': 'En attente',
-  'selection': 'Sélection reçue',
-  'design': 'Mise en page',
-  'print': 'Impression',
-  'sent': 'Expédié'
+    'pending': 'En attente choix',
+    'design': 'Mise en page',
+    'validation': 'Validation Client',
+    'printing': 'En impression',
+    'sent': 'Expédié'
 };
 
-// --- TYPES ---
-export interface Message { id: string; author: 'client' | 'admin'; text: string; date: any; }
-export interface Remuneration { name: string; amount: number; note: string; paid?: boolean; }
-export interface AlbumOrder { id: string; name: string; format: string; price: number; status: string; stripeLink?: string; paid: boolean; }
+export const ALBUM_FORMATS = ['30x30', '40x30', '25x25', 'Coffret Parent'];
+
+export interface Album {
+    id: string;
+    name: string;
+    format: string;
+    status: string;
+    paid: boolean;
+    price: number;
+    stripeLink?: string;
+}
+
+export interface Message {
+    id: string;
+    author: 'admin' | 'client';
+    text: string;
+    date: any; // Timestamp
+}
 
 export interface HistoryLog {
     date: string;
@@ -52,66 +66,71 @@ export interface HistoryLog {
 }
 
 export interface Project {
-  id: string;
-  clientNames: string;
-  
-  // Infos Contacts Mises à jour
-  clientEmail?: string;
-  clientEmail2?: string;
-  clientPhone?: string;
-  clientPhone2?: string;
-  
-  // Modif ici : On garde address pour compatibilité mais on utilisera surtout Venue + Zip
-  clientAddress?: string; 
-  clientCity?: string; 
-  weddingVenueZip?: string; // NOUVEAU
-  weddingVenue?: string;
+    id: string;
+    code: string;
+    clientNames: string;
+    clientEmail: string;
+    clientPhone: string;
+    clientEmail2?: string | null;
+    clientPhone2?: string | null;
+    clientAddress?: string;
+    clientCity?: string;
+    weddingDate: string;
+    weddingVenue?: string | null;
+    weddingVenueZip?: string | null;
+    
+    // Status
+    statusPhoto: keyof typeof PHOTO_STEPS;
+    statusVideo: keyof typeof VIDEO_STEPS;
+    progressPhoto: number;
+    progressVideo: number;
+    
+    // Dates prévisionnelles
+    estimatedDeliveryPhoto?: string;
+    estimatedDeliveryVideo?: string;
 
-  adminNotes?: string;
-  weddingDate: string;
-  code: string;
-  
-  statusPhoto: 'waiting' | 'culling' | 'editing' | 'exporting' | 'delivered' | 'none';
-  statusVideo: 'waiting' | 'cutting' | 'grading' | 'mixing' | 'delivered' | 'none';
-  progressPhoto: number; 
-  progressVideo: number;
-  
-  // ÉQUIPE + EMAILS
-  photographerName: string;
-  photographerEmail?: string; // NOUVEAU
-  videographerName: string;
-  videographerEmail?: string; // NOUVEAU
-  managerName?: string; 
-  managerEmail?: string; 
-  onSiteTeam?: string[]; 
-  
-  coverImage?: string; 
-  estimatedDeliveryPhoto?: string;
-  estimatedDeliveryVideo?: string;
-  linkPhoto?: string;
-  linkVideo?: string;
-  
-  deliveryConfirmed?: boolean;
-  deliveryConfirmationDate?: any;
+    // Staff (Noms + Emails)
+    photographerName?: string;
+    photographerEmail?: string | null;
+    videographerName?: string;
+    videographerEmail?: string | null;
+    managerName?: string;
+    managerEmail?: string | null;
 
-  messages?: Message[]; 
-  hasUnreadMessage?: boolean; 
-  
-  musicLinks?: string; 
-  musicInstructions?: string;
-  albums?: AlbumOrder[];
+    // Livrables
+    linkPhoto?: string;
+    linkVideo?: string;
+    coverImage?: string;
+    
+    // Options
+    isPriority: boolean;
+    fastTrackActivationDate?: string | null;
+    isArchived?: boolean; // 👈 Nouveau champ Archive
 
-  totalPrice?: number;
-  depositAmount?: number;
-  teamPayments?: Remuneration[];
-  financeNotes?: string;
-  
-  isPriority?: boolean; 
-  fastTrackActivationDate?: any;
-  
-  history?: HistoryLog[]; 
-  isArchived?: boolean;
+    // Financier
+    totalPrice?: number;
+    depositAmount?: number;
+    
+    // Communication & Contenu
+    messages?: Message[];
+    hasUnreadMessage?: boolean;
+    albums?: Album[];
+    musicInstructions?: string;
+    musicLinks?: string;
+    adminNotes?: string;
 
-  createdAt: any;
-  lastUpdated?: any;
+    // Confirmations de livraison
+    deliveryConfirmed?: boolean; // Ancien champ (pour compatibilité)
+    deliveryConfirmationDate?: any;
+    
+    // 👇 NOUVEAUX CHAMPS V45
+    deliveryConfirmedPhoto?: boolean;
+    deliveryConfirmedPhotoDate?: any;
+    deliveryConfirmedVideo?: boolean;
+    deliveryConfirmedVideoDate?: any;
+    
+    // Meta
+    lastUpdated?: any;
+    createdAt?: any;
+    history?: HistoryLog[];
 }
