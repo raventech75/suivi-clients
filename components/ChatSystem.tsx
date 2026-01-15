@@ -1,7 +1,7 @@
 'use client';
 import React, { useState, useEffect, useRef } from 'react';
 import { Send, MessageSquare, User, ShieldAlert } from 'lucide-react';
-import { doc, updateDoc, arrayUnion, Timestamp } from 'firebase/firestore';
+import { doc, updateDoc, arrayUnion, Timestamp, serverTimestamp } from 'firebase/firestore'; // J'ai ajouté serverTimestamp ici pour éviter les erreurs d'import
 import { db, appId } from '../lib/firebase';
 import { Project, Message, MAKE_WEBHOOK_URL } from '../lib/config';
 
@@ -10,7 +10,6 @@ export default function ChatBox({ project, userType, disabled = false }: { proje
   const [sending, setSending] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  // Auto-scroll vers le bas quand un message arrive
   useEffect(() => {
     if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
   }, [project.messages]);
@@ -23,7 +22,7 @@ export default function ChatBox({ project, userType, disabled = false }: { proje
     const msgText = newMessage.trim();
 
     try {
-      // 1. Sauvegarde dans Firestore (Base de données)
+      // 1. Sauvegarde Firestore
       const messageData: Message = {
         id: Date.now().toString(),
         author: userType,
@@ -34,36 +33,36 @@ export default function ChatBox({ project, userType, disabled = false }: { proje
       const colPath = typeof appId !== 'undefined' ? `artifacts/${appId}/public/data/wedding_projects` : 'wedding_projects';
       await updateDoc(doc(db, colPath, project.id), {
         messages: arrayUnion(messageData),
-        hasUnreadMessage: true, // Marqueur pour notification visuelle si besoin
+        hasUnreadMessage: true,
         lastUpdated: serverTimestamp()
       });
 
-      // 2. Envoi du Webhook vers Make (C'est ici que ça manquait !)
-      // On envoie TOUTES les infos nécessaires pour le routage
+      // 2. Webhook Make (MISE À JOUR V43)
+      // On envoie TOUTE l'équipe pour que Make puisse notifier les bonnes personnes
       try {
           await fetch(MAKE_WEBHOOK_URL, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
-                  type: 'chat', // Pour le filtre Make "C'est un Chat"
+                  type: 'chat',
                   msg: msgText,
                   author: userType === 'admin' ? 'L\'équipe RavenTech' : project.clientNames,
                   
-                  // Infos Projet pour le contexte
                   clientName: project.clientNames,
                   projectCode: project.code,
                   
-                  // Emails pour le routage (Important !)
+                  // 👇 ON AJOUTE TOUT LE MONDE ICI 👇
                   clientEmail: project.clientEmail || "",
                   managerEmail: project.managerEmail || "",
+                  photographerEmail: project.photographerEmail || "",
+                  videographerEmail: project.videographerEmail || "",
                   
                   url: window.location.origin 
               })
           });
-          console.log("📨 Webhook Chat envoyé avec succès !");
+          console.log("📨 Webhook Chat envoyé à toute l'équipe !");
       } catch (err) {
           console.error("Erreur envoi Webhook Chat", err);
-          // On ne bloque pas l'utilisateur si Make échoue, le message est déjà en base.
       }
 
       setNewMessage('');
@@ -75,7 +74,6 @@ export default function ChatBox({ project, userType, disabled = false }: { proje
     }
   };
 
-  // Petit utilitaire pour formater l'heure
   const formatTime = (timestamp: any) => {
       if (!timestamp) return "";
       const date = timestamp.seconds ? new Date(timestamp.seconds * 1000) : new Date(timestamp);
@@ -84,7 +82,6 @@ export default function ChatBox({ project, userType, disabled = false }: { proje
 
   return (
     <div className="bg-white rounded-2xl shadow-sm border border-stone-200 overflow-hidden flex flex-col h-[500px]">
-      {/* Header du Chat */}
       <div className="bg-stone-50 p-4 border-b border-stone-100 flex justify-between items-center">
         <div className="flex items-center gap-2 font-bold text-stone-700">
             <MessageSquare className="w-5 h-5"/> 
@@ -95,7 +92,6 @@ export default function ChatBox({ project, userType, disabled = false }: { proje
         </div>
       </div>
 
-      {/* Zone des messages */}
       <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 space-y-4 bg-stone-50/30">
         {(!project.messages || project.messages.length === 0) && (
             <div className="text-center text-stone-400 text-sm py-10 italic">
@@ -123,11 +119,10 @@ export default function ChatBox({ project, userType, disabled = false }: { proje
         })}
       </div>
 
-      {/* Zone de saisie */}
       <form onSubmit={sendMessage} className="p-3 bg-white border-t border-stone-100 flex gap-2">
         <input 
             className="flex-1 bg-stone-100 border-0 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-stone-200 outline-none transition-all"
-            placeholder={disabled ? "Chat désactivé (Lecture seule)" : "Écrivez votre message..."}
+            placeholder={disabled ? "Chat désactivé" : "Écrivez votre message..."}
             value={newMessage}
             onChange={e => setNewMessage(e.target.value)}
             disabled={sending || disabled}
@@ -142,6 +137,3 @@ export default function ChatBox({ project, userType, disabled = false }: { proje
     </div>
   );
 }
-
-// Fonction utilitaire manquante dans le fichier original importé, je la rajoute pour éviter les erreurs de build
-import { serverTimestamp } from 'firebase/firestore';
