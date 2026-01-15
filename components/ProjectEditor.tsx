@@ -138,19 +138,19 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, user }
   };
 
   const save = async () => {
-      console.log("💾 [DEBUG] Bouton Enregistrer cliqué");
+      console.log("💾 [DEBUG] Début de la sauvegarde...");
 
-      // 1. Validation Date
+      // 1. Validation des dates obligatoires
       if (localData.statusPhoto !== 'none' && localData.statusPhoto !== 'waiting' && !localData.estimatedDeliveryPhoto) {
-          alert("❌ Date livraison Photo manquante");
+          alert("❌ Date livraison Photo manquante !");
           return;
       }
       if (localData.statusVideo !== 'none' && localData.statusVideo !== 'waiting' && !localData.estimatedDeliveryVideo) {
-          alert("❌ Date livraison Vidéo manquante");
+          alert("❌ Date livraison Vidéo manquante !");
           return;
       }
 
-      // 2. Sauvegarde Firebase
+      // 2. Gestion de l'historique
       const changesList = detectChanges();
       let updatedHistory = [...(localData.history || [])];
       if (changesList.length > 0) {
@@ -160,30 +160,47 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, user }
               action: changesList.join(' | ')
           }, ...updatedHistory];
       }
+
+      // 3. NETTOYAGE DES DONNÉES (C'est ici que l'on corrige l'erreur !)
+      // On crée une copie propre où 'undefined' devient 'null'
+      const cleanData = { ...localData };
       
-      const finalData = { ...localData, history: updatedHistory, lastUpdated: serverTimestamp() };
+      // On force les nouveaux champs à null s'ils n'existent pas
+      if (cleanData.photographerEmail === undefined) cleanData.photographerEmail = null;
+      if (cleanData.videographerEmail === undefined) cleanData.videographerEmail = null;
+      if (cleanData.managerEmail === undefined) cleanData.managerEmail = null;
+      if (cleanData.clientEmail2 === undefined) cleanData.clientEmail2 = null;
+      if (cleanData.clientPhone2 === undefined) cleanData.clientPhone2 = null;
+      if (cleanData.weddingVenueZip === undefined) cleanData.weddingVenueZip = null;
+
+      // On prépare l'objet final pour Firestore
+      const finalData = { 
+          ...cleanData, 
+          history: updatedHistory, 
+          lastUpdated: serverTimestamp() 
+      };
+
       const colPath = typeof appId !== 'undefined' ? `artifacts/${appId}/public/data/${COLLECTION_NAME}` : COLLECTION_NAME;
       
-      console.log("⏳ [DEBUG] Envoi vers Firebase...");
-      await updateDoc(doc(db, colPath, project.id), finalData);
-      console.log("✅ [DEBUG] Firebase mis à jour avec succès.");
-
-      // 3. Logique Webhook (C'est ici qu'on vérifie)
+      try {
+          // SAUVEGARDE FIRESTORE
+          await updateDoc(doc(db, colPath, project.id), finalData);
+          console.log("✅ Sauvegarde Firestore réussie.");
+      } catch (error) {
+          console.error("❌ ERREUR CRITIQUE FIRESTORE :", error);
+          alert("Erreur lors de la sauvegarde (voir console). Vérifiez votre connexion.");
+          return; // On arrête tout si la sauvegarde échoue
+      }
+      
+      // 4. Envoi Webhook (Make)
       const hasPhotoChanged = localData.statusPhoto !== project.statusPhoto;
       const hasVideoChanged = localData.statusVideo !== project.statusVideo;
       
-      console.log("🧐 [DEBUG] Vérification conditions Webhook :");
-      console.log(`- Changement Photo ? ${hasPhotoChanged} (Avant: ${project.statusPhoto} -> Après: ${localData.statusPhoto})`);
-      console.log(`- Changement Vidéo ? ${hasVideoChanged} (Avant: ${project.statusVideo} -> Après: ${localData.statusVideo})`);
-      console.log(`- Email Client présent ? ${localData.clientEmail}`);
-
       if (hasPhotoChanged || hasVideoChanged) {
           if (localData.clientEmail && localData.clientEmail.includes('@')) {
-              console.log("🚀 [DEBUG] Conditions remplies ! Tentative d'envoi vers Make...");
-              console.log("👉 URL:", MAKE_WEBHOOK_URL);
-              
               try {
-                  const response = await fetch(MAKE_WEBHOOK_URL, {
+                  console.log("🚀 Envoi du Webhook Make...");
+                  await fetch(MAKE_WEBHOOK_URL, {
                       method: 'POST', 
                       headers: { 'Content-Type': 'application/json' },
                       body: JSON.stringify({ 
@@ -191,65 +208,27 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, user }
                           clientName: localData.clientNames, 
                           clientEmail: localData.clientEmail, 
                           projectCode: localData.code,
-                          managerEmail: localData.managerEmail,
-                          photographerEmail: localData.photographerEmail,
-                          videographerEmail: localData.videographerEmail,
+                          // On envoie bien les données nettoyées ou vides
+                          managerEmail: localData.managerEmail || "",
+                          photographerEmail: localData.photographerEmail || "",
+                          videographerEmail: localData.videographerEmail || "",
                           stepName: hasPhotoChanged ? PHOTO_STEPS[localData.statusPhoto].label : VIDEO_STEPS[localData.statusVideo].label, 
                           url: window.location.origin 
                       })
                   });
-                  console.log("🎉 [DEBUG] Réponse Make :", response.status, response.statusText);
-                  alert("Sauvegarde + Notification envoyée !");
-              } catch (error) {
-                  console.error("❌ [DEBUG] Erreur réseau vers Make :", error);
-                  alert("Erreur d'envoi vers Make (voir console)");
+                  alert("✅ Sauvegardé et Client notifié !");
+              } catch (err) {
+                  console.error("Erreur Webhook:", err);
+                  alert("Sauvegardé, mais erreur d'envoi notification.");
               }
           } else {
-              console.warn("⚠️ [DEBUG] Annulé : Pas d'email client valide.");
-              alert("Sauvegardé, mais PAS de notification (Email client manquant)");
+              alert("✅ Sauvegardé (Pas d'email client pour la notif).");
           }
       } else {
-          console.log("ℹ️ [DEBUG] Annulé : Aucun changement de statut détecté.");
-          alert("Sauvegardé (Aucun changement d'étape détecté)");
+          // Juste une sauvegarde simple sans changement d'état
+          // On ne met pas d'alerte intrusive ici, juste on ferme
       }
       
-      setHasChanges(false); setIsExpanded(false);
-  };
-
-      const changesList = detectChanges();
-      let updatedHistory = [...(localData.history || [])];
-      if (changesList.length > 0) {
-          const newEntry: HistoryLog = {
-              date: new Date().toISOString(),
-              user: user.email ? user.email.split('@')[0] : 'Inconnu',
-              action: changesList.join(' | ')
-          };
-          updatedHistory = [newEntry, ...updatedHistory];
-      }
-      const finalData = { ...localData, history: updatedHistory, lastUpdated: serverTimestamp() };
-      const colPath = typeof appId !== 'undefined' ? `artifacts/${appId}/public/data/${COLLECTION_NAME}` : COLLECTION_NAME;
-      await updateDoc(doc(db, colPath, project.id), finalData);
-      
-      // WEBHOOK AVEC EMAILS EQUIPE
-      if (localData.statusPhoto !== project.statusPhoto || localData.statusVideo !== project.statusVideo) {
-          if (localData.clientEmail && localData.clientEmail.includes('@')) {
-              fetch(MAKE_WEBHOOK_URL, {
-                  method: 'POST', headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ 
-                      type: 'step_update', 
-                      clientName: localData.clientNames, 
-                      clientEmail: localData.clientEmail, 
-                      projectCode: localData.code,
-                      // AJOUT DES EMAILS EQUIPE POUR MAKE
-                      managerEmail: localData.managerEmail,
-                      photographerEmail: localData.photographerEmail,
-                      videographerEmail: localData.videographerEmail,
-                      stepName: localData.statusPhoto !== project.statusPhoto ? PHOTO_STEPS[localData.statusPhoto].label : VIDEO_STEPS[localData.statusVideo].label, 
-                      url: window.location.origin 
-                  })
-              }).catch(console.error);
-          }
-      }
       setHasChanges(false); setIsExpanded(false);
   };
 
