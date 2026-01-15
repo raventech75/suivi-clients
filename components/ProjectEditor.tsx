@@ -172,6 +172,13 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, staffD
   };
 
   const save = async () => {
+      // 🛑 0. SÉCURITÉ CRITIQUE : Email obligatoire
+      if (!localData.clientEmail || !localData.clientEmail.includes('@')) {
+          alert("⛔️ Impossible d'enregistrer !\n\nL'email du client (Email 1) est manquant ou invalide. Il est indispensable pour le fonctionnement des notifications.");
+          return; // On arrête tout ici.
+      }
+
+      // 1. Validation des dates obligatoires
       if (localData.statusPhoto !== 'none' && localData.statusPhoto !== 'waiting' && !localData.estimatedDeliveryPhoto) {
           alert("❌ Date livraison Photo manquante !"); return;
       }
@@ -179,6 +186,7 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, staffD
           alert("❌ Date livraison Vidéo manquante !"); return;
       }
 
+      // 2. Préparation Historique
       const changesList = detectChanges();
       let updatedHistory = [...(localData.history || [])];
       if (changesList.length > 0) {
@@ -189,6 +197,7 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, staffD
           }, ...updatedHistory];
       }
 
+      // 3. Nettoyage des données (undefined -> null) pour Firestore
       const cleanData = { ...localData } as any;
       if (cleanData.photographerEmail === undefined) cleanData.photographerEmail = null;
       if (cleanData.videographerEmail === undefined) cleanData.videographerEmail = null;
@@ -208,8 +217,7 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, staffD
           return;
       }
 
-      // --- APPRENTISSAGE : MISE A JOUR DE L'ANNUAIRE ---
-      // Si on a un nom ET un email, on met à jour le répertoire global
+      // 4. APPRENTISSAGE : MISE A JOUR DE L'ANNUAIRE
       const newEntries: Record<string, string> = {};
       if (localData.managerName && localData.managerEmail) newEntries[localData.managerName] = localData.managerEmail;
       if (localData.photographerName && localData.photographerEmail) newEntries[localData.photographerName] = localData.photographerEmail;
@@ -217,29 +225,45 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, staffD
 
       if (Object.keys(newEntries).length > 0) {
           const settingsPath = typeof appId !== 'undefined' ? `artifacts/${appId}/public/data/${SETTINGS_COLLECTION}` : SETTINGS_COLLECTION;
-          // On fusionne avec l'existant
           setDoc(doc(db, settingsPath, 'general'), { directory: newEntries }, { merge: true }).catch(console.error);
       }
       
+      // 5. DÉCLENCHEMENT WEBHOOK (MAKE)
       const hasPhotoChanged = localData.statusPhoto !== project.statusPhoto;
       const hasVideoChanged = localData.statusVideo !== project.statusVideo;
       
-      if ((hasPhotoChanged || hasVideoChanged) && localData.clientEmail && localData.clientEmail.includes('@')) {
+      // On détecte aussi si un email a changé (Manager, Photo ou Vidéo)
+      const hasEmailChanged = (
+          localData.managerEmail !== project.managerEmail ||
+          localData.photographerEmail !== project.photographerEmail ||
+          localData.videographerEmail !== project.videographerEmail
+      );
+
+      console.log(`🔍 Webhook check : Statut=${hasPhotoChanged||hasVideoChanged} | Email=${hasEmailChanged}`);
+      
+      // Condition : (Changement Statut OU Changement Email Equipe) ET Email Client Valide
+      if ((hasPhotoChanged || hasVideoChanged || hasEmailChanged)) {
+          
+          let stepLabel = PHOTO_STEPS[localData.statusPhoto].label;
+          if (hasVideoChanged && !hasPhotoChanged) stepLabel = VIDEO_STEPS[localData.statusVideo].label;
+          
           fetch(MAKE_WEBHOOK_URL, {
               method: 'POST', 
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ 
                   type: 'step_update', 
                   clientName: localData.clientNames, 
-                  clientEmail: localData.clientEmail, 
+                  clientEmail: localData.clientEmail, // On est sûr qu'il existe grâce au check du début
                   projectCode: localData.code,
                   managerEmail: localData.managerEmail || "",
                   photographerEmail: localData.photographerEmail || "",
                   videographerEmail: localData.videographerEmail || "",
-                  stepName: hasPhotoChanged ? PHOTO_STEPS[localData.statusPhoto].label : VIDEO_STEPS[localData.statusVideo].label, 
+                  stepName: stepLabel, 
                   url: window.location.origin 
               })
-          }).catch(err => console.error("Erreur Webhook", err));
+          })
+          .then(() => alert("✅ Sauvegardé + Notification envoyée !"))
+          .catch(err => console.error("Erreur Webhook", err));
       }
       
       setHasChanges(false); setIsExpanded(false);

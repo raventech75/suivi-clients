@@ -82,12 +82,36 @@ export default function AdminDashboard({ projects, user, onLogout, staffList, st
       await setDoc(doc(db, colPath, 'general'), {staff:list}, {merge:true}); 
   };
   
-  const createProject = async (e:any) => {
+ const createProject = async (e:any) => {
       e.preventDefault();
+
+      // 🛑 SÉCURITÉ : On bloque la création si pas d'email
+      if (!newProject.clientEmail || !newProject.clientEmail.includes('@')) {
+          alert("⛔️ Oups ! L'email du client (Email 1) est obligatoire.\nSans lui, nous ne pouvons pas créer de dossier connecté.");
+          return;
+      }
+      
       const code = (newProject.clientNames.split(' ')[0] + '-' + Math.floor(Math.random()*1000)).toUpperCase();
       const colPath = typeof appId !== 'undefined' ? `artifacts/${appId}/public/data/${COLLECTION_NAME}` : COLLECTION_NAME;
-      await addDoc(collection(db, colPath), { ...newProject, code, statusPhoto: newProject.hasPhoto?'waiting':'none', statusVideo: newProject.hasVideo?'waiting':'none', progressPhoto:0, progressVideo:0, messages:[], createdAt: serverTimestamp() });
+      
+      await addDoc(collection(db, colPath), { 
+          ...newProject, 
+          code, 
+          statusPhoto: newProject.hasPhoto ? 'waiting' : 'none', 
+          statusVideo: newProject.hasVideo ? 'waiting' : 'none', 
+          progressPhoto:0, 
+          progressVideo:0, 
+          messages:[], 
+          createdAt: serverTimestamp() 
+      });
+      
       setIsAdding(false);
+      // Reset du formulaire pour le prochain
+      setNewProject({ 
+        clientNames: '', clientEmail: '', clientEmail2: '', clientPhone: '', clientPhone2: '', weddingDate: '', 
+        photographerName: '', videographerName: '', managerName: '', managerEmail: '',
+        onSiteTeam: [], hasPhoto: true, hasVideo: true
+      });
   };
 
   if (!user || user.isAnonymous) return (
