@@ -112,11 +112,21 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, user }
     if (!canEdit) return;
     try {
       setUploading(true);
-      let storageRef = ref(storage, `covers/${project.id}_${Date.now()}_${file.name}`);
+      // Correction du chemin de stockage pour éviter les conflits
+      const fileName = `${project.id}_${Date.now()}`; 
+      let storageRef = ref(storage, `covers/${fileName}`);
+      
       await uploadBytes(storageRef, file);
       const url = await getDownloadURL(storageRef);
+      
+      // Mise à jour immédiate de l'état local pour affichage
       updateField('coverImage', url);
-    } catch (error: any) { alert(`Erreur: ${error.message}`); } finally { setUploading(false); setIsDragging(false); }
+    } catch (error: any) { 
+        alert(`Erreur upload: ${error.message}`); 
+    } finally { 
+        setUploading(false); 
+        setIsDragging(false); 
+    }
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -124,15 +134,13 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, user }
   };
 
   const handleDrag = (e: React.DragEvent) => {
-      e.preventDefault();
-      e.stopPropagation();
+      e.preventDefault(); e.stopPropagation();
       if (e.type === "dragenter" || e.type === "dragover") setIsDragging(true);
       else if (e.type === "dragleave") setIsDragging(false);
   };
 
   const handleDrop = (e: React.DragEvent) => {
-      e.preventDefault();
-      e.stopPropagation();
+      e.preventDefault(); e.stopPropagation();
       setIsDragging(false);
       if (e.dataTransfer.files && e.dataTransfer.files[0]) processFile(e.dataTransfer.files[0]);
   };
@@ -160,6 +168,7 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, user }
   };
 
   const save = async () => {
+      // Validation dates
       if (localData.statusPhoto !== 'none' && localData.statusPhoto !== 'waiting' && !localData.estimatedDeliveryPhoto) {
           alert("❌ Date livraison Photo manquante !"); return;
       }
@@ -241,9 +250,9 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, user }
         <div className="p-4 flex items-center justify-between cursor-pointer" onClick={(e) => { if(!(e.target as HTMLElement).closest('.avatar-uploader')) setIsExpanded(!isExpanded); }}>
             <div className="flex items-center gap-4 flex-1">
                 
-                {/* 🔴 AVATAR UPLOADER (DRAG & DROP) */}
+                {/* 🔴 AVATAR UPLOADER (CORRIGÉ) */}
                 <div 
-                    className={`avatar-uploader w-12 h-12 rounded-full flex items-center justify-center text-xs font-bold shrink-0 overflow-hidden relative group transition-all duration-200 border-2 ${isDragging ? 'border-blue-500 bg-blue-50 scale-110 shadow-lg' : 'border-transparent bg-stone-100 text-stone-400'}`}
+                    className={`avatar-uploader w-12 h-12 rounded-full flex items-center justify-center text-xs font-bold shrink-0 overflow-hidden relative group transition-all duration-200 border-2 cursor-pointer ${isDragging ? 'border-blue-500 bg-blue-50 scale-110 shadow-lg' : 'border-transparent bg-stone-100 text-stone-400'}`}
                     onDragEnter={handleDrag}
                     onDragLeave={handleDrag}
                     onDragOver={handleDrag}
@@ -255,10 +264,10 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, user }
                     
                     {uploading ? (
                         <Loader2 className="w-5 h-5 text-stone-500 animate-spin"/>
-                    ) : project.coverImage ? (
-                        <img src={project.coverImage} className={`w-full h-full object-cover transition-opacity ${isDragging ? 'opacity-50' : ''}`}/>
+                    ) : localData.coverImage ? ( // 👈 C'est ici que j'ai corrigé : localData au lieu de project
+                        <img src={localData.coverImage} className={`w-full h-full object-cover transition-opacity ${isDragging ? 'opacity-50' : ''}`}/>
                     ) : (
-                        <span className="text-lg">{project.clientNames.charAt(0)}</span>
+                        <span className="text-lg">{localData.clientNames.charAt(0)}</span>
                     )}
 
                     {/* OVERLAY AU SURVOL */}
@@ -280,7 +289,6 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, user }
                         )}
                         {localData.isArchived && <span className="bg-stone-200 text-stone-500 px-2 py-0.5 rounded text-xs font-bold flex items-center gap-1"><Archive className="w-3 h-3"/> ARCHIVÉ</span>}
                     </div>
-                    {/* CODE + LIEU */}
                     <p className="text-xs text-stone-500 flex items-center gap-2 mt-1">
                         <span className="bg-stone-100 text-stone-600 px-1.5 py-0.5 rounded font-mono font-bold">{project.code}</span>
                         <span>•</span>
@@ -288,7 +296,7 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, user }
                     </p>
                 </div>
 
-                {/* INFO EQUIPE DANS LA BULLE (VUE FERMÉE) */}
+                {/* INFO EQUIPE DANS LA BULLE */}
                 <div className="hidden lg:flex items-center gap-4 text-xs text-stone-500 border-l border-r border-stone-100 px-4">
                     <div className="flex flex-col items-center w-16 text-center" title="Responsable Dossier">
                         <UserCheck className="w-4 h-4 mb-1 text-purple-400"/>
