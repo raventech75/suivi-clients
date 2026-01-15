@@ -63,7 +63,6 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, staffD
 
   useEffect(() => { if (!hasChanges) setLocalData(project); }, [project, hasChanges]);
 
-  // --- LOGIQUE AUTO-COMPLÉTION INTELLIGENTE ---
   const handleStaffChange = (roleNameKey: 'photographerName' | 'videographerName' | 'managerName', roleEmailKey: 'photographerEmail' | 'videographerEmail' | 'managerEmail', name: string) => {
       let newData = { ...localData, [roleNameKey]: name };
       if (staffDirectory && staffDirectory[name] && !localData[roleEmailKey]) {
@@ -77,8 +76,9 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, staffD
     if(!canEdit) return;
     setLocalData(p => {
         const newState = { ...p, [k]: v };
-        if(k === 'statusPhoto') newState.progressPhoto = PHOTO_STEPS[v as keyof typeof PHOTO_STEPS].percent;
-        if(k === 'statusVideo') newState.progressVideo = VIDEO_STEPS[v as keyof typeof VIDEO_STEPS].percent;
+        // Sécurité pour éviter le crash si la nouvelle valeur n'existe pas dans la config
+        if(k === 'statusPhoto' && PHOTO_STEPS[v as keyof typeof PHOTO_STEPS]) newState.progressPhoto = PHOTO_STEPS[v as keyof typeof PHOTO_STEPS].percent;
+        if(k === 'statusVideo' && VIDEO_STEPS[v as keyof typeof VIDEO_STEPS]) newState.progressVideo = VIDEO_STEPS[v as keyof typeof VIDEO_STEPS].percent;
         return newState;
     });
     setHasChanges(true); 
@@ -159,14 +159,13 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, staffD
               let displayOld = oldVal;
               let displayNew = newVal;
               
-              // 👇 C'EST ICI QUE J'AI CORRIGÉ (L'AJOUT DE "as any")
               if (key === 'statusPhoto') { 
-                  displayOld = (PHOTO_STEPS as any)[oldVal]?.label; 
-                  displayNew = (PHOTO_STEPS as any)[newVal]?.label; 
+                  displayOld = (PHOTO_STEPS as any)[oldVal]?.label || oldVal; 
+                  displayNew = (PHOTO_STEPS as any)[newVal]?.label || newVal; 
               }
               if (key === 'statusVideo') { 
-                  displayOld = (VIDEO_STEPS as any)[oldVal]?.label; 
-                  displayNew = (VIDEO_STEPS as any)[newVal]?.label; 
+                  displayOld = (VIDEO_STEPS as any)[oldVal]?.label || oldVal; 
+                  displayNew = (VIDEO_STEPS as any)[newVal]?.label || newVal; 
               }
               
               changes.push(`${labels[key]} : ${displayOld || 'Vide'} ➔ ${displayNew || 'Vide'}`);
@@ -176,13 +175,11 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, staffD
   };
 
   const save = async () => {
-      // 0. SÉCURITÉ CRITIQUE
       if (!localData.clientEmail || !localData.clientEmail.includes('@')) {
           alert("⛔️ Impossible d'enregistrer !\n\nL'email du client (Email 1) est manquant ou invalide.");
           return;
       }
 
-      // 1. Validation dates
       if (localData.statusPhoto !== 'none' && localData.statusPhoto !== 'waiting' && !localData.estimatedDeliveryPhoto) {
           alert("❌ Date livraison Photo manquante !"); return;
       }
@@ -190,7 +187,6 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, staffD
           alert("❌ Date livraison Vidéo manquante !"); return;
       }
 
-      // 2. Historique
       const changesList = detectChanges();
       let updatedHistory = [...(localData.history || [])];
       if (changesList.length > 0) {
@@ -201,7 +197,6 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, staffD
           }, ...updatedHistory];
       }
 
-      // 3. Nettoyage
       const cleanData = { ...localData } as any;
       if (cleanData.photographerEmail === undefined) cleanData.photographerEmail = null;
       if (cleanData.videographerEmail === undefined) cleanData.videographerEmail = null;
@@ -221,7 +216,6 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, staffD
           return;
       }
 
-      // 4. Apprentissage Annuaire
       const newEntries: Record<string, string> = {};
       if (localData.managerName && localData.managerEmail) newEntries[localData.managerName] = localData.managerEmail;
       if (localData.photographerName && localData.photographerEmail) newEntries[localData.photographerName] = localData.photographerEmail;
@@ -232,7 +226,6 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, staffD
           setDoc(doc(db, settingsPath, 'general'), { directory: newEntries }, { merge: true }).catch(console.error);
       }
       
-      // 5. Webhook
       const hasPhotoChanged = localData.statusPhoto !== project.statusPhoto;
       const hasVideoChanged = localData.statusVideo !== project.statusVideo;
       const hasEmailChanged = (
@@ -242,8 +235,9 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, staffD
       );
       
       if ((hasPhotoChanged || hasVideoChanged || hasEmailChanged)) {
-          let stepLabel = PHOTO_STEPS[localData.statusPhoto].label;
-          if (hasVideoChanged && !hasPhotoChanged) stepLabel = VIDEO_STEPS[localData.statusVideo].label;
+          // Sécurité ici aussi pour le label
+          let stepLabel = PHOTO_STEPS[localData.statusPhoto]?.label || "Mise à jour";
+          if (hasVideoChanged && !hasPhotoChanged) stepLabel = VIDEO_STEPS[localData.statusVideo]?.label || "Mise à jour";
           
           fetch(MAKE_WEBHOOK_URL, {
               method: 'POST', 
@@ -310,8 +304,9 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, staffD
                 </div>
                 <div className="hidden md:block text-sm text-stone-500 font-mono bg-stone-50 px-2 py-1 rounded">{formatDateFR(project.weddingDate)}</div>
                 <div className="hidden md:flex gap-4">
-                    {project.statusPhoto !== 'none' && <div className={`text-xs px-3 py-1.5 rounded-full font-bold flex flex-col items-center leading-tight ${project.statusPhoto === 'delivered' ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'} ${localData.isArchived ? 'opacity-50' : ''}`}><span>PHOTO: {PHOTO_STEPS[project.statusPhoto].label}</span>{project.estimatedDeliveryPhoto && <span className="text-[10px] opacity-75">{formatDateFR(project.estimatedDeliveryPhoto)}</span>}</div>}
-                    {project.statusVideo !== 'none' && <div className={`text-xs px-3 py-1.5 rounded-full font-bold flex flex-col items-center leading-tight ${project.statusVideo === 'delivered' ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'} ${localData.isArchived ? 'opacity-50' : ''}`}><span>VIDEO: {VIDEO_STEPS[project.statusVideo].label}</span>{project.estimatedDeliveryVideo && <span className="text-[10px] opacity-75">{formatDateFR(project.estimatedDeliveryVideo)}</span>}</div>}
+                    {/* 👇 C'EST ICI QUE LE CRASH SE PRODUISAIT - AJOUT DE ?.label || 'Inconnu' */}
+                    {project.statusPhoto !== 'none' && <div className={`text-xs px-3 py-1.5 rounded-full font-bold flex flex-col items-center leading-tight ${project.statusPhoto === 'delivered' ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'} ${localData.isArchived ? 'opacity-50' : ''}`}><span>PHOTO: {PHOTO_STEPS[project.statusPhoto]?.label || project.statusPhoto}</span>{project.estimatedDeliveryPhoto && <span className="text-[10px] opacity-75">{formatDateFR(project.estimatedDeliveryPhoto)}</span>}</div>}
+                    {project.statusVideo !== 'none' && <div className={`text-xs px-3 py-1.5 rounded-full font-bold flex flex-col items-center leading-tight ${project.statusVideo === 'delivered' ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'} ${localData.isArchived ? 'opacity-50' : ''}`}><span>VIDEO: {VIDEO_STEPS[project.statusVideo]?.label || project.statusVideo}</span>{project.estimatedDeliveryVideo && <span className="text-[10px] opacity-75">{formatDateFR(project.estimatedDeliveryVideo)}</span>}</div>}
                 </div>
             </div>
             <div className="flex items-center gap-4">
@@ -323,7 +318,7 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, staffD
         {/* DÉTAIL */}
         {isExpanded && (
             <div className="p-6 border-t bg-stone-50/50 space-y-8 animate-fade-in">
-                
+                {/* ... Contenu du détail identique ... */}
                 <div className="flex flex-col md:flex-row justify-between items-center gap-4 bg-white p-4 rounded-xl border border-stone-100 shadow-sm">
                     <div className="flex items-center gap-4 w-full md:w-auto">
                         <button onClick={toggleFastTrack} className={`flex-1 md:flex-none flex items-center justify-center gap-2 px-6 py-3 rounded-xl font-bold transition-all ${localData.isPriority ? 'bg-orange-500 text-white shadow-lg shadow-orange-200 transform scale-105' : 'bg-stone-100 text-stone-400 hover:bg-stone-200'}`}><Rocket className="w-5 h-5"/> {localData.isPriority ? 'FAST TRACK ACTIF' : 'Activer Fast Track'}</button>
@@ -335,7 +330,7 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, staffD
                 </div>
 
                 <div className="grid lg:grid-cols-2 gap-8">
-                    {/* GAUCHE */}
+                    {/* ... (Reste du code inchangé, mais assurez-vous de copier-coller tout le fichier pour avoir les correctifs partout) ... */}
                     <div className="space-y-6">
                         <div className="bg-white p-6 rounded-xl border border-stone-200 shadow-sm">
                             <h4 className="font-bold text-stone-800 mb-4 flex items-center gap-2"><Users className="w-5 h-5 text-stone-400"/> Fiche Mariés</h4>
@@ -364,9 +359,7 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, staffD
                         </div>
                     </div>
 
-                    {/* DROITE */}
                     <div className="space-y-6">
-                        
                         <div className="bg-white p-6 rounded-xl border border-stone-200 shadow-sm">
                             <h4 className="font-bold text-stone-800 mb-4 flex items-center gap-2"><Briefcase className="w-5 h-5 text-stone-400"/> Équipe & Contact</h4>
                             <div className="space-y-4">
@@ -423,6 +416,7 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, staffD
                             </div>
                         </div>
 
+                        {/* ... Albums et Brief ... */}
                         <div className="bg-white p-6 rounded-xl border border-stone-200 shadow-sm">
                             <h4 className="font-bold text-stone-800 mb-4 flex items-center gap-2"><BookOpen className="w-5 h-5 text-stone-400"/> Albums</h4>
                             <div className="space-y-2">
