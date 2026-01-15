@@ -11,8 +11,8 @@ export const SETTINGS_COLLECTION = 'settings';
 export const MAKE_WEBHOOK_URL = 'https://hook.eu2.make.com/iwf8nbt3tywmywp6u89xgn7e2nar0bbs'; 
 
 // Liens Stripe
-export const STRIPE_PRIORITY_LINK = 'https://buy.stripe.com/test_...'; // Votre lien Fast Track
-export const STRIPE_ARCHIVE_LINK = 'https://buy.stripe.com/test_...'; // 👈 J'ai rajouté cette ligne manquante !
+export const STRIPE_PRIORITY_LINK = 'https://buy.stripe.com/test_...'; 
+export const STRIPE_ARCHIVE_LINK = 'https://buy.stripe.com/test_...';
 
 export const SUPER_ADMINS = ['irzzenproductions@gmail.com']; 
 
@@ -68,6 +68,15 @@ export interface HistoryLog {
     action: string;
 }
 
+// 👇 NOUVELLE INTERFACE POUR LES PAIEMENTS ÉQUIPE
+export interface TeamPayment {
+    id: string;
+    recipient: string;
+    amount: number;
+    date: string;
+    note?: string;
+}
+
 export interface Project {
     id: string;
     code: string;
@@ -113,6 +122,7 @@ export interface Project {
     // Financier
     totalPrice?: number;
     depositAmount?: number;
+    teamPayments?: TeamPayment[]; // 👈 J'AI AJOUTÉ CETTE LIGNE MANQUANTE
     
     // Communication & Contenu
     messages?: Message[];
