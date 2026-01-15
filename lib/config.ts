@@ -8,8 +8,11 @@ export const DEFAULT_STAFF = [
 export const COLLECTION_NAME = 'wedding_projects';
 export const LEADS_COLLECTION = 'leads';
 export const SETTINGS_COLLECTION = 'settings';
-export const MAKE_WEBHOOK_URL = 'https://hook.eu2.make.com/iwf8nbt3tywmywp6u89xgn7e2nar0bbs'; // Remplacez par votre URL Make
-export const STRIPE_PRIORITY_LINK = 'https://buy.stripe.com/test_...'; // Votre lien Stripe
+export const MAKE_WEBHOOK_URL = 'https://hook.eu2.make.com/iwf8nbt3tywmywp6u89xgn7e2nar0bbs'; 
+
+// Liens Stripe
+export const STRIPE_PRIORITY_LINK = 'https://buy.stripe.com/test_...'; // Votre lien Fast Track
+export const STRIPE_ARCHIVE_LINK = 'https://buy.stripe.com/test_...'; // 👈 J'ai rajouté cette ligne manquante !
 
 export const SUPER_ADMINS = ['irzzenproductions@gmail.com']; 
 
@@ -56,7 +59,7 @@ export interface Message {
     id: string;
     author: 'admin' | 'client';
     text: string;
-    date: any; // Timestamp
+    date: any; 
 }
 
 export interface HistoryLog {
@@ -105,7 +108,7 @@ export interface Project {
     // Options
     isPriority: boolean;
     fastTrackActivationDate?: string | null;
-    isArchived?: boolean; // 👈 Nouveau champ Archive
+    isArchived?: boolean;
 
     // Financier
     totalPrice?: number;
@@ -120,10 +123,10 @@ export interface Project {
     adminNotes?: string;
 
     // Confirmations de livraison
-    deliveryConfirmed?: boolean; // Ancien champ (pour compatibilité)
+    deliveryConfirmed?: boolean; 
     deliveryConfirmationDate?: any;
     
-    // 👇 NOUVEAUX CHAMPS V45
+    // Nouveaux champs V45
     deliveryConfirmedPhoto?: boolean;
     deliveryConfirmedPhotoDate?: any;
     deliveryConfirmedVideo?: boolean;
