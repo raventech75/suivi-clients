@@ -161,9 +161,9 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, user }
           }, ...updatedHistory];
       }
 
-      // 3. NETTOYAGE DES DONNÉES (C'est ici que l'on corrige l'erreur !)
-      // On crée une copie propre où 'undefined' devient 'null'
-      const cleanData = { ...localData };
+      // 3. NETTOYAGE DES DONNÉES (CORRECTION ICI 👇)
+      // On ajoute "as any" pour autoriser l'assignation de null
+      const cleanData = { ...localData } as any;
       
       // On force les nouveaux champs à null s'ils n'existent pas
       if (cleanData.photographerEmail === undefined) cleanData.photographerEmail = null;
@@ -226,7 +226,6 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, user }
           }
       } else {
           // Juste une sauvegarde simple sans changement d'état
-          // On ne met pas d'alerte intrusive ici, juste on ferme
       }
       
       setHasChanges(false); setIsExpanded(false);
