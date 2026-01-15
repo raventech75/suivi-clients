@@ -45,9 +45,8 @@ export interface Message { id: string; author: 'client' | 'admin'; text: string;
 export interface Remuneration { name: string; amount: number; note: string; paid?: boolean; }
 export interface AlbumOrder { id: string; name: string; format: string; price: number; status: string; stripeLink?: string; paid: boolean; }
 
-// 👇 NOUVEAU TYPE POUR L'HISTORIQUE
 export interface HistoryLog {
-    date: string; // ISO String pour facilité
+    date: string;
     user: string;
     action: string;
 }
@@ -55,16 +54,20 @@ export interface HistoryLog {
 export interface Project {
   id: string;
   clientNames: string;
-  // Infos Contacts
+  
+  // Infos Contacts Mises à jour
   clientEmail?: string;
   clientEmail2?: string;
   clientPhone?: string;
   clientPhone2?: string;
-  clientAddress?: string;
-  clientCity?: string;
-  adminNotes?: string;
+  
+  // Modif ici : On garde address pour compatibilité mais on utilisera surtout Venue + Zip
+  clientAddress?: string; 
+  clientCity?: string; 
+  weddingVenueZip?: string; // NOUVEAU
   weddingVenue?: string;
 
+  adminNotes?: string;
   weddingDate: string;
   code: string;
   
@@ -73,8 +76,11 @@ export interface Project {
   progressPhoto: number; 
   progressVideo: number;
   
+  // ÉQUIPE + EMAILS
   photographerName: string;
+  photographerEmail?: string; // NOUVEAU
   videographerName: string;
+  videographerEmail?: string; // NOUVEAU
   managerName?: string; 
   managerEmail?: string; 
   onSiteTeam?: string[]; 
@@ -103,21 +109,8 @@ export interface Project {
   isPriority?: boolean; 
   fastTrackActivationDate?: any;
   
-  history?: HistoryLog[]; // 👈 AJOUT DU CHAMP HISTORIQUE ICI
-
-  createdAt: any;
-  lastUpdated?: any;
-}
-
-export interface Project {
-  id: string;
-  clientNames: string;
-  // ... (tous les autres champs)
-  isPriority?: boolean; 
-  fastTrackActivationDate?: any;
-  
-  history?: HistoryLog[];
-  isArchived?: boolean; // 👈 AJOUTEZ CETTE LIGNE
+  history?: HistoryLog[]; 
+  isArchived?: boolean;
 
   createdAt: any;
   lastUpdated?: any;
