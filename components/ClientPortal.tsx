@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { 
   ChevronRight, Search, AlertTriangle, ImageIcon, Film, Calendar, 
   Music, Rocket, CheckCircle, CheckSquare, BookOpen, 
-  Copy, ClipboardCheck, X
+  Copy, ClipboardCheck, X, Users, Camera, Video, UserCheck // 👈 J'ai ajouté ces icônes
 } from 'lucide-react';
 import { doc, updateDoc, serverTimestamp } from 'firebase/firestore';
 import { db, appId } from '../lib/firebase';
@@ -13,7 +13,6 @@ import {
 } from '../lib/config';
 import ChatBox from './ChatSystem';
 
-// UTILITAIRE DATE FR
 const formatDateFR = (dateString: string) => {
     if (!dateString) return "";
     return new Date(dateString).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric' });
@@ -66,7 +65,6 @@ export default function ClientPortal({ projects, onBack }: { projects: Project[]
     const isBlocked = ((foundProject.totalPrice || 0) - (foundProject.depositAmount || 0)) > 0 && (foundProject.totalPrice || 0) > 0;
     const defaultImage = 'https://images.unsplash.com/photo-1519741497674-611481863552?auto=format&fit=crop&q=80';
     
-    // NOUVELLE CONDITION DE SÉCURITÉ GALERIE
     const canViewGallery = foundProject.statusPhoto === 'delivered' && !isBlocked && foundProject.linkPhoto && foundProject.linkPhoto.length > 5;
     
     return (
@@ -75,8 +73,7 @@ export default function ClientPortal({ projects, onBack }: { projects: Project[]
              <img src={foundProject.coverImage || defaultImage} className="absolute inset-0 w-full h-full object-cover opacity-40" />
              <button onClick={onBack} className="absolute top-6 left-6 text-white/70 hover:text-white flex gap-2 items-center z-10 transition-colors"><ChevronRight className="rotate-180 w-4 h-4"/> Retour Accueil</button>
              <h2 className="text-4xl font-serif mb-2 relative z-10">{foundProject.clientNames}</h2>
-             {/* DATE FR ICI 👇 */}
-             <span className="bg-white/20 px-4 py-1 rounded-full text-sm relative z-10 backdrop-blur-md">{formatDateFR(foundProject.weddingDate)} • {foundProject.clientCity || 'Mariage'}</span>
+             <span className="bg-white/20 px-4 py-1 rounded-full text-sm relative z-10 backdrop-blur-md">{formatDateFR(foundProject.weddingDate)} • {foundProject.weddingVenue || foundProject.clientCity || 'Mariage'}</span>
         </div>
         
         <div className="max-w-4xl mx-auto px-4 -mt-16 space-y-8 relative z-10">
@@ -107,6 +104,33 @@ export default function ClientPortal({ projects, onBack }: { projects: Project[]
               </div>
           )}
 
+          {/* 🟢 NOUVEAU BLOC : ÉQUIPE DÉDIÉE */}
+          {(foundProject.managerName || foundProject.photographerName || foundProject.videographerName) && (
+              <div className="bg-white p-6 rounded-2xl border border-stone-200 shadow-md">
+                  <h3 className="font-bold text-lg text-stone-800 flex items-center gap-2 mb-4"><Users className="w-5 h-5 text-amber-500"/> Votre Équipe RavenTech</h3>
+                  <div className="grid md:grid-cols-3 gap-4">
+                      {foundProject.managerName && (
+                          <div className="flex items-center gap-3 p-3 bg-stone-50 rounded-xl border border-stone-100">
+                              <div className="w-10 h-10 bg-purple-100 text-purple-600 rounded-full flex items-center justify-center"><UserCheck className="w-5 h-5"/></div>
+                              <div><div className="text-xs text-stone-400 font-bold uppercase">Suivi Dossier</div><div className="font-bold text-stone-800">{foundProject.managerName}</div></div>
+                          </div>
+                      )}
+                      {foundProject.photographerName && (
+                          <div className="flex items-center gap-3 p-3 bg-stone-50 rounded-xl border border-stone-100">
+                              <div className="w-10 h-10 bg-amber-100 text-amber-600 rounded-full flex items-center justify-center"><Camera className="w-5 h-5"/></div>
+                              <div><div className="text-xs text-stone-400 font-bold uppercase">Photographe</div><div className="font-bold text-stone-800">{foundProject.photographerName}</div></div>
+                          </div>
+                      )}
+                      {foundProject.videographerName && (
+                          <div className="flex items-center gap-3 p-3 bg-stone-50 rounded-xl border border-stone-100">
+                              <div className="w-10 h-10 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center"><Video className="w-5 h-5"/></div>
+                              <div><div className="text-xs text-stone-400 font-bold uppercase">Vidéaste</div><div className="font-bold text-stone-800">{foundProject.videographerName}</div></div>
+                          </div>
+                      )}
+                  </div>
+              </div>
+          )}
+
           {/* CARTES PHOTO / VIDEO */}
           <div className="grid md:grid-cols-2 gap-6">
               {foundProject.statusPhoto !== 'none' && (
@@ -117,10 +141,8 @@ export default function ClientPortal({ projects, onBack }: { projects: Project[]
                       <div className="h-3 bg-stone-100 rounded-full overflow-hidden"><div className="h-full bg-amber-500 transition-all duration-1000" style={{ width: `${foundProject.progressPhoto}%` }} /></div>
                       <p className="text-right text-xs mt-1 text-stone-400">{PHOTO_STEPS[foundProject.statusPhoto].label}</p>
                   </div>
-                  {/* DATE ESTIMÉE EN FR 👇 */}
                   {foundProject.estimatedDeliveryPhoto && <div className="mb-4 bg-amber-50 text-amber-800 text-xs p-3 rounded-lg flex items-center gap-2"><Calendar className="w-4 h-4"/> Livraison estimée : <strong>{formatDateFR(foundProject.estimatedDeliveryPhoto)}</strong></div>}
                   
-                  {/* BOUTON SÉCURISÉ */}
                   {canViewGallery ? (
                       <a href={foundProject.linkPhoto} target="_blank" className="block w-full bg-stone-900 text-white text-center py-3 rounded-xl font-bold hover:bg-stone-800 transition shadow-lg transform active:scale-95">Voir la Galerie</a>
                   ) : foundProject.statusPhoto === 'delivered' ? (
@@ -137,7 +159,6 @@ export default function ClientPortal({ projects, onBack }: { projects: Project[]
                       <div className="h-3 bg-stone-100 rounded-full overflow-hidden"><div className="h-full bg-blue-500 transition-all duration-1000" style={{ width: `${foundProject.progressVideo}%` }} /></div>
                       <p className="text-right text-xs mt-1 text-stone-400">{VIDEO_STEPS[foundProject.statusVideo].label}</p>
                   </div>
-                  {/* DATE ESTIMÉE EN FR 👇 */}
                   {foundProject.estimatedDeliveryVideo && <div className="mb-4 bg-blue-50 text-blue-800 text-xs p-3 rounded-lg flex items-center gap-2"><Calendar className="w-4 h-4"/> Livraison estimée : <strong>{formatDateFR(foundProject.estimatedDeliveryVideo)}</strong></div>}
                   {foundProject.statusVideo === 'delivered' && !isBlocked && foundProject.linkVideo ? (
                       <a href={foundProject.linkVideo} target="_blank" className="block w-full bg-stone-900 text-white text-center py-3 rounded-xl font-bold hover:bg-stone-800 transition shadow-lg transform active:scale-95">Télécharger le Film</a>
