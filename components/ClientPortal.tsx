@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { 
   ChevronRight, Search, AlertTriangle, ImageIcon, Film, Calendar, 
   Music, Rocket, CheckCircle, CheckSquare, BookOpen, 
-  Copy, ClipboardCheck, X, Users, Camera, Video, UserCheck // 👈 J'ai ajouté ces icônes
+  Copy, ClipboardCheck, X, Users, Camera, Video, UserCheck, HardDrive, Download
 } from 'lucide-react';
 import { doc, updateDoc, serverTimestamp } from 'firebase/firestore';
 import { db, appId } from '../lib/firebase';
@@ -49,10 +49,18 @@ export default function ClientPortal({ projects, onBack }: { projects: Project[]
       setSavingMusic(false);
   };
 
-  const confirmDelivery = async () => {
-      if(!foundProject || !confirm("Confirmez-vous avoir bien récupéré tous vos fichiers ?")) return;
+  // 👇 CONFIRMATION SPÉCIFIQUE PHOTO
+  const confirmPhoto = async () => {
+      if(!foundProject || !confirm("⚠️ ATTENTION :\n\nEn confirmant, vous certifiez avoir téléchargé TOUS vos fichiers photos sur un disque dur personnel.\n\nConfirmer la bonne réception ?")) return;
       const colPath = typeof appId !== 'undefined' ? `artifacts/${appId}/public/data/${COLLECTION_NAME}` : COLLECTION_NAME;
-      await updateDoc(doc(db, colPath, foundProject.id), { deliveryConfirmed: true, deliveryConfirmationDate: serverTimestamp() });
+      await updateDoc(doc(db, colPath, foundProject.id), { deliveryConfirmedPhoto: true, deliveryConfirmedPhotoDate: serverTimestamp() });
+  };
+
+  // 👇 CONFIRMATION SPÉCIFIQUE VIDÉO
+  const confirmVideo = async () => {
+      if(!foundProject || !confirm("⚠️ ATTENTION :\n\nEn confirmant, vous certifiez avoir téléchargé votre film sur un disque dur personnel.\n\nConfirmer la bonne réception ?")) return;
+      const colPath = typeof appId !== 'undefined' ? `artifacts/${appId}/public/data/${COLLECTION_NAME}` : COLLECTION_NAME;
+      await updateDoc(doc(db, colPath, foundProject.id), { deliveryConfirmedVideo: true, deliveryConfirmedVideoDate: serverTimestamp() });
   };
 
   const copyProdEmail = () => {
@@ -66,7 +74,12 @@ export default function ClientPortal({ projects, onBack }: { projects: Project[]
     const defaultImage = 'https://images.unsplash.com/photo-1519741497674-611481863552?auto=format&fit=crop&q=80';
     
     const canViewGallery = foundProject.statusPhoto === 'delivered' && !isBlocked && foundProject.linkPhoto && foundProject.linkPhoto.length > 5;
+    const canViewVideo = foundProject.statusVideo === 'delivered' && !isBlocked && foundProject.linkVideo && foundProject.linkVideo.length > 5;
     
+    // On vérifie s'il y a au moins un élément livré pour afficher le bandeau d'urgence
+    const hasDelivery = foundProject.statusPhoto === 'delivered' || foundProject.statusVideo === 'delivered';
+    const allConfirmed = foundProject.deliveryConfirmedPhoto && foundProject.deliveryConfirmedVideo;
+
     return (
       <div className="min-h-screen bg-stone-50 pb-20">
         <div className="bg-stone-900 text-white p-10 text-center relative h-[40vh] flex flex-col justify-center items-center overflow-hidden">
@@ -78,33 +91,34 @@ export default function ClientPortal({ projects, onBack }: { projects: Project[]
         
         <div className="max-w-4xl mx-auto px-4 -mt-16 space-y-8 relative z-10">
           
-          {/* CONFIRMATION LIVRAISON */}
-          {(foundProject.statusPhoto === 'delivered' || foundProject.statusVideo === 'delivered') && !foundProject.deliveryConfirmed && !isBlocked && (
-              <div className="bg-green-50 border border-green-200 rounded-2xl p-6 flex flex-col md:flex-row items-center justify-between gap-4 shadow-lg animate-fade-in">
-                  <div>
-                      <h3 className="font-bold text-green-900 text-lg flex items-center gap-2"><CheckCircle className="w-5 h-5"/> Confirmation de réception</h3>
-                      <p className="text-green-800 text-sm">Avez-vous bien téléchargé et sauvegardé vos fichiers ?</p>
+          {/* 🚨 BANDEAU D'URGENCE ROUGE (Apparaît si livré mais pas encore tout confirmé) */}
+          {hasDelivery && !allConfirmed && (
+              <div className="bg-red-600 text-white p-6 rounded-2xl shadow-xl border-2 border-red-400 flex flex-col md:flex-row gap-4 items-start animate-fade-in">
+                  <div className="bg-white/20 p-3 rounded-full shrink-0">
+                      <HardDrive className="w-8 h-8 text-white" />
                   </div>
-                  <button onClick={confirmDelivery} className="bg-green-600 hover:bg-green-700 text-white px-6 py-3 rounded-xl font-bold transition-colors shadow-md flex items-center gap-2">
-                      <CheckSquare className="w-5 h-5"/> Je confirme la bonne réception
-                  </button>
-              </div>
-          )}
-
-          {foundProject.deliveryConfirmed && (
-              <div className="bg-stone-100 border border-stone-200 rounded-xl p-4 flex items-center justify-center gap-2 text-stone-500 text-sm italic">
-                  <CheckCircle className="w-4 h-4"/> Réception confirmée le {new Date(foundProject.deliveryConfirmationDate?.seconds * 1000).toLocaleDateString('fr-FR')}
+                  <div>
+                      <h3 className="font-bold text-xl uppercase tracking-wide mb-2 flex items-center gap-2">⚠️ Sauvegarde Obligatoire</h3>
+                      <p className="text-white/90 leading-relaxed mb-4">
+                          Vous avez accès à vos fichiers. <strong>Vous disposez de 2 mois</strong> pour effectuer une copie de sécurité sur vos disques durs personnels.
+                          <br/>
+                          Passé ce délai, nous ne garantissons plus la disponibilité des fichiers en ligne. Toute demande de restauration d'archive sera facturée <strong>290 €</strong>.
+                      </p>
+                      <div className="text-xs font-bold bg-black/20 inline-block px-3 py-1 rounded text-red-100">
+                          Veuillez confirmer la réception ci-dessous pour valider votre garantie.
+                      </div>
+                  </div>
               </div>
           )}
 
           {isBlocked && (
-              <div className="bg-red-50 border border-red-200 rounded-xl p-6 flex items-center gap-4 text-red-800 shadow-md">
-                   <AlertTriangle className="w-8 h-8 shrink-0" />
-                   <div><h3 className="font-bold text-lg">Paiement en attente</h3><p className="text-sm">Le téléchargement sera débloqué une fois le solde réglé.</p></div>
+              <div className="bg-stone-800 text-white border border-stone-700 rounded-xl p-6 flex items-center gap-4 shadow-md">
+                   <AlertTriangle className="w-8 h-8 shrink-0 text-amber-500" />
+                   <div><h3 className="font-bold text-lg text-amber-500">Paiement en attente</h3><p className="text-sm text-stone-300">Le téléchargement sera débloqué une fois le solde réglé.</p></div>
               </div>
           )}
 
-          {/* 🟢 NOUVEAU BLOC : ÉQUIPE DÉDIÉE */}
+          {/* ÉQUIPE DÉDIÉE */}
           {(foundProject.managerName || foundProject.photographerName || foundProject.videographerName) && (
               <div className="bg-white p-6 rounded-2xl border border-stone-200 shadow-md">
                   <h3 className="font-bold text-lg text-stone-800 flex items-center gap-2 mb-4"><Users className="w-5 h-5 text-amber-500"/> Votre Équipe RavenTech</h3>
@@ -131,40 +145,74 @@ export default function ClientPortal({ projects, onBack }: { projects: Project[]
               </div>
           )}
 
-          {/* CARTES PHOTO / VIDEO */}
+          {/* CARTES PHOTO / VIDEO AVEC CONFIRMATION DISTINCTE */}
           <div className="grid md:grid-cols-2 gap-6">
+              
+              {/* --- CARTE PHOTO --- */}
               {foundProject.statusPhoto !== 'none' && (
-                <div className="bg-white rounded-2xl p-6 shadow-md border border-stone-100">
+                <div className="bg-white rounded-2xl p-6 shadow-md border border-stone-100 flex flex-col h-full">
                   <div className="flex items-center gap-4 mb-4"><div className="w-12 h-12 bg-amber-100 text-amber-600 rounded-xl flex items-center justify-center"><ImageIcon className="w-6 h-6"/></div><h3 className="font-bold text-xl">Photos</h3></div>
-                  <div className="mb-4">
+                  <div className="mb-4 flex-1">
                       <div className="flex justify-between text-sm font-bold text-stone-500 mb-1"><span>Progression</span><span>{foundProject.progressPhoto}%</span></div>
                       <div className="h-3 bg-stone-100 rounded-full overflow-hidden"><div className="h-full bg-amber-500 transition-all duration-1000" style={{ width: `${foundProject.progressPhoto}%` }} /></div>
                       <p className="text-right text-xs mt-1 text-stone-400">{PHOTO_STEPS[foundProject.statusPhoto].label}</p>
+                      {foundProject.estimatedDeliveryPhoto && <div className="mt-4 bg-amber-50 text-amber-800 text-xs p-3 rounded-lg flex items-center gap-2"><Calendar className="w-4 h-4"/> Livraison estimée : <strong>{formatDateFR(foundProject.estimatedDeliveryPhoto)}</strong></div>}
                   </div>
-                  {foundProject.estimatedDeliveryPhoto && <div className="mb-4 bg-amber-50 text-amber-800 text-xs p-3 rounded-lg flex items-center gap-2"><Calendar className="w-4 h-4"/> Livraison estimée : <strong>{formatDateFR(foundProject.estimatedDeliveryPhoto)}</strong></div>}
                   
-                  {canViewGallery ? (
-                      <a href={foundProject.linkPhoto} target="_blank" className="block w-full bg-stone-900 text-white text-center py-3 rounded-xl font-bold hover:bg-stone-800 transition shadow-lg transform active:scale-95">Voir la Galerie</a>
-                  ) : foundProject.statusPhoto === 'delivered' ? (
-                      <button disabled className="block w-full bg-stone-200 text-stone-400 text-center py-3 rounded-xl font-bold cursor-not-allowed">Lien en cours de génération...</button>
-                  ) : null}
+                  {/* ACTIONS PHOTO */}
+                  <div className="space-y-3 mt-auto pt-4 border-t border-stone-50">
+                      {canViewGallery ? (
+                          <>
+                            <a href={foundProject.linkPhoto} target="_blank" className="block w-full bg-stone-900 text-white text-center py-3 rounded-xl font-bold hover:bg-stone-800 transition shadow-lg flex items-center justify-center gap-2"><Download className="w-4 h-4"/> Accéder à la Galerie</a>
+                            
+                            {!foundProject.deliveryConfirmedPhoto ? (
+                                <button onClick={confirmPhoto} className="w-full bg-white border-2 border-green-500 text-green-600 py-3 rounded-xl font-bold hover:bg-green-50 transition flex items-center justify-center gap-2 text-sm">
+                                    <CheckSquare className="w-4 h-4"/> Confirmer bonne réception
+                                </button>
+                            ) : (
+                                <div className="flex items-center justify-center gap-2 text-green-600 text-xs font-bold bg-green-50 p-2 rounded-lg border border-green-100">
+                                    <CheckCircle className="w-4 h-4"/> Réception confirmée le {new Date(foundProject.deliveryConfirmedPhotoDate?.seconds * 1000).toLocaleDateString()}
+                                </div>
+                            )}
+                          </>
+                      ) : foundProject.statusPhoto === 'delivered' ? (
+                          <button disabled className="block w-full bg-stone-200 text-stone-400 text-center py-3 rounded-xl font-bold cursor-not-allowed">Lien en cours de génération...</button>
+                      ) : null}
+                  </div>
               </div>
               )}
 
+              {/* --- CARTE VIDEO --- */}
               {foundProject.statusVideo !== 'none' && (
-                <div className="bg-white rounded-2xl p-6 shadow-md border border-stone-100">
+                <div className="bg-white rounded-2xl p-6 shadow-md border border-stone-100 flex flex-col h-full">
                   <div className="flex items-center gap-4 mb-4"><div className="w-12 h-12 bg-blue-100 text-blue-600 rounded-xl flex items-center justify-center"><Film className="w-6 h-6"/></div><h3 className="font-bold text-xl">Vidéo</h3></div>
-                  <div className="mb-4">
+                  <div className="mb-4 flex-1">
                       <div className="flex justify-between text-sm font-bold text-stone-500 mb-1"><span>Progression</span><span>{foundProject.progressVideo}%</span></div>
                       <div className="h-3 bg-stone-100 rounded-full overflow-hidden"><div className="h-full bg-blue-500 transition-all duration-1000" style={{ width: `${foundProject.progressVideo}%` }} /></div>
                       <p className="text-right text-xs mt-1 text-stone-400">{VIDEO_STEPS[foundProject.statusVideo].label}</p>
+                      {foundProject.estimatedDeliveryVideo && <div className="mt-4 bg-blue-50 text-blue-800 text-xs p-3 rounded-lg flex items-center gap-2"><Calendar className="w-4 h-4"/> Livraison estimée : <strong>{formatDateFR(foundProject.estimatedDeliveryVideo)}</strong></div>}
                   </div>
-                  {foundProject.estimatedDeliveryVideo && <div className="mb-4 bg-blue-50 text-blue-800 text-xs p-3 rounded-lg flex items-center gap-2"><Calendar className="w-4 h-4"/> Livraison estimée : <strong>{formatDateFR(foundProject.estimatedDeliveryVideo)}</strong></div>}
-                  {foundProject.statusVideo === 'delivered' && !isBlocked && foundProject.linkVideo ? (
-                      <a href={foundProject.linkVideo} target="_blank" className="block w-full bg-stone-900 text-white text-center py-3 rounded-xl font-bold hover:bg-stone-800 transition shadow-lg transform active:scale-95">Télécharger le Film</a>
-                  ) : foundProject.statusVideo === 'delivered' ? (
-                       <button disabled className="block w-full bg-stone-200 text-stone-400 text-center py-3 rounded-xl font-bold cursor-not-allowed">Lien en cours de génération...</button>
-                  ) : null}
+
+                  {/* ACTIONS VIDEO */}
+                  <div className="space-y-3 mt-auto pt-4 border-t border-stone-50">
+                      {canViewVideo ? (
+                          <>
+                              <a href={foundProject.linkVideo} target="_blank" className="block w-full bg-stone-900 text-white text-center py-3 rounded-xl font-bold hover:bg-stone-800 transition shadow-lg flex items-center justify-center gap-2"><Download className="w-4 h-4"/> Télécharger le Film</a>
+                              
+                              {!foundProject.deliveryConfirmedVideo ? (
+                                <button onClick={confirmVideo} className="w-full bg-white border-2 border-green-500 text-green-600 py-3 rounded-xl font-bold hover:bg-green-50 transition flex items-center justify-center gap-2 text-sm">
+                                    <CheckSquare className="w-4 h-4"/> Confirmer bonne réception
+                                </button>
+                              ) : (
+                                <div className="flex items-center justify-center gap-2 text-green-600 text-xs font-bold bg-green-50 p-2 rounded-lg border border-green-100">
+                                    <CheckCircle className="w-4 h-4"/> Réception confirmée le {new Date(foundProject.deliveryConfirmedVideoDate?.seconds * 1000).toLocaleDateString()}
+                                </div>
+                              )}
+                          </>
+                      ) : foundProject.statusVideo === 'delivered' ? (
+                           <button disabled className="block w-full bg-stone-200 text-stone-400 text-center py-3 rounded-xl font-bold cursor-not-allowed">Lien en cours de génération...</button>
+                      ) : null}
+                  </div>
                 </div>
               )}
           </div>
@@ -191,11 +239,8 @@ export default function ClientPortal({ projects, onBack }: { projects: Project[]
              <div className="bg-purple-50 p-6 rounded-2xl border border-purple-100 shadow-md">
                 <h3 className="font-bold text-purple-900 flex items-center gap-2 mb-4"><Music/> Brief Montage & Musique</h3>
                 <p className="text-sm text-purple-700 mb-3 font-medium">Ajoutez ici vos titres de chansons préférés ou vos demandes spécifiques de modification <span className="underline">avant le début du montage</span>.</p>
-                
                 <textarea className="w-full p-4 rounded-xl border border-purple-200 mb-3 focus:ring-2 ring-purple-500 outline-none min-h-[100px]" rows={3} placeholder="Ex: Musique d'ouverture : Perfect - Ed Sheeran. Merci de couper la scène du discours de l'oncle..." value={musicInstructions} onChange={e => setMusicInstructions(e.target.value)}/>
-                
                 <input className="w-full p-4 rounded-xl border border-purple-200 mb-4 focus:ring-2 ring-purple-500 outline-none" placeholder="Lien Spotify / Youtube playlist..." value={musicLinks} onChange={e => setMusicLinks(e.target.value)}/>
-                
                 <button onClick={handleSaveMusic} disabled={savingMusic} className="bg-purple-600 hover:bg-purple-700 text-white px-6 py-3 rounded-xl font-bold transition shadow-lg disabled:opacity-50">Enregistrer mes choix</button>
              </div>
           )}
