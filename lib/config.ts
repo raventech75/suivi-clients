@@ -1,7 +1,7 @@
 export const MAKE_WEBHOOK_URL = "https://hook.eu2.make.com/iwf8nbt3tywmywp6u89xgn7e2nar0bbs"; 
 export const SUPER_ADMINS = ["admin@raventech.fr", "irzzenproductions@gmail.com"]; 
 export const STRIPE_ARCHIVE_LINK = "https://buy.stripe.com/3cI3cv3jq2j37x9eFy5gc0b";
-export const STRIPE_PRIORITY_LINK = "https://buy.stripe.com/VOTRE_LIEN_PRIORITE"; 
+export const STRIPE_PRIORITY_LINK = "https://buy.stripe.com/fZu4gz07eaPzcRt54Y5gc0c"; 
 
 export const DEFAULT_STAFF = [
   "Feridun", "Volkan", "Ali", "Yunus", "Serife", "Emir", 
