@@ -5,7 +5,7 @@ import {
   BookOpen, Trash2, Image as ImageIcon, CheckSquare, 
   Upload, Loader2, MapPin, FileText, Users, Calendar, Eye, Timer, Music, Briefcase, History, Archive, RefreshCw, UserCheck
 } from 'lucide-react';
-import { doc, updateDoc, deleteDoc, serverTimestamp, setDoc } from 'firebase/firestore'; // Ajout setDoc
+import { doc, updateDoc, deleteDoc, serverTimestamp, setDoc } from 'firebase/firestore'; 
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { db, storage, appId } from '../lib/firebase';
 import { 
@@ -24,7 +24,6 @@ const formatDateTimeFR = (dateString: string) => {
     return new Date(dateString).toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute:'2-digit' });
 };
 
-// 👇 ON RECOIT staffDirectory EN PROPS
 export default function ProjectEditor({ project, isSuperAdmin, staffList, staffDirectory, user }: { project: Project, isSuperAdmin: boolean, staffList: string[], staffDirectory: Record<string, string>, user: any }) {
   const [isExpanded, setIsExpanded] = useState(false);
   const [localData, setLocalData] = useState(project);
@@ -66,14 +65,10 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, staffD
 
   // --- LOGIQUE AUTO-COMPLÉTION INTELLIGENTE ---
   const handleStaffChange = (roleNameKey: 'photographerName' | 'videographerName' | 'managerName', roleEmailKey: 'photographerEmail' | 'videographerEmail' | 'managerEmail', name: string) => {
-      // 1. On met à jour le nom
       let newData = { ...localData, [roleNameKey]: name };
-      
-      // 2. Si un email est connu pour ce nom et que le champ email est vide, on le remplit
       if (staffDirectory && staffDirectory[name] && !localData[roleEmailKey]) {
           newData = { ...newData, [roleEmailKey]: staffDirectory[name] };
       }
-      
       setLocalData(newData);
       setHasChanges(true);
   };
@@ -163,8 +158,17 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, staffD
           if (oldVal != newVal) {
               let displayOld = oldVal;
               let displayNew = newVal;
-              if (key === 'statusPhoto') { displayOld = PHOTO_STEPS[oldVal]?.label; displayNew = PHOTO_STEPS[newVal]?.label; }
-              if (key === 'statusVideo') { displayOld = VIDEO_STEPS[oldVal]?.label; displayNew = VIDEO_STEPS[newVal]?.label; }
+              
+              // 👇 C'EST ICI QUE J'AI CORRIGÉ (L'AJOUT DE "as any")
+              if (key === 'statusPhoto') { 
+                  displayOld = (PHOTO_STEPS as any)[oldVal]?.label; 
+                  displayNew = (PHOTO_STEPS as any)[newVal]?.label; 
+              }
+              if (key === 'statusVideo') { 
+                  displayOld = (VIDEO_STEPS as any)[oldVal]?.label; 
+                  displayNew = (VIDEO_STEPS as any)[newVal]?.label; 
+              }
+              
               changes.push(`${labels[key]} : ${displayOld || 'Vide'} ➔ ${displayNew || 'Vide'}`);
           }
       });
@@ -172,13 +176,13 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, staffD
   };
 
   const save = async () => {
-      // 🛑 0. SÉCURITÉ CRITIQUE : Email obligatoire
+      // 0. SÉCURITÉ CRITIQUE
       if (!localData.clientEmail || !localData.clientEmail.includes('@')) {
-          alert("⛔️ Impossible d'enregistrer !\n\nL'email du client (Email 1) est manquant ou invalide. Il est indispensable pour le fonctionnement des notifications.");
-          return; // On arrête tout ici.
+          alert("⛔️ Impossible d'enregistrer !\n\nL'email du client (Email 1) est manquant ou invalide.");
+          return;
       }
 
-      // 1. Validation des dates obligatoires
+      // 1. Validation dates
       if (localData.statusPhoto !== 'none' && localData.statusPhoto !== 'waiting' && !localData.estimatedDeliveryPhoto) {
           alert("❌ Date livraison Photo manquante !"); return;
       }
@@ -186,7 +190,7 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, staffD
           alert("❌ Date livraison Vidéo manquante !"); return;
       }
 
-      // 2. Préparation Historique
+      // 2. Historique
       const changesList = detectChanges();
       let updatedHistory = [...(localData.history || [])];
       if (changesList.length > 0) {
@@ -197,7 +201,7 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, staffD
           }, ...updatedHistory];
       }
 
-      // 3. Nettoyage des données (undefined -> null) pour Firestore
+      // 3. Nettoyage
       const cleanData = { ...localData } as any;
       if (cleanData.photographerEmail === undefined) cleanData.photographerEmail = null;
       if (cleanData.videographerEmail === undefined) cleanData.videographerEmail = null;
@@ -217,7 +221,7 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, staffD
           return;
       }
 
-      // 4. APPRENTISSAGE : MISE A JOUR DE L'ANNUAIRE
+      // 4. Apprentissage Annuaire
       const newEntries: Record<string, string> = {};
       if (localData.managerName && localData.managerEmail) newEntries[localData.managerName] = localData.managerEmail;
       if (localData.photographerName && localData.photographerEmail) newEntries[localData.photographerName] = localData.photographerEmail;
@@ -228,22 +232,16 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, staffD
           setDoc(doc(db, settingsPath, 'general'), { directory: newEntries }, { merge: true }).catch(console.error);
       }
       
-      // 5. DÉCLENCHEMENT WEBHOOK (MAKE)
+      // 5. Webhook
       const hasPhotoChanged = localData.statusPhoto !== project.statusPhoto;
       const hasVideoChanged = localData.statusVideo !== project.statusVideo;
-      
-      // On détecte aussi si un email a changé (Manager, Photo ou Vidéo)
       const hasEmailChanged = (
           localData.managerEmail !== project.managerEmail ||
           localData.photographerEmail !== project.photographerEmail ||
           localData.videographerEmail !== project.videographerEmail
       );
-
-      console.log(`🔍 Webhook check : Statut=${hasPhotoChanged||hasVideoChanged} | Email=${hasEmailChanged}`);
       
-      // Condition : (Changement Statut OU Changement Email Equipe) ET Email Client Valide
       if ((hasPhotoChanged || hasVideoChanged || hasEmailChanged)) {
-          
           let stepLabel = PHOTO_STEPS[localData.statusPhoto].label;
           if (hasVideoChanged && !hasPhotoChanged) stepLabel = VIDEO_STEPS[localData.statusVideo].label;
           
@@ -253,7 +251,7 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, staffD
               body: JSON.stringify({ 
                   type: 'step_update', 
                   clientName: localData.clientNames, 
-                  clientEmail: localData.clientEmail, // On est sûr qu'il existe grâce au check du début
+                  clientEmail: localData.clientEmail,
                   projectCode: localData.code,
                   managerEmail: localData.managerEmail || "",
                   photographerEmail: localData.photographerEmail || "",
@@ -261,9 +259,7 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, staffD
                   stepName: stepLabel, 
                   url: window.location.origin 
               })
-          })
-          .then(() => alert("✅ Sauvegardé + Notification envoyée !"))
-          .catch(err => console.error("Erreur Webhook", err));
+          }).catch(err => console.error("Erreur Webhook", err));
       }
       
       setHasChanges(false); setIsExpanded(false);
@@ -271,7 +267,7 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, staffD
 
   const invite = async () => {
       if (!localData.clientEmail || !localData.clientEmail.includes('@')) {
-          alert("❌ Impossible d'envoyer l'invitation : L'adresse email du client est manquante ou invalide.");
+          alert("❌ Impossible d'envoyer l'invitation : L'email du client est invalide.");
           return;
       }
       fetch(MAKE_WEBHOOK_URL, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ type:'invite', clientName: localData.clientNames, clientEmail: localData.clientEmail, projectCode: localData.code, url: window.location.origin }) });
@@ -286,7 +282,7 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, staffD
 
   return (
     <div className={`rounded-lg transition-all duration-200 mb-4 ${borderStyle} ${bgStyle}`}>
-        {/* ... (La partie Affichage reste identique à V39) ... */}
+        {/* ENTÊTE */}
         <div className="p-4 flex items-center justify-between cursor-pointer" onClick={(e) => { if(!(e.target as HTMLElement).closest('.avatar-uploader')) setIsExpanded(!isExpanded); }}>
             <div className="flex items-center gap-4 flex-1">
                 <div 
@@ -319,11 +315,12 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, staffD
                 </div>
             </div>
             <div className="flex items-center gap-4">
-                {project.deliveryConfirmed && <span className="bg-green-600 text-white px-2 py-1 rounded text-xs font-bold flex items-center gap-1"><CheckSquare className="w-3 h-3"/> LIVRÉ</span>}
+                {(project.deliveryConfirmedPhoto || project.deliveryConfirmedVideo) && <span className="bg-green-600 text-white px-2 py-1 rounded text-xs font-bold flex items-center gap-1"><CheckSquare className="w-3 h-3"/> LIVRÉ</span>}
                 <ChevronRight className={`text-stone-400 transition-transform ${isExpanded ? 'rotate-90' : ''}`} />
             </div>
         </div>
 
+        {/* DÉTAIL */}
         {isExpanded && (
             <div className="p-6 border-t bg-stone-50/50 space-y-8 animate-fade-in">
                 
@@ -338,7 +335,7 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, staffD
                 </div>
 
                 <div className="grid lg:grid-cols-2 gap-8">
-                    {/* COLONNE GAUCHE (Infos) */}
+                    {/* GAUCHE */}
                     <div className="space-y-6">
                         <div className="bg-white p-6 rounded-xl border border-stone-200 shadow-sm">
                             <h4 className="font-bold text-stone-800 mb-4 flex items-center gap-2"><Users className="w-5 h-5 text-stone-400"/> Fiche Mariés</h4>
@@ -367,10 +364,9 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, staffD
                         </div>
                     </div>
 
-                    {/* COLONNE DROITE (Equipe & Prod) */}
+                    {/* DROITE */}
                     <div className="space-y-6">
                         
-                        {/* 🧠 BLOC EQUIPE INTELLIGENT */}
                         <div className="bg-white p-6 rounded-xl border border-stone-200 shadow-sm">
                             <h4 className="font-bold text-stone-800 mb-4 flex items-center gap-2"><Briefcase className="w-5 h-5 text-stone-400"/> Équipe & Contact</h4>
                             <div className="space-y-4">
@@ -407,7 +403,6 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, staffD
                             </div>
                         </div>
 
-                        {/* ... (La suite Prod, Albums, Brief reste identique) ... */}
                         <div className="bg-white p-6 rounded-xl border border-stone-200 shadow-sm">
                             <h4 className="font-bold text-stone-800 mb-4 flex items-center gap-2"><Camera className="w-5 h-5 text-stone-400"/> Production</h4>
                             <div className="mb-6 pb-6 border-b border-stone-100">
