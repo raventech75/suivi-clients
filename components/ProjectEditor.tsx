@@ -1,5 +1,5 @@
 'use client';
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   Camera, Video, Ban, ChevronRight, Rocket, Mail, 
   BookOpen, Trash2, Image as ImageIcon, CheckSquare, 
@@ -30,6 +30,10 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, user }
   const [hasChanges, setHasChanges] = useState(false);
   const [newAlbum, setNewAlbum] = useState({ name: 'Album', format: '30x30', price: 0 });
   const [uploading, setUploading] = useState(false);
+  
+  // DRAG & DROP STATES
+  const [isDragging, setIsDragging] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const canEdit = !!user; 
 
@@ -103,16 +107,34 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, user }
       updateField('albums', albums);
   };
 
-  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  // --- GESTION UPLOAD IMAGE (CLICK & DROP) ---
+  const processFile = async (file: File) => {
     if (!canEdit) return;
-    const file = e.target.files?.[0]; if (!file) return;
     try {
       setUploading(true);
       let storageRef = ref(storage, `covers/${project.id}_${Date.now()}_${file.name}`);
       await uploadBytes(storageRef, file);
       const url = await getDownloadURL(storageRef);
       updateField('coverImage', url);
-    } catch (error: any) { alert(`Erreur: ${error.message}`); } finally { setUploading(false); }
+    } catch (error: any) { alert(`Erreur: ${error.message}`); } finally { setUploading(false); setIsDragging(false); }
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+      if(e.target.files && e.target.files[0]) processFile(e.target.files[0]);
+  };
+
+  const handleDrag = (e: React.DragEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (e.type === "dragenter" || e.type === "dragover") setIsDragging(true);
+      else if (e.type === "dragleave") setIsDragging(false);
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      setIsDragging(false);
+      if (e.dataTransfer.files && e.dataTransfer.files[0]) processFile(e.dataTransfer.files[0]);
   };
 
   const detectChanges = (): string[] => {
@@ -137,8 +159,7 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, user }
       return changes;
   };
 
- const save = async () => {
-      // 1. Validation des champs obligatoires
+  const save = async () => {
       if (localData.statusPhoto !== 'none' && localData.statusPhoto !== 'waiting' && !localData.estimatedDeliveryPhoto) {
           alert("❌ Date livraison Photo manquante !"); return;
       }
@@ -146,7 +167,6 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, user }
           alert("❌ Date livraison Vidéo manquante !"); return;
       }
 
-      // 2. Préparation Historique
       const changesList = detectChanges();
       let updatedHistory = [...(localData.history || [])];
       if (changesList.length > 0) {
@@ -157,7 +177,6 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, user }
           }, ...updatedHistory];
       }
 
-      // 3. Nettoyage des données (undefined -> null) pour Firestore
       const cleanData = { ...localData } as any;
       if (cleanData.photographerEmail === undefined) cleanData.photographerEmail = null;
       if (cleanData.videographerEmail === undefined) cleanData.videographerEmail = null;
@@ -177,7 +196,6 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, user }
           return;
       }
       
-      // 4. Déclenchement Webhook (Make)
       const hasPhotoChanged = localData.statusPhoto !== project.statusPhoto;
       const hasVideoChanged = localData.statusVideo !== project.statusVideo;
       
@@ -220,12 +238,35 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, user }
   return (
     <div className={`rounded-lg transition-all duration-200 mb-4 ${borderStyle} ${bgStyle}`}>
         {/* ENTÊTE LIGNE (LISTE) */}
-        <div className="p-4 flex items-center justify-between cursor-pointer" onClick={() => setIsExpanded(!isExpanded)}>
+        <div className="p-4 flex items-center justify-between cursor-pointer" onClick={(e) => { if(!(e.target as HTMLElement).closest('.avatar-uploader')) setIsExpanded(!isExpanded); }}>
             <div className="flex items-center gap-4 flex-1">
-                {/* AVATAR */}
-                <div className="w-12 h-12 rounded-full bg-stone-100 flex items-center justify-center text-xs font-bold text-stone-400 shrink-0 overflow-hidden relative group">
-                    {project.coverImage ? <img src={project.coverImage} className="w-full h-full object-cover"/> : project.clientNames.charAt(0)}
-                    <div className="absolute inset-0 bg-black/50 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"><Eye className="w-4 h-4 text-white"/></div>
+                
+                {/* 🔴 AVATAR UPLOADER (DRAG & DROP) */}
+                <div 
+                    className={`avatar-uploader w-12 h-12 rounded-full flex items-center justify-center text-xs font-bold shrink-0 overflow-hidden relative group transition-all duration-200 border-2 ${isDragging ? 'border-blue-500 bg-blue-50 scale-110 shadow-lg' : 'border-transparent bg-stone-100 text-stone-400'}`}
+                    onDragEnter={handleDrag}
+                    onDragLeave={handleDrag}
+                    onDragOver={handleDrag}
+                    onDrop={handleDrop}
+                    onClick={() => canEdit && fileInputRef.current?.click()}
+                    title="Cliquez ou déposez une image"
+                >
+                    <input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={handleFileChange} />
+                    
+                    {uploading ? (
+                        <Loader2 className="w-5 h-5 text-stone-500 animate-spin"/>
+                    ) : project.coverImage ? (
+                        <img src={project.coverImage} className={`w-full h-full object-cover transition-opacity ${isDragging ? 'opacity-50' : ''}`}/>
+                    ) : (
+                        <span className="text-lg">{project.clientNames.charAt(0)}</span>
+                    )}
+
+                    {/* OVERLAY AU SURVOL */}
+                    {canEdit && !uploading && (
+                        <div className={`absolute inset-0 bg-black/50 flex items-center justify-center transition-opacity ${isDragging ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>
+                            <Upload className="w-4 h-4 text-white"/>
+                        </div>
+                    )}
                 </div>
                 
                 {/* INFO PRINCIPALE */}
