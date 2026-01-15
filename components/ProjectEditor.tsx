@@ -76,7 +76,6 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, staffD
     if(!canEdit) return;
     setLocalData(p => {
         const newState = { ...p, [k]: v };
-        // Sécurité pour éviter le crash si la nouvelle valeur n'existe pas dans la config
         if(k === 'statusPhoto' && PHOTO_STEPS[v as keyof typeof PHOTO_STEPS]) newState.progressPhoto = PHOTO_STEPS[v as keyof typeof PHOTO_STEPS].percent;
         if(k === 'statusVideo' && VIDEO_STEPS[v as keyof typeof VIDEO_STEPS]) newState.progressVideo = VIDEO_STEPS[v as keyof typeof VIDEO_STEPS].percent;
         return newState;
@@ -158,16 +157,8 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, staffD
           if (oldVal != newVal) {
               let displayOld = oldVal;
               let displayNew = newVal;
-              
-              if (key === 'statusPhoto') { 
-                  displayOld = (PHOTO_STEPS as any)[oldVal]?.label || oldVal; 
-                  displayNew = (PHOTO_STEPS as any)[newVal]?.label || newVal; 
-              }
-              if (key === 'statusVideo') { 
-                  displayOld = (VIDEO_STEPS as any)[oldVal]?.label || oldVal; 
-                  displayNew = (VIDEO_STEPS as any)[newVal]?.label || newVal; 
-              }
-              
+              if (key === 'statusPhoto') { displayOld = (PHOTO_STEPS as any)[oldVal]?.label || oldVal; displayNew = (PHOTO_STEPS as any)[newVal]?.label || newVal; }
+              if (key === 'statusVideo') { displayOld = (VIDEO_STEPS as any)[oldVal]?.label || oldVal; displayNew = (VIDEO_STEPS as any)[newVal]?.label || newVal; }
               changes.push(`${labels[key]} : ${displayOld || 'Vide'} ➔ ${displayNew || 'Vide'}`);
           }
       });
@@ -179,7 +170,6 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, staffD
           alert("⛔️ Impossible d'enregistrer !\n\nL'email du client (Email 1) est manquant ou invalide.");
           return;
       }
-
       if (localData.statusPhoto !== 'none' && localData.statusPhoto !== 'waiting' && !localData.estimatedDeliveryPhoto) {
           alert("❌ Date livraison Photo manquante !"); return;
       }
@@ -228,14 +218,9 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, staffD
       
       const hasPhotoChanged = localData.statusPhoto !== project.statusPhoto;
       const hasVideoChanged = localData.statusVideo !== project.statusVideo;
-      const hasEmailChanged = (
-          localData.managerEmail !== project.managerEmail ||
-          localData.photographerEmail !== project.photographerEmail ||
-          localData.videographerEmail !== project.videographerEmail
-      );
+      const hasEmailChanged = (localData.managerEmail !== project.managerEmail || localData.photographerEmail !== project.photographerEmail || localData.videographerEmail !== project.videographerEmail);
       
       if ((hasPhotoChanged || hasVideoChanged || hasEmailChanged)) {
-          // Sécurité ici aussi pour le label
           let stepLabel = PHOTO_STEPS[localData.statusPhoto]?.label || "Mise à jour";
           if (hasVideoChanged && !hasPhotoChanged) stepLabel = VIDEO_STEPS[localData.statusVideo]?.label || "Mise à jour";
           
@@ -255,7 +240,6 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, staffD
               })
           }).catch(err => console.error("Erreur Webhook", err));
       }
-      
       setHasChanges(false); setIsExpanded(false);
   };
 
@@ -276,19 +260,20 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, staffD
 
   return (
     <div className={`rounded-lg transition-all duration-200 mb-4 ${borderStyle} ${bgStyle}`}>
-        {/* ENTÊTE */}
+        {/* ENTÊTE AVEC NOUVEAU DESIGN BADGES */}
         <div className="p-4 flex items-center justify-between cursor-pointer" onClick={(e) => { if(!(e.target as HTMLElement).closest('.avatar-uploader')) setIsExpanded(!isExpanded); }}>
             <div className="flex items-center gap-4 flex-1">
                 <div 
                     className={`avatar-uploader w-12 h-12 rounded-full flex items-center justify-center text-xs font-bold shrink-0 overflow-hidden relative group transition-all duration-200 border-2 cursor-pointer ${isDragging ? 'border-blue-500 bg-blue-50 scale-110 shadow-lg' : 'border-transparent bg-stone-100 text-stone-400'}`}
                     onDragEnter={handleDrag} onDragLeave={handleDrag} onDragOver={handleDrag} onDrop={handleDrop}
-                    onClick={() => canEdit && fileInputRef.current?.click()}
-                    title="Cliquez ou déposez une image"
+                    onClick={() => canEdit && fileInputRef.current?.click()} title="Cliquez ou déposez une image"
                 >
                     <input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={handleFileChange} />
                     {uploading ? <Loader2 className="w-5 h-5 text-stone-500 animate-spin"/> : localData.coverImage ? <img src={localData.coverImage} className={`w-full h-full object-cover transition-opacity ${isDragging ? 'opacity-50' : ''}`}/> : <span className="text-lg">{localData.clientNames.charAt(0)}</span>}
                     {canEdit && !uploading && <div className={`absolute inset-0 bg-black/50 flex items-center justify-center transition-opacity ${isDragging ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}><Upload className="w-4 h-4 text-white"/></div>}
                 </div>
+                
+                {/* INFO PRINCIPALE */}
                 <div className="min-w-[180px]">
                     <div className="flex items-center gap-2">
                         <span className="font-bold text-stone-800 text-lg">{project.clientNames}</span>
@@ -297,28 +282,62 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, staffD
                     </div>
                     <p className="text-xs text-stone-500 flex items-center gap-2 mt-1"><span className="bg-stone-100 text-stone-600 px-1.5 py-0.5 rounded font-mono font-bold">{project.code}</span><span>•</span><MapPin className="w-3 h-3"/> {project.weddingVenue || 'Lieu non défini'}</p>
                 </div>
+
+                {/* EQUIPE (ICONES RONDES) */}
                 <div className="hidden lg:flex items-center gap-4 text-xs text-stone-500 border-l border-r border-stone-100 px-4">
                     <div className="flex flex-col items-center w-16 text-center" title="Responsable Dossier"><UserCheck className="w-4 h-4 mb-1 text-purple-400"/><span className="truncate w-full font-bold">{project.managerName || '-'}</span></div>
                     <div className="flex flex-col items-center w-16 text-center" title="Photographe"><Camera className="w-4 h-4 mb-1 text-amber-400"/><span className="truncate w-full font-bold">{project.photographerName || '-'}</span></div>
                     <div className="flex flex-col items-center w-16 text-center" title="Vidéaste"><Video className="w-4 h-4 mb-1 text-blue-400"/><span className="truncate w-full font-bold">{project.videographerName || '-'}</span></div>
                 </div>
+
+                {/* DATE MARIAGE */}
                 <div className="hidden md:block text-sm text-stone-500 font-mono bg-stone-50 px-2 py-1 rounded">{formatDateFR(project.weddingDate)}</div>
-                <div className="hidden md:flex gap-4">
-                    {/* 👇 C'EST ICI QUE LE CRASH SE PRODUISAIT - AJOUT DE ?.label || 'Inconnu' */}
-                    {project.statusPhoto !== 'none' && <div className={`text-xs px-3 py-1.5 rounded-full font-bold flex flex-col items-center leading-tight ${project.statusPhoto === 'delivered' ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'} ${localData.isArchived ? 'opacity-50' : ''}`}><span>PHOTO: {PHOTO_STEPS[project.statusPhoto]?.label || project.statusPhoto}</span>{project.estimatedDeliveryPhoto && <span className="text-[10px] opacity-75">{formatDateFR(project.estimatedDeliveryPhoto)}</span>}</div>}
-                    {project.statusVideo !== 'none' && <div className={`text-xs px-3 py-1.5 rounded-full font-bold flex flex-col items-center leading-tight ${project.statusVideo === 'delivered' ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'} ${localData.isArchived ? 'opacity-50' : ''}`}><span>VIDEO: {VIDEO_STEPS[project.statusVideo]?.label || project.statusVideo}</span>{project.estimatedDeliveryVideo && <span className="text-[10px] opacity-75">{formatDateFR(project.estimatedDeliveryVideo)}</span>}</div>}
+                
+                {/* 👇 NOUVEAU DESIGN DES BADGES DE STATUT (CARTE BLANCHE + BORDURE) */}
+                <div className="hidden md:flex gap-3">
+                    {project.statusPhoto !== 'none' && (
+                        <div className={`flex items-center gap-3 px-3 py-2 rounded-lg border shadow-sm transition-all ${project.statusPhoto === 'delivered' ? 'bg-white border-green-200' : 'bg-white border-amber-200'} ${localData.isArchived ? 'opacity-50 grayscale' : ''}`}>
+                            <div className={`p-1.5 rounded-md ${project.statusPhoto === 'delivered' ? 'bg-green-50 text-green-600' : 'bg-amber-50 text-amber-600'}`}>
+                                <Camera className="w-4 h-4" />
+                            </div>
+                            <div className="flex flex-col leading-none">
+                                <span className={`text-[10px] font-bold uppercase tracking-wider mb-0.5 ${project.statusPhoto === 'delivered' ? 'text-green-700' : 'text-amber-700'}`}>
+                                    {(PHOTO_STEPS as any)[project.statusPhoto]?.label || project.statusPhoto}
+                                </span>
+                                <span className="text-[10px] text-stone-400 font-mono">
+                                    {project.estimatedDeliveryPhoto ? formatDateFR(project.estimatedDeliveryPhoto) : 'Date à définir'}
+                                </span>
+                            </div>
+                        </div>
+                    )}
+                    
+                    {project.statusVideo !== 'none' && (
+                        <div className={`flex items-center gap-3 px-3 py-2 rounded-lg border shadow-sm transition-all ${project.statusVideo === 'delivered' ? 'bg-white border-green-200' : 'bg-white border-blue-200'} ${localData.isArchived ? 'opacity-50 grayscale' : ''}`}>
+                            <div className={`p-1.5 rounded-md ${project.statusVideo === 'delivered' ? 'bg-green-50 text-green-600' : 'bg-blue-50 text-blue-600'}`}>
+                                <Video className="w-4 h-4" />
+                            </div>
+                            <div className="flex flex-col leading-none">
+                                <span className={`text-[10px] font-bold uppercase tracking-wider mb-0.5 ${project.statusVideo === 'delivered' ? 'text-green-700' : 'text-blue-700'}`}>
+                                    {(VIDEO_STEPS as any)[project.statusVideo]?.label || project.statusVideo}
+                                </span>
+                                <span className="text-[10px] text-stone-400 font-mono">
+                                    {project.estimatedDeliveryVideo ? formatDateFR(project.estimatedDeliveryVideo) : 'Date à définir'}
+                                </span>
+                            </div>
+                        </div>
+                    )}
                 </div>
             </div>
             <div className="flex items-center gap-4">
-                {(project.deliveryConfirmedPhoto || project.deliveryConfirmedVideo) && <span className="bg-green-600 text-white px-2 py-1 rounded text-xs font-bold flex items-center gap-1"><CheckSquare className="w-3 h-3"/> LIVRÉ</span>}
+                {(project.deliveryConfirmedPhoto || project.deliveryConfirmedVideo) && <span className="bg-green-600 text-white px-2 py-1 rounded text-xs font-bold flex items-center gap-1 shadow-sm"><CheckSquare className="w-3 h-3"/> LIVRÉ</span>}
                 <ChevronRight className={`text-stone-400 transition-transform ${isExpanded ? 'rotate-90' : ''}`} />
             </div>
         </div>
 
-        {/* DÉTAIL */}
         {isExpanded && (
             <div className="p-6 border-t bg-stone-50/50 space-y-8 animate-fade-in">
-                {/* ... Contenu du détail identique ... */}
+                 {/* ... LE RESTE DU DÉTAIL NE CHANGE PAS (COPIEZ-COLLEZ LA SUITE DE VOTRE V49 ICI SI BESOIN) ... */}
+                 {/* Pour la clarté, je remets le contenu complet du bloc expanded pour que le copier-coller marche direct */}
                 <div className="flex flex-col md:flex-row justify-between items-center gap-4 bg-white p-4 rounded-xl border border-stone-100 shadow-sm">
                     <div className="flex items-center gap-4 w-full md:w-auto">
                         <button onClick={toggleFastTrack} className={`flex-1 md:flex-none flex items-center justify-center gap-2 px-6 py-3 rounded-xl font-bold transition-all ${localData.isPriority ? 'bg-orange-500 text-white shadow-lg shadow-orange-200 transform scale-105' : 'bg-stone-100 text-stone-400 hover:bg-stone-200'}`}><Rocket className="w-5 h-5"/> {localData.isPriority ? 'FAST TRACK ACTIF' : 'Activer Fast Track'}</button>
@@ -330,7 +349,6 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, staffD
                 </div>
 
                 <div className="grid lg:grid-cols-2 gap-8">
-                    {/* ... (Reste du code inchangé, mais assurez-vous de copier-coller tout le fichier pour avoir les correctifs partout) ... */}
                     <div className="space-y-6">
                         <div className="bg-white p-6 rounded-xl border border-stone-200 shadow-sm">
                             <h4 className="font-bold text-stone-800 mb-4 flex items-center gap-2"><Users className="w-5 h-5 text-stone-400"/> Fiche Mariés</h4>
@@ -366,30 +384,21 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, staffD
                                 <div className="p-3 bg-stone-50 rounded-lg border border-stone-100">
                                     <label className="text-[10px] uppercase font-bold text-purple-600 block mb-1">Responsable Dossier</label>
                                     <div className="flex gap-2">
-                                        <select disabled={!isSuperAdmin} className="w-1/3 p-2 border rounded bg-white text-sm" value={localData.managerName || ''} onChange={e=>handleStaffChange('managerName', 'managerEmail', e.target.value)}>
-                                            <option value="">-- Nom --</option>
-                                            {staffList.map(s => <option key={s} value={s}>{s}</option>)}
-                                        </select>
+                                        <select disabled={!isSuperAdmin} className="w-1/3 p-2 border rounded bg-white text-sm" value={localData.managerName || ''} onChange={e=>handleStaffChange('managerName', 'managerEmail', e.target.value)}><option value="">-- Nom --</option>{staffList.map(s => <option key={s} value={s}>{s}</option>)}</select>
                                         <input disabled={!isSuperAdmin} className="flex-1 p-2 border rounded bg-white text-sm" value={localData.managerEmail || ''} onChange={e=>updateField('managerEmail', e.target.value)} placeholder="Email du responsable" />
                                     </div>
                                 </div>
                                 <div className="p-3 bg-stone-50 rounded-lg border border-stone-100">
                                     <label className="text-[10px] uppercase font-bold text-amber-600 block mb-1">Photographe J-J</label>
                                     <div className="flex gap-2">
-                                        <select disabled={!canEdit} className="w-1/3 p-2 border rounded bg-white text-sm" value={localData.photographerName || ''} onChange={e=>handleStaffChange('photographerName', 'photographerEmail', e.target.value)}>
-                                            <option value="">-- Nom --</option>
-                                            {staffList.map(s => <option key={s} value={s}>{s}</option>)}
-                                        </select>
+                                        <select disabled={!canEdit} className="w-1/3 p-2 border rounded bg-white text-sm" value={localData.photographerName || ''} onChange={e=>handleStaffChange('photographerName', 'photographerEmail', e.target.value)}><option value="">-- Nom --</option>{staffList.map(s => <option key={s} value={s}>{s}</option>)}</select>
                                         <input disabled={!canEdit} className="flex-1 p-2 border rounded bg-white text-sm" value={localData.photographerEmail || ''} onChange={e=>updateField('photographerEmail', e.target.value)} placeholder="Email Photographe" />
                                     </div>
                                 </div>
                                 <div className="p-3 bg-stone-50 rounded-lg border border-stone-100">
                                     <label className="text-[10px] uppercase font-bold text-blue-600 block mb-1">Vidéaste J-J</label>
                                     <div className="flex gap-2">
-                                        <select disabled={!canEdit} className="w-1/3 p-2 border rounded bg-white text-sm" value={localData.videographerName || ''} onChange={e=>handleStaffChange('videographerName', 'videographerEmail', e.target.value)}>
-                                            <option value="">-- Nom --</option>
-                                            {staffList.map(s => <option key={s} value={s}>{s}</option>)}
-                                        </select>
+                                        <select disabled={!canEdit} className="w-1/3 p-2 border rounded bg-white text-sm" value={localData.videographerName || ''} onChange={e=>handleStaffChange('videographerName', 'videographerEmail', e.target.value)}><option value="">-- Nom --</option>{staffList.map(s => <option key={s} value={s}>{s}</option>)}</select>
                                         <input disabled={!canEdit} className="flex-1 p-2 border rounded bg-white text-sm" value={localData.videographerEmail || ''} onChange={e=>updateField('videographerEmail', e.target.value)} placeholder="Email Vidéaste" />
                                     </div>
                                 </div>
@@ -416,7 +425,6 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, staffD
                             </div>
                         </div>
 
-                        {/* ... Albums et Brief ... */}
                         <div className="bg-white p-6 rounded-xl border border-stone-200 shadow-sm">
                             <h4 className="font-bold text-stone-800 mb-4 flex items-center gap-2"><BookOpen className="w-5 h-5 text-stone-400"/> Albums</h4>
                             <div className="space-y-2">
