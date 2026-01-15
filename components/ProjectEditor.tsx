@@ -137,10 +137,10 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, user }
       return changes;
   };
 
-  const save = async () => {
-      console.log("💾 [DEBUG] Début de la sauvegarde...");
+ const save = async () => {
+      console.log("💾 [1] Clic sur Enregistrer");
 
-      // 1. Validation des dates obligatoires
+      // 1. Validation
       if (localData.statusPhoto !== 'none' && localData.statusPhoto !== 'waiting' && !localData.estimatedDeliveryPhoto) {
           alert("❌ Date livraison Photo manquante !");
           return;
@@ -150,7 +150,7 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, user }
           return;
       }
 
-      // 2. Gestion de l'historique
+      // 2. Historique & Nettoyage
       const changesList = detectChanges();
       let updatedHistory = [...(localData.history || [])];
       if (changesList.length > 0) {
@@ -161,11 +161,7 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, user }
           }, ...updatedHistory];
       }
 
-      // 3. NETTOYAGE DES DONNÉES (CORRECTION ICI 👇)
-      // On ajoute "as any" pour autoriser l'assignation de null
       const cleanData = { ...localData } as any;
-      
-      // On force les nouveaux champs à null s'ils n'existent pas
       if (cleanData.photographerEmail === undefined) cleanData.photographerEmail = null;
       if (cleanData.videographerEmail === undefined) cleanData.videographerEmail = null;
       if (cleanData.managerEmail === undefined) cleanData.managerEmail = null;
@@ -173,59 +169,62 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, user }
       if (cleanData.clientPhone2 === undefined) cleanData.clientPhone2 = null;
       if (cleanData.weddingVenueZip === undefined) cleanData.weddingVenueZip = null;
 
-      // On prépare l'objet final pour Firestore
-      const finalData = { 
-          ...cleanData, 
-          history: updatedHistory, 
-          lastUpdated: serverTimestamp() 
-      };
-
+      const finalData = { ...cleanData, history: updatedHistory, lastUpdated: serverTimestamp() };
       const colPath = typeof appId !== 'undefined' ? `artifacts/${appId}/public/data/${COLLECTION_NAME}` : COLLECTION_NAME;
       
       try {
-          // SAUVEGARDE FIRESTORE
           await updateDoc(doc(db, colPath, project.id), finalData);
-          console.log("✅ Sauvegarde Firestore réussie.");
+          console.log("✅ [2] Sauvegarde Firestore OK");
       } catch (error) {
-          console.error("❌ ERREUR CRITIQUE FIRESTORE :", error);
-          alert("Erreur lors de la sauvegarde (voir console). Vérifiez votre connexion.");
-          return; // On arrête tout si la sauvegarde échoue
+          console.error("❌ ERREUR FIRESTORE :", error);
+          alert("Erreur de sauvegarde");
+          return;
       }
       
-      // 4. Envoi Webhook (Make)
+      // 3. DIAGNOSTIC WEBHOOK
       const hasPhotoChanged = localData.statusPhoto !== project.statusPhoto;
       const hasVideoChanged = localData.statusVideo !== project.statusVideo;
-      
+      const hasClientEmail = localData.clientEmail && localData.clientEmail.includes('@');
+
+      console.log("🧐 [3] Analyse des conditions d'envoi :");
+      console.log(`   - Statut Photo : ${project.statusPhoto} -> ${localData.statusPhoto} (Changé ? ${hasPhotoChanged})`);
+      console.log(`   - Statut Vidéo : ${project.statusVideo} -> ${localData.statusVideo} (Changé ? ${hasVideoChanged})`);
+      console.log(`   - Email Client présent ? : ${hasClientEmail} (${localData.clientEmail})`);
+
       if (hasPhotoChanged || hasVideoChanged) {
-          if (localData.clientEmail && localData.clientEmail.includes('@')) {
+          if (hasClientEmail) {
+              console.log("🚀 [4] TOUTES CONDITIONS RÉUNIES -> ENVOI MAKE !");
               try {
-                  console.log("🚀 Envoi du Webhook Make...");
+                  const payload = { 
+                      type: 'step_update', 
+                      clientName: localData.clientNames, 
+                      clientEmail: localData.clientEmail, 
+                      projectCode: localData.code,
+                      managerEmail: localData.managerEmail || "",
+                      photographerEmail: localData.photographerEmail || "",
+                      videographerEmail: localData.videographerEmail || "",
+                      stepName: hasPhotoChanged ? PHOTO_STEPS[localData.statusPhoto].label : VIDEO_STEPS[localData.statusVideo].label, 
+                      url: window.location.origin 
+                  };
+                  console.log("📦 Payload envoyé :", payload);
+
                   await fetch(MAKE_WEBHOOK_URL, {
                       method: 'POST', 
                       headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify({ 
-                          type: 'step_update', 
-                          clientName: localData.clientNames, 
-                          clientEmail: localData.clientEmail, 
-                          projectCode: localData.code,
-                          // On envoie bien les données nettoyées ou vides
-                          managerEmail: localData.managerEmail || "",
-                          photographerEmail: localData.photographerEmail || "",
-                          videographerEmail: localData.videographerEmail || "",
-                          stepName: hasPhotoChanged ? PHOTO_STEPS[localData.statusPhoto].label : VIDEO_STEPS[localData.statusVideo].label, 
-                          url: window.location.origin 
-                      })
+                      body: JSON.stringify(payload)
                   });
-                  alert("✅ Sauvegardé et Client notifié !");
+                  alert("✅ Sauvegardé + Notification envoyée !");
               } catch (err) {
-                  console.error("Erreur Webhook:", err);
-                  alert("Sauvegardé, mais erreur d'envoi notification.");
+                  console.error("❌ Erreur réseau Make:", err);
+                  alert("Sauvegardé, mais Make n'a pas répondu.");
               }
           } else {
-              alert("✅ Sauvegardé (Pas d'email client pour la notif).");
+              console.warn("⛔️ [STOP] Pas d'email client valide.");
+              alert("Sauvegardé (Pas de notif : Email client manquant)");
           }
       } else {
-          // Juste une sauvegarde simple sans changement d'état
+          console.log("ℹ️ [STOP] Aucun changement de statut détecté. Le webhook ne part pas.");
+          // Pas d'alerte, on sauvegarde juste silencieusement
       }
       
       setHasChanges(false); setIsExpanded(false);
