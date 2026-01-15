@@ -13,6 +13,8 @@ export const MAKE_WEBHOOK_URL = 'https://hook.eu2.make.com/iwf8nbt3tywmywp6u89xg
 // Liens Stripe
 export const STRIPE_PRIORITY_LINK = 'https://buy.stripe.com/fZu4gz07eaPzcRt54Y5gc0c'; 
 export const STRIPE_ARCHIVE_LINK = 'https://buy.stripe.com/3cI3cv3jq2j37x9eFy5gc0b';
+export const STRIPE_RAW_LINK = 'https://buy.stripe.com/test_...'; // Nouveau : Option Fichiers Bruts
+export const STRIPE_ARCHIVE_RESTORE_LINK = 'https://buy.stripe.com/test_...'; // Nouveau : Déblocage après délai
 
 export const SUPER_ADMINS = ['irzzenproductions@gmail.com']; 
 
