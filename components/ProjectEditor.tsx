@@ -3,7 +3,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { 
   Camera, Video, Ban, ChevronRight, Rocket, Mail, 
   BookOpen, Trash2, Image as ImageIcon, CheckSquare, 
-  Upload, Loader2, MapPin, FileText, Users, Calendar, Eye, Timer, Music, Briefcase, History, Archive, RefreshCw, UserCheck
+  Upload, Loader2, MapPin, FileText, Users, Calendar, Eye, Timer, Music, Briefcase, History, Archive, RefreshCw, UserCheck, Send
 } from 'lucide-react';
 import { doc, updateDoc, deleteDoc, serverTimestamp, setDoc } from 'firebase/firestore'; 
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
@@ -11,7 +11,7 @@ import { db, storage, appId } from '../lib/firebase';
 import { 
   COLLECTION_NAME, MAKE_WEBHOOK_URL, PHOTO_STEPS, SETTINGS_COLLECTION,
   VIDEO_STEPS, ALBUM_FORMATS, ALBUM_STATUSES, Project, HistoryLog,
-  STAFF_DIRECTORY // 👈 J'importe le nouvel annuaire fixe
+  STAFF_DIRECTORY 
 } from '../lib/config';
 import ChatBox from './ChatSystem';
 
@@ -31,6 +31,7 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, staffD
   const [hasChanges, setHasChanges] = useState(false);
   const [newAlbum, setNewAlbum] = useState({ name: 'Album', format: '30x30', price: 0 });
   const [uploading, setUploading] = useState(false);
+  const [sendingInvite, setSendingInvite] = useState(false); // 👈 Nouvel état pour le chargement
   
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -64,12 +65,9 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, staffD
 
   useEffect(() => { if (!hasChanges) setLocalData(project); }, [project, hasChanges]);
 
-  // 👇 LOGIQUE CORRIGÉE POUR L'ANNUAIRE FIXE
   const handleStaffChange = (roleNameKey: 'photographerName' | 'videographerName' | 'managerName', roleEmailKey: 'photographerEmail' | 'videographerEmail' | 'managerEmail', name: string) => {
       let newData = { ...localData, [roleNameKey]: name };
       
-      // Priorité 1 : Annuaire Fixe (Config)
-      // Priorité 2 : Annuaire Appris (Firestore)
       const fixedEmail = STAFF_DIRECTORY[name];
       const learnedEmail = staffDirectory ? staffDirectory[name] : null;
       const emailToUse = fixedEmail || learnedEmail;
@@ -216,7 +214,6 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, staffD
           return;
       }
 
-      // Apprentissage de l'annuaire (On garde ça au cas où vous ajoutez qqn qui n'est pas dans la config fixe)
       const newEntries: Record<string, string> = {};
       if (localData.managerName && localData.managerEmail) newEntries[localData.managerName] = localData.managerEmail;
       if (localData.photographerName && localData.photographerEmail) newEntries[localData.photographerName] = localData.photographerEmail;
@@ -254,13 +251,46 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, staffD
       setHasChanges(false); setIsExpanded(false);
   };
 
+  // 👇 FONCTION D'INVITATION AVEC COMPTEUR (V57)
   const invite = async () => {
       if (!localData.clientEmail || !localData.clientEmail.includes('@')) {
           alert("❌ Impossible d'envoyer l'invitation : L'email du client est invalide.");
           return;
       }
-      fetch(MAKE_WEBHOOK_URL, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ type:'invite', clientName: localData.clientNames, clientEmail: localData.clientEmail, projectCode: localData.code, url: window.location.origin }) });
-      alert("Invitation envoyée !");
+      
+      setSendingInvite(true);
+      
+      try {
+          // 1. Envoi Webhook
+          await fetch(MAKE_WEBHOOK_URL, { 
+              method:'POST', 
+              headers:{'Content-Type':'application/json'}, 
+              body:JSON.stringify({ 
+                  type:'invite', 
+                  clientName: localData.clientNames, 
+                  clientEmail: localData.clientEmail, 
+                  projectCode: localData.code, 
+                  url: window.location.origin 
+              }) 
+          });
+
+          // 2. Incrémentation du compteur
+          const newCount = (localData.inviteCount || 0) + 1;
+          
+          // 3. Mise à jour Firestore Directe (pour ne pas bloquer le bouton Save)
+          const colPath = typeof appId !== 'undefined' ? `artifacts/${appId}/public/data/${COLLECTION_NAME}` : COLLECTION_NAME;
+          await updateDoc(doc(db, colPath, project.id), { inviteCount: newCount });
+
+          // 4. Mise à jour Local
+          setLocalData(prev => ({ ...prev, inviteCount: newCount }));
+          
+          alert(`✅ Invitation envoyée !\n\n(C'est la ${newCount}ème fois que ce dossier est envoyé)`);
+      } catch (err) {
+          console.error(err);
+          alert("Erreur lors de l'envoi.");
+      } finally {
+          setSendingInvite(false);
+      }
   };
 
   const handleDelete = async () => {
@@ -271,7 +301,7 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, staffD
 
   return (
     <div className={`rounded-lg transition-all duration-200 mb-4 ${borderStyle} ${bgStyle}`}>
-        {/* ENTÊTE AVEC NOUVEAU DESIGN BADGES */}
+        {/* ENTÊTE (Identique V56) */}
         <div className="p-4 flex items-center justify-between cursor-pointer" onClick={(e) => { if(!(e.target as HTMLElement).closest('.avatar-uploader')) setIsExpanded(!isExpanded); }}>
             <div className="flex items-center gap-4 flex-1">
                 <div 
@@ -284,7 +314,6 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, staffD
                     {canEdit && !uploading && <div className={`absolute inset-0 bg-black/50 flex items-center justify-center transition-opacity ${isDragging ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}><Upload className="w-4 h-4 text-white"/></div>}
                 </div>
                 
-                {/* INFO PRINCIPALE */}
                 <div className="min-w-[180px]">
                     <div className="flex items-center gap-2">
                         <span className="font-bold text-stone-800 text-lg">{project.clientNames}</span>
@@ -294,17 +323,14 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, staffD
                     <p className="text-xs text-stone-500 flex items-center gap-2 mt-1"><span className="bg-stone-100 text-stone-600 px-1.5 py-0.5 rounded font-mono font-bold">{project.code}</span><span>•</span><MapPin className="w-3 h-3"/> {project.weddingVenue || 'Lieu non défini'}</p>
                 </div>
 
-                {/* EQUIPE (ICONES RONDES) */}
                 <div className="hidden lg:flex items-center gap-4 text-xs text-stone-500 border-l border-r border-stone-100 px-4">
                     <div className="flex flex-col items-center w-16 text-center" title="Responsable Dossier"><UserCheck className="w-4 h-4 mb-1 text-purple-400"/><span className="truncate w-full font-bold">{project.managerName || '-'}</span></div>
                     <div className="flex flex-col items-center w-16 text-center" title="Photographe"><Camera className="w-4 h-4 mb-1 text-amber-400"/><span className="truncate w-full font-bold">{project.photographerName || '-'}</span></div>
                     <div className="flex flex-col items-center w-16 text-center" title="Vidéaste"><Video className="w-4 h-4 mb-1 text-blue-400"/><span className="truncate w-full font-bold">{project.videographerName || '-'}</span></div>
                 </div>
 
-                {/* DATE MARIAGE */}
                 <div className="hidden md:block text-sm text-stone-500 font-mono bg-stone-50 px-2 py-1 rounded">{formatDateFR(project.weddingDate)}</div>
                 
-                {/* BADGES DE STATUT */}
                 <div className="hidden md:flex gap-3">
                     {project.statusPhoto !== 'none' && (
                         <div className={`flex items-center gap-3 px-3 py-2 rounded-lg border shadow-sm transition-all ${project.statusPhoto === 'delivered' ? 'bg-white border-green-200' : 'bg-white border-amber-200'} ${localData.isArchived ? 'opacity-50 grayscale' : ''}`}>
@@ -353,11 +379,22 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, staffD
                     </div>
                     <div className="flex gap-2 w-full md:w-auto items-center">
                          <div className="px-4 py-2 bg-stone-100 rounded-lg font-mono text-sm font-bold text-stone-600 border border-stone-200">CODE : <span className="text-black select-all">{localData.code}</span></div>
-                        <button onClick={invite} className="px-4 py-3 bg-white border border-stone-200 rounded-xl text-sm font-bold hover:bg-stone-50 flex items-center justify-center gap-2"><Mail className="w-4 h-4"/> Inviter</button>
+                        
+                        {/* 👇 NOUVEAU BOUTON D'INVITATION (V57) */}
+                        <div className="flex flex-col items-end">
+                            <button onClick={invite} disabled={sendingInvite} className="px-4 py-3 bg-white border border-stone-200 rounded-xl text-sm font-bold hover:bg-stone-50 flex items-center justify-center gap-2 disabled:opacity-50 min-w-[140px]">
+                                {sendingInvite ? <Loader2 className="w-4 h-4 animate-spin"/> : <Send className="w-4 h-4"/>}
+                                {localData.inviteCount && localData.inviteCount > 0 ? "Renvoyer" : "Inviter"}
+                            </button>
+                            {localData.inviteCount && localData.inviteCount > 0 && <span className="text-[10px] text-stone-400 font-mono mt-1 mr-1">Envoyé {localData.inviteCount} fois</span>}
+                        </div>
+
                     </div>
                 </div>
 
                 <div className="grid lg:grid-cols-2 gap-8">
+                     {/* ... Le reste du contenu (Fiches Mariés, Equipe, etc.) reste STRICTEMENT IDENTIQUE à la V56 ... */}
+                     {/* Je répète tout le bloc pour que le copier-coller soit facile et sans erreur */}
                     <div className="space-y-6">
                         <div className="bg-white p-6 rounded-xl border border-stone-200 shadow-sm">
                             <h4 className="font-bold text-stone-800 mb-4 flex items-center gap-2"><Users className="w-5 h-5 text-stone-400"/> Fiche Mariés</h4>

@@ -102,6 +102,7 @@ export interface Project {
     weddingDate: string;
     weddingVenue?: string | null;
     weddingVenueZip?: string | null;
+    inviteCount?: number;
     
     // Status
     statusPhoto: keyof typeof PHOTO_STEPS;
