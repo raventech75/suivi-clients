@@ -10,7 +10,8 @@ import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { db, storage, appId } from '../lib/firebase';
 import { 
   COLLECTION_NAME, MAKE_WEBHOOK_URL, PHOTO_STEPS, SETTINGS_COLLECTION,
-  VIDEO_STEPS, ALBUM_FORMATS, ALBUM_STATUSES, Project, HistoryLog 
+  VIDEO_STEPS, ALBUM_FORMATS, ALBUM_STATUSES, Project, HistoryLog,
+  STAFF_DIRECTORY // 👈 J'importe le nouvel annuaire fixe
 } from '../lib/config';
 import ChatBox from './ChatSystem';
 
@@ -63,11 +64,20 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, staffD
 
   useEffect(() => { if (!hasChanges) setLocalData(project); }, [project, hasChanges]);
 
+  // 👇 LOGIQUE CORRIGÉE POUR L'ANNUAIRE FIXE
   const handleStaffChange = (roleNameKey: 'photographerName' | 'videographerName' | 'managerName', roleEmailKey: 'photographerEmail' | 'videographerEmail' | 'managerEmail', name: string) => {
       let newData = { ...localData, [roleNameKey]: name };
-      if (staffDirectory && staffDirectory[name] && !localData[roleEmailKey]) {
-          newData = { ...newData, [roleEmailKey]: staffDirectory[name] };
+      
+      // Priorité 1 : Annuaire Fixe (Config)
+      // Priorité 2 : Annuaire Appris (Firestore)
+      const fixedEmail = STAFF_DIRECTORY[name];
+      const learnedEmail = staffDirectory ? staffDirectory[name] : null;
+      const emailToUse = fixedEmail || learnedEmail;
+
+      if (emailToUse) {
+          newData = { ...newData, [roleEmailKey]: emailToUse };
       }
+      
       setLocalData(newData);
       setHasChanges(true);
   };
@@ -206,6 +216,7 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, staffD
           return;
       }
 
+      // Apprentissage de l'annuaire (On garde ça au cas où vous ajoutez qqn qui n'est pas dans la config fixe)
       const newEntries: Record<string, string> = {};
       if (localData.managerName && localData.managerEmail) newEntries[localData.managerName] = localData.managerEmail;
       if (localData.photographerName && localData.photographerEmail) newEntries[localData.photographerName] = localData.photographerEmail;
@@ -293,7 +304,7 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, staffD
                 {/* DATE MARIAGE */}
                 <div className="hidden md:block text-sm text-stone-500 font-mono bg-stone-50 px-2 py-1 rounded">{formatDateFR(project.weddingDate)}</div>
                 
-                {/* 👇 NOUVEAU DESIGN DES BADGES DE STATUT (CARTE BLANCHE + BORDURE) */}
+                {/* BADGES DE STATUT */}
                 <div className="hidden md:flex gap-3">
                     {project.statusPhoto !== 'none' && (
                         <div className={`flex items-center gap-3 px-3 py-2 rounded-lg border shadow-sm transition-all ${project.statusPhoto === 'delivered' ? 'bg-white border-green-200' : 'bg-white border-amber-200'} ${localData.isArchived ? 'opacity-50 grayscale' : ''}`}>
@@ -336,8 +347,6 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, staffD
 
         {isExpanded && (
             <div className="p-6 border-t bg-stone-50/50 space-y-8 animate-fade-in">
-                 {/* ... LE RESTE DU DÉTAIL NE CHANGE PAS (COPIEZ-COLLEZ LA SUITE DE VOTRE V49 ICI SI BESOIN) ... */}
-                 {/* Pour la clarté, je remets le contenu complet du bloc expanded pour que le copier-coller marche direct */}
                 <div className="flex flex-col md:flex-row justify-between items-center gap-4 bg-white p-4 rounded-xl border border-stone-100 shadow-sm">
                     <div className="flex items-center gap-4 w-full md:w-auto">
                         <button onClick={toggleFastTrack} className={`flex-1 md:flex-none flex items-center justify-center gap-2 px-6 py-3 rounded-xl font-bold transition-all ${localData.isPriority ? 'bg-orange-500 text-white shadow-lg shadow-orange-200 transform scale-105' : 'bg-stone-100 text-stone-400 hover:bg-stone-200'}`}><Rocket className="w-5 h-5"/> {localData.isPriority ? 'FAST TRACK ACTIF' : 'Activer Fast Track'}</button>

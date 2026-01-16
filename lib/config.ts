@@ -1,8 +1,18 @@
 import { Timestamp } from 'firebase/firestore';
 
-export const DEFAULT_STAFF = [
-    "Volkan", "Feridun", "Adem", "Burak", "Emre", "Yasin"
-];
+// 👇 VOTRE ANNUAIRE FIXE (Correction V53)
+export const STAFF_DIRECTORY: Record<string, string> = {
+    "Volkan": "mariages.paris.productions@gmail.com",
+    "Feridun": "feridun.kizgin@gmail.com",
+    "Yunus": "yunus34@hotmail.fr",
+    "Serife": "serifevideography@gmail.com",
+    "Steeven": "studios.h265@gmail.com",
+    "Taner": "bokehart9@gmail.com",
+    "Göksel": "gokseltuzun@gmail.com"
+};
+
+// La liste des noms pour les menus déroulants est générée automatiquement depuis l'annuaire ci-dessus
+export const DEFAULT_STAFF = Object.keys(STAFF_DIRECTORY);
 
 // Configuration
 export const COLLECTION_NAME = 'wedding_projects';
@@ -11,10 +21,9 @@ export const SETTINGS_COLLECTION = 'settings';
 export const MAKE_WEBHOOK_URL = 'https://hook.eu2.make.com/iwf8nbt3tywmywp6u89xgn7e2nar0bbs'; 
 
 // Liens Stripe
-export const STRIPE_PRIORITY_LINK = 'https://buy.stripe.com/fZu4gz07eaPzcRt54Y5gc0c'; 
-export const STRIPE_ARCHIVE_LINK = 'https://buy.stripe.com/3cI3cv3jq2j37x9eFy5gc0b';
-export const STRIPE_RAW_LINK = 'https://buy.stripe.com/cNi5kD5rye1L2cP2WQ5gc0d'; // Nouveau : Option Fichiers Bruts
-export const STRIPE_ARCHIVE_RESTORE_LINK = 'https://buy.stripe.com/fZu00j3jq4rb5p140U5gc0e'; // Nouveau : Déblocage après délai
+export const STRIPE_PRIORITY_LINK = 'https://buy.stripe.com/test_...'; 
+export const STRIPE_RAW_LINK = 'https://buy.stripe.com/test_...';
+export const STRIPE_ARCHIVE_RESTORE_LINK = 'https://buy.stripe.com/test_...';
 
 export const SUPER_ADMINS = ['irzzenproductions@gmail.com']; 
 
@@ -31,7 +40,7 @@ export const VIDEO_STEPS = {
     'none': { label: 'En attente', percent: 0 },
     'waiting': { label: 'En attente des fichiers', percent: 10 },
     'rushes': { label: 'Dérushage', percent: 25 },
-    'cutting': { label: 'Montage en cours', percent: 50 },
+    'cutting': { label: 'Montage Ours', percent: 50 },
     'grading': { label: 'Etalonnage & Mixage', percent: 75 },
     'rendering': { label: 'Export Final', percent: 90 },
     'delivered': { label: 'Livré', percent: 100 }
@@ -70,7 +79,6 @@ export interface HistoryLog {
     action: string;
 }
 
-// 👇 NOUVELLE INTERFACE POUR LES PAIEMENTS ÉQUIPE
 export interface TeamPayment {
     id: string;
     recipient: string;
@@ -124,7 +132,7 @@ export interface Project {
     // Financier
     totalPrice?: number;
     depositAmount?: number;
-    teamPayments?: TeamPayment[]; // 👈 J'AI AJOUTÉ CETTE LIGNE MANQUANTE
+    teamPayments?: TeamPayment[];
     
     // Communication & Contenu
     messages?: Message[];
