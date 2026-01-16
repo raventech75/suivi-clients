@@ -1,6 +1,6 @@
 import { Timestamp } from 'firebase/firestore';
 
-// 👇 VOTRE ANNUAIRE FIXE (Correction V53)
+// ANNUAIRE FIXE
 export const STAFF_DIRECTORY: Record<string, string> = {
     "Volkan": "mariages.paris.productions@gmail.com",
     "Feridun": "feridun.kizgin@gmail.com",
@@ -11,7 +11,6 @@ export const STAFF_DIRECTORY: Record<string, string> = {
     "Göksel": "gokseltuzun@gmail.com"
 };
 
-// La liste des noms pour les menus déroulants est générée automatiquement depuis l'annuaire ci-dessus
 export const DEFAULT_STAFF = Object.keys(STAFF_DIRECTORY);
 
 // Configuration
@@ -24,6 +23,9 @@ export const MAKE_WEBHOOK_URL = 'https://hook.eu2.make.com/iwf8nbt3tywmywp6u89xg
 export const STRIPE_PRIORITY_LINK = 'https://buy.stripe.com/test_...'; 
 export const STRIPE_RAW_LINK = 'https://buy.stripe.com/test_...';
 export const STRIPE_ARCHIVE_RESTORE_LINK = 'https://buy.stripe.com/test_...';
+
+// 👇 CORRECTIF : On remet l'ancien nom (Alias) pour éviter l'erreur dans page.tsx
+export const STRIPE_ARCHIVE_LINK = STRIPE_ARCHIVE_RESTORE_LINK;
 
 export const SUPER_ADMINS = ['irzzenproductions@gmail.com']; 
 
