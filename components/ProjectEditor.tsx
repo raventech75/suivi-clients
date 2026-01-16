@@ -31,7 +31,7 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, staffD
   const [hasChanges, setHasChanges] = useState(false);
   const [newAlbum, setNewAlbum] = useState({ name: 'Album', format: '30x30', price: 0 });
   const [uploading, setUploading] = useState(false);
-  const [sendingInvite, setSendingInvite] = useState(false); // 👈 Nouvel état pour le chargement
+  const [sendingInvite, setSendingInvite] = useState(false);
   
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -251,7 +251,7 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, staffD
       setHasChanges(false); setIsExpanded(false);
   };
 
-  // 👇 FONCTION D'INVITATION AVEC COMPTEUR (V57)
+  // 👇 FONCTION D'INVITATION AVEC COMPTEUR + HISTORIQUE (V58)
   const invite = async () => {
       if (!localData.clientEmail || !localData.clientEmail.includes('@')) {
           alert("❌ Impossible d'envoyer l'invitation : L'email du client est invalide.");
@@ -261,7 +261,7 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, staffD
       setSendingInvite(true);
       
       try {
-          // 1. Envoi Webhook
+          // 1. Webhook Make
           await fetch(MAKE_WEBHOOK_URL, { 
               method:'POST', 
               headers:{'Content-Type':'application/json'}, 
@@ -274,15 +274,32 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, staffD
               }) 
           });
 
-          // 2. Incrémentation du compteur
+          // 2. Compteur + Historique
           const newCount = (localData.inviteCount || 0) + 1;
           
-          // 3. Mise à jour Firestore Directe (pour ne pas bloquer le bouton Save)
-          const colPath = typeof appId !== 'undefined' ? `artifacts/${appId}/public/data/${COLLECTION_NAME}` : COLLECTION_NAME;
-          await updateDoc(doc(db, colPath, project.id), { inviteCount: newCount });
+          const newHistoryEntry = {
+              date: new Date().toISOString(),
+              user: user.email ? user.email.split('@')[0] : 'Admin',
+              action: `INVITATION ENVOYÉE (N°${newCount})`
+          };
 
-          // 4. Mise à jour Local
-          setLocalData(prev => ({ ...prev, inviteCount: newCount }));
+          const currentHistory = localData.history || [];
+          const updatedHistory = [newHistoryEntry, ...currentHistory];
+
+          // 3. Update Firestore
+          const colPath = typeof appId !== 'undefined' ? `artifacts/${appId}/public/data/${COLLECTION_NAME}` : COLLECTION_NAME;
+          await updateDoc(doc(db, colPath, project.id), { 
+              inviteCount: newCount,
+              history: updatedHistory,
+              lastUpdated: serverTimestamp()
+          });
+
+          // 4. Update Local
+          setLocalData(prev => ({ 
+              ...prev, 
+              inviteCount: newCount,
+              history: updatedHistory
+          }));
           
           alert(`✅ Invitation envoyée !\n\n(C'est la ${newCount}ème fois que ce dossier est envoyé)`);
       } catch (err) {
@@ -380,7 +397,6 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, staffD
                     <div className="flex gap-2 w-full md:w-auto items-center">
                          <div className="px-4 py-2 bg-stone-100 rounded-lg font-mono text-sm font-bold text-stone-600 border border-stone-200">CODE : <span className="text-black select-all">{localData.code}</span></div>
                         
-                        {/* 👇 NOUVEAU BOUTON D'INVITATION (V57) */}
                         <div className="flex flex-col items-end">
                             <button onClick={invite} disabled={sendingInvite} className="px-4 py-3 bg-white border border-stone-200 rounded-xl text-sm font-bold hover:bg-stone-50 flex items-center justify-center gap-2 disabled:opacity-50 min-w-[140px]">
                                 {sendingInvite ? <Loader2 className="w-4 h-4 animate-spin"/> : <Send className="w-4 h-4"/>}
@@ -393,8 +409,6 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, staffD
                 </div>
 
                 <div className="grid lg:grid-cols-2 gap-8">
-                     {/* ... Le reste du contenu (Fiches Mariés, Equipe, etc.) reste STRICTEMENT IDENTIQUE à la V56 ... */}
-                     {/* Je répète tout le bloc pour que le copier-coller soit facile et sans erreur */}
                     <div className="space-y-6">
                         <div className="bg-white p-6 rounded-xl border border-stone-200 shadow-sm">
                             <h4 className="font-bold text-stone-800 mb-4 flex items-center gap-2"><Users className="w-5 h-5 text-stone-400"/> Fiche Mariés</h4>

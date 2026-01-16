@@ -20,9 +20,9 @@ export const SETTINGS_COLLECTION = 'settings';
 export const MAKE_WEBHOOK_URL = 'https://hook.eu2.make.com/iwf8nbt3tywmywp6u89xgn7e2nar0bbs'; 
 
 // Liens Stripe
-export const STRIPE_PRIORITY_LINK = 'https://buy.stripe.com/test_...'; 
-export const STRIPE_RAW_LINK = 'https://buy.stripe.com/test_...';
-export const STRIPE_ARCHIVE_RESTORE_LINK = 'https://buy.stripe.com/test_...';
+export const STRIPE_PRIORITY_LINK = 'https://buy.stripe.com/fZu4gz07eaPzcRt54Y5gc0c'; 
+export const STRIPE_RAW_LINK = 'https://buy.stripe.com/cNi5kD5rye1L2cP2WQ5gc0d';
+export const STRIPE_ARCHIVE_RESTORE_LINK = 'https://buy.stripe.com/fZu00j3jq4rb5p140U5gc0e';
 
 // 👇 CORRECTIF : On remet l'ancien nom (Alias) pour éviter l'erreur dans page.tsx
 export const STRIPE_ARCHIVE_LINK = STRIPE_ARCHIVE_RESTORE_LINK;
