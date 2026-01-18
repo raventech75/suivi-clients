@@ -50,7 +50,7 @@ export default function AdminDashboard({ projects, staffList, staffDirectory, us
           progressPhoto: 0, 
           progressVideo: 0, 
           messages: [],
-          albums: [], // 👈 CORRECTION ICI : On initialise une liste VIDE (pas d'album fantôme 30x30)
+          albums: [], // ✅ LISTE VIDE À LA CRÉATION (Pas d'album fantôme)
           internalChat: [],
           inviteCount: 0,
           createdAt: serverTimestamp() 
