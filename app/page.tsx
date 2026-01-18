@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { onAuthStateChanged, signOut } from 'firebase/auth'; 
 import { collection, query, onSnapshot } from 'firebase/firestore';
-import { Loader2, Lock, HeartHandshake, ChevronRight, PlayCircle } from 'lucide-react';
+import { Loader2, Lock, HeartHandshake, ChevronRight, Sparkles, ShieldCheck, Clock, ChevronDown } from 'lucide-react';
 
 import { auth, db } from '../lib/firebase';
 import { COLLECTION_NAME, Project, STAFF_DIRECTORY } from '../lib/config';
@@ -50,102 +50,152 @@ export default function Home() {
   };
 
   if (loading) return (
-    <div className="h-screen flex items-center justify-center bg-black text-white">
-        <div className="flex flex-col items-center gap-4">
-            <Loader2 className="animate-spin w-10 h-10 text-stone-500"/>
-            <span className="text-xs font-serif tracking-widest text-stone-500">CHARGEMENT RAVENTECH...</span>
-        </div>
+    <div className="h-screen flex flex-col items-center justify-center bg-stone-50">
+        <HeartHandshake className="w-12 h-12 text-amber-600 animate-pulse mb-4"/>
+        <span className="text-xs font-serif tracking-[0.2em] text-stone-500 uppercase">Chargement de l'expérience...</span>
     </div>
   );
 
   return (
-    <div className="min-h-screen font-sans text-stone-800">
+    <div className="min-h-screen font-sans text-stone-800 bg-stone-50 overflow-x-hidden">
       
-      {/* ==========================
-          VUE : ACCUEIL (LANDING)
-         ========================== */}
+      {/* =====================================================================================
+          VUE : ACCUEIL PREMIUM (LANDING PAGE COMPLETE)
+         ===================================================================================== */}
       {view === 'landing' && (
-        <div className="relative h-screen flex flex-col items-center justify-center overflow-hidden">
+        <div className="flex flex-col">
            
-           {/* 1. IMAGE DE FOND (Changez l'URL ici si vous avez votre propre photo) */}
-           <img 
-           src="https://images.unsplash.com/photo-1519741497674-611481863552?q=80&w=2000&auto=format&fit=crop" 
-                 className="w-full h-full object-cover transform scale-105"
-                 alt="Wedding Background"
-           />
-           {/* Calque noir par-dessus pour la lisibilité */}
-               <div className="absolute inset-0 bg-stone-900/80 backdrop-blur-[1px]"></div>
-           
-           {/* 2. FILTRE SOMBRE (Pour la lisibilité) */}
-           <div className="absolute inset-0 bg-black/60 backdrop-blur-[2px]"></div>
-
-           {/* 3. CONTENU PRINCIPAL */}
-           <div className="relative z-10 flex flex-col items-center text-center px-6 max-w-5xl animate-fade-in-up">
-               
-               {/* Logo Cercle */}
-               <div className="w-24 h-24 bg-white/10 backdrop-blur-md border border-white/20 rounded-full flex items-center justify-center shadow-2xl mb-8">
-                  <HeartHandshake className="text-white w-12 h-12 opacity-90"/>
+           {/* --- SECTION 1 : HERO (HAUT DE PAGE IMMERSIF) --- */}
+           <section className="relative h-screen flex flex-col items-center justify-center text-center px-6">
+               {/* Image de fond Cinématographique */}
+               <div className="absolute inset-0 z-0">
+                   <img 
+                     src="https://images.unsplash.com/photo-1606800052052-a08af7148866?q=80&w=2940&auto=format&fit=crop" 
+                     className="w-full h-full object-cover"
+                     alt="Wedding Atmosphere"
+                   />
+                   {/* Voile dégradé élégant pour la lisibilité */}
+                   <div className="absolute inset-0 bg-gradient-to-t from-stone-900/95 via-stone-900/60 to-stone-900/40"></div>
                </div>
 
-               {/* Titres */}
-               <h1 className="text-6xl md:text-8xl font-serif text-white tracking-tight mb-4 drop-shadow-lg">
-                   RavenTech
-               </h1>
-               <p className="text-lg md:text-2xl text-stone-300 font-light max-w-2xl leading-relaxed mb-12">
-                   L'excellence visuelle au service de vos souvenirs.<br/>
-                   <span className="text-stone-400 text-base">Cinéma & Photographie de Mariage</span>
-               </p>
-               
-               {/* Boutons d'action */}
-               <div className="flex flex-col md:flex-row gap-6 w-full max-w-lg">
-                  <button 
-                    onClick={() => setView('client')} 
-                    className="group flex-1 bg-white text-black py-5 rounded-2xl font-bold text-lg hover:bg-stone-200 transition-all transform hover:scale-105 shadow-[0_0_40px_rgba(255,255,255,0.3)] flex items-center justify-center gap-3"
-                  >
-                    <span>Espace Mariés</span>
-                    <ChevronRight className="w-5 h-5 group-hover:translate-x-1 transition-transform"/>
-                  </button>
+               {/* Contenu Principal (Animé) */}
+               <div className="relative z-10 max-w-4xl mx-auto flex flex-col items-center animate-fade-in-up delay-200">
+                   
+                   {/* 👇 LOGO LUXE TRANSPARENT (Sans contour ni boîte) */}
+                   {/* Assurez-vous que le fichier logo.png (votre image_20.png) est dans le dossier public/ */}
+                   <div className="mb-8 animate-fade-in">
+                      <img 
+                        src="/logo.png" 
+                        onError={(e) => {
+                            // Fallback discret si l'image n'est pas encore là
+                            e.currentTarget.style.display = 'none';
+                            e.currentTarget.nextElementSibling?.classList.remove('hidden');
+                        }}
+                        alt="RavenTech Luxury Logo" 
+                        // J'ai augmenté la taille (w-40) et ajouté une grosse ombre (drop-shadow-2xl) pour le volume
+                        className="w-40 h-auto drop-shadow-2xl" 
+                      />
+                      {/* Fallback Icon (caché si l'image charge) */}
+                      <div className="hidden text-amber-400 opacity-80">
+                          <HeartHandshake className="w-20 h-20"/>
+                      </div>
+                   </div>
 
-                  <button 
-                    onClick={handleAdminClick} 
-                    className="flex-1 bg-black/40 backdrop-blur-md border border-white/20 text-white py-5 rounded-2xl font-bold text-lg hover:bg-black/60 hover:border-white/40 transition-all flex items-center justify-center gap-3"
-                  >
-                    <Lock className="w-4 h-4 text-stone-400"/> 
-                    <span>Accès Studio</span>
-                  </button>
+                   <h1 className="text-5xl md:text-7xl font-serif text-white tracking-tight mb-6 drop-shadow-sm">
+                       RavenTech <span className="text-amber-400">Studio</span>
+                   </h1>
+                   <p className="text-xl md:text-2xl text-stone-200 font-light max-w-2xl leading-relaxed mb-12">
+                       L'excellence visuelle au service de vos souvenirs.<br/>
+                       <span className="font-serif italic text-amber-200/80 text-lg">Cinéma & Photographie de Mariage</span>
+                   </p>
+                   
+                   {/* Boutons d'action Premium */}
+                   <div className="flex flex-col sm:flex-row gap-6 w-full max-w-lg justify-center">
+                      <button 
+                        onClick={() => setView('client')} 
+                        className="group relative overflow-hidden bg-white text-stone-900 py-5 px-8 rounded-xl font-bold text-lg hover:shadow-[0_0_30px_rgba(251,191,36,0.4)] transition-all transform hover:-translate-y-1 flex items-center justify-center gap-3 border border-white"
+                      >
+                        <div className="absolute inset-0 w-full h-full bg-gradient-to-r from-amber-100 via-white to-amber-50 opacity-0 group-hover:opacity-100 transition-opacity"></div>
+                        <span className="relative z-10 font-serif tracking-wide">ESPACE MARIÉS</span>
+                        <ChevronRight className="w-4 h-4 relative z-10 group-hover:translate-x-1 transition-transform text-amber-700"/>
+                      </button>
+
+                      <button 
+                        onClick={handleAdminClick} 
+                        className="group bg-stone-900/40 backdrop-blur-md border border-white/20 text-white py-5 px-8 rounded-xl font-bold text-lg hover:bg-stone-900/80 hover:border-amber-500/50 transition-all flex items-center justify-center gap-3"
+                      >
+                        <Lock className="w-4 h-4 text-amber-400 group-hover:text-amber-300 transition-colors"/> 
+                        <span className="font-serif tracking-wide text-sm">ACCÈS STUDIO</span>
+                      </button>
+                   </div>
                </div>
-           </div>
 
-           {/* Footer discret */}
-           <div className="absolute bottom-8 text-white/30 text-[10px] uppercase tracking-widest font-mono z-10">
-              RavenTech Systems V2.0 • Paris • Production
-           </div>
+               {/* Indicateur de scroll */}
+               <div className="absolute bottom-10 animate-bounce text-white/30 z-10">
+                   <ChevronDown className="w-6 h-6"/>
+               </div>
+           </section>
+
+           {/* --- SECTION 2 : PRÉSENTATION & VALEURS --- */}
+           <section className="py-24 px-6 bg-stone-50 relative z-10">
+               <div className="max-w-6xl mx-auto">
+                   <div className="text-center mb-20 animate-fade-in">
+                       <span className="text-amber-600 font-bold tracking-widest text-xs uppercase mb-2 block">Notre Engagement</span>
+                       <h2 className="text-3xl md:text-5xl font-serif font-bold text-stone-900 mb-6">L'Art de la Post-Production</h2>
+                       <div className="w-24 h-1 bg-amber-400 mx-auto rounded-full mb-6"></div>
+                       <p className="text-stone-600 text-lg max-w-2xl mx-auto leading-relaxed">Nous avons conçu une plateforme unique pour prolonger la magie de votre mariage. Une transparence totale, de la production à la livraison finale.</p>
+                   </div>
+
+                   <div className="grid md:grid-cols-3 gap-8">
+                       {/* Feature 1 */}
+                       <div className="group bg-white p-10 rounded-3xl shadow-sm hover:shadow-2xl hover:shadow-stone-200/50 transition-all duration-500 transform hover:-translate-y-2 border border-stone-100">
+                           <div className="w-16 h-16 bg-stone-50 text-stone-800 rounded-2xl flex items-center justify-center mb-8 group-hover:bg-amber-500 group-hover:text-white transition-colors duration-300">
+                               <Clock className="w-8 h-8"/>
+                           </div>
+                           <h3 className="text-2xl font-serif font-bold mb-4 text-stone-800">Suivi Temps Réel</h3>
+                           <p className="text-stone-500 leading-relaxed">Ne vous demandez plus où en sont vos souvenirs. Suivez chaque étape, du dérushage à l'étalonnage, via votre timeline personnelle.</p>
+                       </div>
+                       {/* Feature 2 */}
+                       <div className="group bg-white p-10 rounded-3xl shadow-sm hover:shadow-2xl hover:shadow-stone-200/50 transition-all duration-500 transform hover:-translate-y-2 border border-stone-100">
+                           <div className="w-16 h-16 bg-stone-50 text-stone-800 rounded-2xl flex items-center justify-center mb-8 group-hover:bg-amber-500 group-hover:text-white transition-colors duration-300">
+                               <ShieldCheck className="w-8 h-8"/>
+                           </div>
+                           <h3 className="text-2xl font-serif font-bold mb-4 text-stone-800">Archive Sécurisée</h3>
+                           <p className="text-stone-500 leading-relaxed">Vos galeries photos et vos films 4K sont hébergés sur des serveurs privés sécurisés, accessibles uniquement via votre code unique.</p>
+                       </div>
+                       {/* Feature 3 */}
+                       <div className="group bg-white p-10 rounded-3xl shadow-sm hover:shadow-2xl hover:shadow-stone-200/50 transition-all duration-500 transform hover:-translate-y-2 border border-stone-100">
+                           <div className="w-16 h-16 bg-stone-50 text-stone-800 rounded-2xl flex items-center justify-center mb-8 group-hover:bg-amber-500 group-hover:text-white transition-colors duration-300">
+                               <Sparkles className="w-8 h-8"/>
+                           </div>
+                           <h3 className="text-2xl font-serif font-bold mb-4 text-stone-800">Expérience Luxe</h3>
+                           <p className="text-stone-500 leading-relaxed">Commandez vos livres d'art, activez des options prioritaires (Fast Track) et dialoguez avec votre équipe dédiée directement.</p>
+                       </div>
+                   </div>
+               </div>
+           </section>
+
+           {/* --- FOOTER --- */}
+           <footer className="bg-[#0f0f0f] text-stone-500 py-16 text-center border-t border-white/5">
+               <div className="flex items-center justify-center gap-3 mb-6 opacity-50">
+                   <div className="h-px w-12 bg-white/20"></div>
+                   <HeartHandshake className="w-6 h-6"/>
+                   <div className="h-px w-12 bg-white/20"></div>
+               </div>
+               <p className="font-serif text-xl text-white mb-2 tracking-wide">RavenTech Studio</p>
+               <p className="text-sm mb-8 font-light">Paris • International Wedding Cinematography</p>
+               <div className="text-[10px] uppercase tracking-[0.2em] opacity-40">
+                   © {new Date().getFullYear()} RavenTech Systems. All rights reserved.
+               </div>
+           </footer>
         </div>
       )}
 
-      {/* AUTRES VUES (Restent inchangées) */}
-      {view === 'login' && (
-          <AdminLogin onLogin={() => setView('admin')} onBack={() => setView('landing')} />
-      )}
-
-      {view === 'client' && (
-          <ClientPortal projects={projects} onBack={() => setView('landing')} />
-      )}
-
-      {view === 'admin' && (
-          <AdminDashboard 
-            projects={projects} 
-            staffList={Object.keys(STAFF_DIRECTORY)}
-            staffDirectory={STAFF_DIRECTORY}
-            user={user} 
-            onLogout={handleLogout}
-            onStats={() => setView('stats')} 
-          />
-      )}
-
-      {view === 'stats' && (
-          <StatsDashboard projects={projects} onBack={() => setView('admin')} />
-      )}
+      {/* AUTRES VUES */}
+      {view === 'login' && <AdminLogin onLogin={() => setView('admin')} onBack={() => setView('landing')} />}
+      {view === 'client' && <ClientPortal projects={projects} onBack={() => setView('landing')} />}
+      {view === 'admin' && <AdminDashboard projects={projects} staffList={Object.keys(STAFF_DIRECTORY)} staffDirectory={STAFF_DIRECTORY} user={user} onLogout={handleLogout} onStats={() => setView('stats')} />}
+      {view === 'stats' && <StatsDashboard projects={projects} onBack={() => setView('admin')} />}
 
     </div>
   );
