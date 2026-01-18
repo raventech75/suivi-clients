@@ -20,9 +20,9 @@ export const SETTINGS_COLLECTION = 'settings';
 export const MAKE_WEBHOOK_URL = 'https://hook.eu2.make.com/iwf8nbt3tywmywp6u89xgn7e2nar0bbs'; 
 
 // Liens Stripe
-export const STRIPE_PRIORITY_LINK = 'https://buy.stripe.com/test_...'; 
-export const STRIPE_RAW_LINK = 'https://buy.stripe.com/test_...';
-export const STRIPE_ARCHIVE_RESTORE_LINK = 'https://buy.stripe.com/test_...';
+export const STRIPE_PRIORITY_LINK = 'https://buy.stripe.com/fZu4gz07eaPzcRt54Y5gc0c'; 
+export const STRIPE_RAW_LINK = 'https://buy.stripe.com/cNi5kD5rye1L2cP2WQ5gc0d';
+export const STRIPE_ARCHIVE_RESTORE_LINK = 'https://buy.stripe.com/fZu00j3jq4rb5p140U5gc0e';
 export const STRIPE_ARCHIVE_LINK = STRIPE_ARCHIVE_RESTORE_LINK; // Alias
 
 export const SUPER_ADMINS = ['irzzenproductions@gmail.com']; 
@@ -40,7 +40,7 @@ export const VIDEO_STEPS = {
     'none': { label: 'En attente', percent: 0 },
     'waiting': { label: 'En attente des fichiers', percent: 10 },
     'rushes': { label: 'Dérushage', percent: 25 },
-    'cutting': { label: 'Montage Ours', percent: 50 },
+    'cutting': { label: 'Montage en cours', percent: 50 },
     'grading': { label: 'Etalonnage & Mixage', percent: 75 },
     'partial': { label: 'Livraison Partielle (Clip/Taki)', percent: 85 }, // 👈 NOUVELLE ÉTAPE
     'rendering': { label: 'Export Final', percent: 90 },
