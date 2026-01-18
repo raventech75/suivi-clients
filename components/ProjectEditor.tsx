@@ -31,7 +31,6 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, staffD
   const [localData, setLocalData] = useState(project);
   const [hasChanges, setHasChanges] = useState(false);
   
-  // 👇 MODIFICATION ICI : On initialise avec le premier format de la liste
   const [newAlbum, setNewAlbum] = useState({ name: '', format: ALBUM_FORMATS[0], price: 0 });
   
   const [uploading, setUploading] = useState(false);
@@ -43,11 +42,16 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, staffD
   const canEdit = !!user; 
 
   const now = Date.now();
+  const wedDate = new Date(project.weddingDate).getTime();
   const isFinished = (project.statusPhoto === 'delivered' || project.statusPhoto === 'none') && (project.statusVideo === 'delivered' || project.statusVideo === 'none');
+  
+  const activationTime = project.fastTrackActivationDate ? new Date(project.fastTrackActivationDate).getTime() : now;
+  const fastTrackDeadline = activationTime + (14 * 24 * 60 * 60 * 1000);
   const daysRemaining = project.fastTrackActivationDate 
-      ? Math.ceil((new Date(project.fastTrackActivationDate).getTime() + (14 * 24 * 60 * 60 * 1000) - now) / (1000 * 60 * 60 * 24))
+      ? Math.ceil((fastTrackDeadline - now) / (1000 * 60 * 60 * 24))
       : 0;
   
+  // 👇 RESTAURATION DES COULEURS DE PRIORITÉ
   let borderStyle = 'border-l-4 border-l-stone-300 border-y border-r border-stone-200';
   let bgStyle = 'bg-white';
   
@@ -57,6 +61,14 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, staffD
   } else if (localData.isPriority && !isFinished) {
       borderStyle = 'border-l-8 border-l-orange-500 border-y-2 border-r-2 border-orange-400 ring-2 ring-orange-200 shadow-xl shadow-orange-100/50';
       bgStyle = 'bg-orange-50/40';
+  } else if (!isFinished && now > wedDate + (60 * 24 * 3600 * 1000)) { 
+      // Retard > 60 jours : Rouge
+      borderStyle = 'border-l-4 border-l-red-500 border-y border-r border-red-200';
+      bgStyle = 'bg-red-50/30';
+  } else if (!isFinished && now > wedDate + (15 * 24 * 3600 * 1000)) { 
+      // Retard > 15 jours : Orange
+      borderStyle = 'border-l-4 border-l-orange-300 border-y border-r border-orange-200';
+      bgStyle = 'bg-orange-50/20';
   }
 
   useEffect(() => { if (!hasChanges) setLocalData(project); }, [project, hasChanges]);
@@ -105,9 +117,7 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, staffD
   const addAlbum = () => {
       if(!newAlbum.name) return alert("Nom de l'album requis");
       const albums = localData.albums || [];
-      // 👇 ON UTILISE BIEN LE FORMAT CHOISI DANS LE SELECT
       updateField('albums', [...albums, { id: Date.now().toString(), ...newAlbum, status: 'pending', paid: false }]);
-      // Reset avec valeurs par défaut
       setNewAlbum({ name: '', format: ALBUM_FORMATS[0], price: 0 });
   };
 
@@ -117,16 +127,34 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, staffD
       updateField('albums', albums);
   };
 
+  // 👇 MODIFICATION : Sauvegarde Automatique après Upload
   const processFile = async (file: File) => {
     if (!canEdit) return;
     try {
       setUploading(true);
       const fileName = `${project.id}_${Date.now()}`; 
       let storageRef = ref(storage, `covers/${fileName}`);
+      
+      // 1. Upload
       await uploadBytes(storageRef, file);
       const url = await getDownloadURL(storageRef);
-      updateField('coverImage', url);
-    } catch (error: any) { alert(`Erreur upload: ${error.message}`); } finally { setUploading(false); setIsDragging(false); }
+      
+      // 2. Mise à jour locale (pour voir l'image tout de suite)
+      setLocalData(prev => ({ ...prev, coverImage: url }));
+      
+      // 3. SAUVEGARDE DIRECTE EN BDD (Plus besoin de cliquer sur Enregistrer)
+      const colPath = typeof appId !== 'undefined' ? `artifacts/${appId}/public/data/${COLLECTION_NAME}` : COLLECTION_NAME;
+      await updateDoc(doc(db, colPath, project.id), { 
+          coverImage: url,
+          lastUpdated: serverTimestamp() 
+      });
+
+    } catch (error: any) { 
+        alert(`Erreur upload: ${error.message}`); 
+    } finally { 
+        setUploading(false); 
+        setIsDragging(false); 
+    }
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -295,7 +323,6 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, staffD
                             <div className="space-y-2">
                                 {(localData.albums || []).map((album, idx) => (
                                     <div key={idx} className="flex flex-wrap gap-2 items-center bg-stone-50 p-2 rounded-lg text-sm">
-                                        {/* 👇 AFFICHAGE CORRECT DU FORMAT EXISTANT */}
                                         <div className="flex-1">
                                             <div className="font-bold">{album.name}</div>
                                             <div className="text-[10px] text-stone-400">{album.format}</div>
@@ -307,7 +334,6 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, staffD
                                 ))}
                             </div>
                             
-                            {/* 👇 FORMULAIRE D'AJOUT CORRIGÉ (Menu déroulant + Prix) */}
                             {canEdit && (
                                 <div className="mt-4 pt-4 border-t flex flex-col gap-2">
                                     <div className="flex gap-2">
