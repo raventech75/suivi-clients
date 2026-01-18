@@ -1,80 +1,86 @@
-import { Timestamp } from 'firebase/firestore';
+// ---------------------------------------------------------------------------
+// CONFIGURATION GLOBALE DU PROJET
+// ---------------------------------------------------------------------------
 
-// ANNUAIRE FIXE
+export const COLLECTION_NAME = "projects";
+export const SETTINGS_COLLECTION = "settings";
+
+// 👇 METTEZ VOS URLS ICI
+export const MAKE_WEBHOOK_URL = "https://hook.eu2.make.com/xxxxxxxxxxxxxxxxxxxx"; 
+export const STRIPE_PRIORITY_LINK = "https://buy.stripe.com/xxxx";
+export const STRIPE_RAW_LINK = "https://buy.stripe.com/xxxx";
+export const STRIPE_ARCHIVE_RESTORE_LINK = "https://buy.stripe.com/xxxx";
+
+// Annuaire de l'équipe (Nom -> Email)
 export const STAFF_DIRECTORY: Record<string, string> = {
-    "Volkan": "mariages.paris.productions@gmail.com",
-    "Feridun": "feridun.kizgin@gmail.com",
-    "Yunus": "yunus34@hotmail.fr",
-    "Serife": "serifevideography@gmail.com",
-    "Steeven": "studios.h265@gmail.com",
-    "Taner": "bokehart9@gmail.com",
-    "Göksel": "gokseltuzun@gmail.com"
+    'Alexandre': 'alexandre@raventech.com',
+    'Sarah': 'sarah@raventech.com',
+    'Volkan': 'volkan@raventech.com',
+    'Feridun': 'feridun@raventech.com',
+    // Ajoutez vos membres ici
 };
 
-export const DEFAULT_STAFF = Object.keys(STAFF_DIRECTORY);
-
-// Configuration
-export const COLLECTION_NAME = 'wedding_projects';
-export const LEADS_COLLECTION = 'leads';
-export const SETTINGS_COLLECTION = 'settings';
-export const MAKE_WEBHOOK_URL = 'https://hook.eu2.make.com/iwf8nbt3tywmywp6u89xgn7e2nar0bbs'; 
-
-// Liens Stripe
-export const STRIPE_PRIORITY_LINK = 'https://buy.stripe.com/fZu4gz07eaPzcRt54Y5gc0c'; 
-export const STRIPE_RAW_LINK = 'https://buy.stripe.com/cNi5kD5rye1L2cP2WQ5gc0d';
-export const STRIPE_ARCHIVE_RESTORE_LINK = 'https://buy.stripe.com/fZu00j3jq4rb5p140U5gc0e';
-export const STRIPE_ARCHIVE_LINK = STRIPE_ARCHIVE_RESTORE_LINK; // Alias
-
-export const SUPER_ADMINS = ['irzzenproductions@gmail.com']; 
-
+// Étapes Photo
 export const PHOTO_STEPS = {
     'none': { label: 'En attente', percent: 0 },
     'waiting': { label: 'En attente des fichiers', percent: 10 },
     'culling': { label: 'Tri & Sélection', percent: 30 },
-    'editing': { label: 'Retouches Colorimétrie', percent: 60 },
-    'export': { label: 'Export & Galerie', percent: 90 },
-    'delivered': { label: 'Livré', percent: 100 }
+    'editing': { label: 'Développement (Lr)', percent: 60 },
+    'retouching': { label: 'Retouches (Ps)', percent: 80 },
+    'export': { label: 'Export Final', percent: 90 },
+    'delivered': { label: 'Livraison Finale', percent: 100 }
 };
 
+// Étapes Vidéo (Avec l'étape PARTIAL ajoutée récemment)
 export const VIDEO_STEPS = {
     'none': { label: 'En attente', percent: 0 },
     'waiting': { label: 'En attente des fichiers', percent: 10 },
     'rushes': { label: 'Dérushage', percent: 25 },
-    'cutting': { label: 'Montage en cours', percent: 50 },
+    'cutting': { label: 'Montage Ours', percent: 50 },
     'grading': { label: 'Etalonnage & Mixage', percent: 75 },
-    'partial': { label: 'Livraison Partielle (Clip/Taki)', percent: 85 }, // 👈 NOUVELLE ÉTAPE
+    'partial': { label: 'Livraison Partielle (Clip)', percent: 85 },
     'rendering': { label: 'Export Final', percent: 90 },
     'delivered': { label: 'Livraison Finale', percent: 100 }
 };
 
 export const ALBUM_STATUSES = {
     'pending': 'En attente choix',
-    'design': 'Mise en page',
-    'validation': 'Validation Client',
+    'design': 'En cours de design',
+    'validation': 'En attente validation',
     'printing': 'En impression',
     'sent': 'Expédié'
 };
 
-export const ALBUM_FORMATS = ['30x30', '40x30', '25x25', 'Coffret Parent'];
+export const ALBUM_FORMATS = [
+    "30x30", "40x30", "25x25", "20x30", "Coffret Luxe", "Livre Parents (20x20)"
+];
+
+// --- INTERFACES TYPESCRIPT ---
+
+export interface HistoryLog {
+    date: string;
+    user: string;
+    action: string;
+}
 
 export interface Album {
     id: string;
     name: string;
     format: string;
+    price: number;
     status: string;
     paid: boolean;
-    price: number;
     stripeLink?: string;
 }
 
 export interface Message {
     id: string;
-    author: 'admin' | 'client';
+    author: string; // 👈 C'EST ICI LA CORRECTION (C'était 'admin' | 'client')
     text: string;
-    date: any; 
+    date: string;
+    isStaff: boolean;
 }
 
-// Structure Chat Interne
 export interface InternalMessage {
     id: string;
     author: string;
@@ -83,88 +89,68 @@ export interface InternalMessage {
     date: string;
 }
 
-export interface HistoryLog {
-    date: string;
-    user: string;
-    action: string;
-}
-
-export interface TeamPayment {
-    id: string;
-    recipient: string;
-    amount: number;
-    date: string;
-    note?: string;
-}
-
 export interface Project {
     id: string;
     code: string;
     clientNames: string;
     clientEmail: string;
-    clientPhone: string;
-    clientEmail2?: string | null;
-    clientPhone2?: string | null;
-    clientAddress?: string;
-    clientCity?: string;
+    clientEmail2?: string;
+    clientPhone?: string;
+    clientPhone2?: string;
     weddingDate: string;
-    weddingVenue?: string | null;
-    weddingVenueZip?: string | null;
-    
-    // Status
-    statusPhoto: keyof typeof PHOTO_STEPS;
-    statusVideo: keyof typeof VIDEO_STEPS;
+    weddingVenue?: string;
+    weddingVenueZip?: string;
+    clientCity?: string;
+
+    // Staff
+    managerName?: string;
+    managerEmail?: string;
+    photographerName?: string;
+    photographerEmail?: string;
+    videographerName?: string;
+    videographerEmail?: string;
+
+    // Production
+    hasPhoto: boolean;
+    hasVideo: boolean;
+    statusPhoto: string;
+    statusVideo: string;
     progressPhoto: number;
     progressVideo: number;
     
-    // Dates prévisionnelles
+    // Dates & Livraisons
     estimatedDeliveryPhoto?: string;
     estimatedDeliveryVideo?: string;
+    deliveryConfirmedPhoto?: boolean;
+    deliveryConfirmedVideo?: boolean;
+    deliveryConfirmedPhotoDate?: any;
+    deliveryConfirmedVideoDate?: any;
 
-    // Staff
-    photographerName?: string;
-    photographerEmail?: string | null;
-    videographerName?: string;
-    videographerEmail?: string | null;
-    managerName?: string;
-    managerEmail?: string | null;
-
-    // Livrables & Contenu
+    // Liens
     linkPhoto?: string;
     linkVideo?: string;
+    moodboardLink?: string;
+    musicLinks?: string;
+    musicInstructions?: string;
     coverImage?: string;
-    moodboardLink?: string; // 👈 Nouveau
-    
+
     // Options
     isPriority: boolean;
-    fastTrackActivationDate?: string | null;
-    isArchived?: boolean;
-    inviteCount?: number; // 👈 Nouveau
-
-    // Financier
-    totalPrice?: number;
-    depositAmount?: number;
-    teamPayments?: TeamPayment[];
+    isArchived: boolean;
+    fastTrackActivationDate?: string;
     
-    // Communication & Contenu
-    messages?: Message[];
-    internalChat?: InternalMessage[]; // 👈 Nouveau
-    hasUnreadMessage?: boolean;
-    albums?: Album[];
-    musicInstructions?: string;
-    musicLinks?: string;
-    adminNotes?: string;
-
-    // Confirmations
-    deliveryConfirmed?: boolean; 
-    deliveryConfirmationDate?: any;
-    deliveryConfirmedPhoto?: boolean;
-    deliveryConfirmedPhotoDate?: any;
-    deliveryConfirmedVideo?: boolean;
-    deliveryConfirmedVideoDate?: any;
+    // Données complexes
+    albums: Album[];
+    messages: Message[];
+    internalChat: InternalMessage[];
+    history: HistoryLog[];
     
     // Meta
-    lastUpdated?: any;
+    inviteCount?: number;
     createdAt?: any;
-    history?: HistoryLog[];
+    lastUpdated?: any;
+    
+    // Financier (Optionnel)
+    totalPrice?: number;
+    depositAmount?: number;
 }
