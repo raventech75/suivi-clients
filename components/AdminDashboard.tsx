@@ -1,6 +1,6 @@
 'use client';
 import React, { useState } from 'react';
-import { Plus, Search, Filter, Loader2, Calendar, MapPin, Users, AlertCircle } from 'lucide-react';
+import { Plus, Search, Loader2, Calendar, MapPin, Users } from 'lucide-react';
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore'; 
 import { db, appId } from '../lib/firebase';
 import { COLLECTION_NAME, PHOTO_STEPS, VIDEO_STEPS, Project } from '../lib/config';
@@ -33,9 +33,8 @@ export default function AdminDashboard({ projects, staffList, staffDirectory, us
   const createProject = async (e: any) => {
       e.preventDefault();
 
-      // SÉCURITÉ : Email obligatoire
       if (!newProject.clientEmail || !newProject.clientEmail.includes('@')) {
-          alert("⛔️ Email client obligatoire pour créer le dossier.");
+          alert("⛔️ Email client obligatoire.");
           return;
       }
       
@@ -50,7 +49,7 @@ export default function AdminDashboard({ projects, staffList, staffDirectory, us
           progressPhoto: 0, 
           progressVideo: 0, 
           messages: [],
-          albums: [], // ✅ LISTE VIDE À LA CRÉATION (Pas d'album fantôme)
+          albums: [], // ✅ LISTE VIDE À LA CRÉATION
           internalChat: [],
           inviteCount: 0,
           createdAt: serverTimestamp() 
@@ -65,7 +64,6 @@ export default function AdminDashboard({ projects, staffList, staffDirectory, us
       });
   };
 
-  // Si un projet est ouvert, on affiche l'éditeur
   if (selectedProject) {
     return (
       <div className="min-h-screen bg-stone-50">
@@ -85,7 +83,6 @@ export default function AdminDashboard({ projects, staffList, staffDirectory, us
     );
   }
 
-  // Sinon, on affiche la liste
   return (
     <div className="min-h-screen bg-stone-100 p-4 md:p-8">
       <div className="max-w-7xl mx-auto">
@@ -179,6 +176,6 @@ export default function AdminDashboard({ projects, staffList, staffDirectory, us
           ))}
         </div>
       </div>
-    );
-  }
+    </div>
+  );
 }
