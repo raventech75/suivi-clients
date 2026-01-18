@@ -1,14 +1,16 @@
 'use client';
 import React, { useState, useEffect } from 'react';
-import { onAuthStateChanged, signOut } from 'firebase/auth'; // Import signOut
+import { onAuthStateChanged, signOut } from 'firebase/auth'; 
 import { collection, query, onSnapshot } from 'firebase/firestore';
-import { auth, db } from './lib/firebase';
-import { COLLECTION_NAME, Project, STAFF_DIRECTORY } from './lib/config'; // Ajout STAFF_DIRECTORY
-import AdminDashboard from './components/AdminDashboard';
-import ClientPortal from './components/ClientPortal';
-import StatsDashboard from './components/StatsDashboard';
-import AdminLogin from './components/AdminLogin';
 import { Loader2, Lock, HeartHandshake } from 'lucide-react';
+
+// 👇 CORRECTION DES CHEMINS (../ au lieu de ./)
+import { auth, db } from '../lib/firebase';
+import { COLLECTION_NAME, Project, STAFF_DIRECTORY } from '../lib/config';
+import AdminDashboard from '../components/AdminDashboard';
+import ClientPortal from '../components/ClientPortal';
+import StatsDashboard from '../components/StatsDashboard';
+import AdminLogin from '../components/AdminLogin';
 
 export default function Home() {
   const [user, setUser] = useState<any>(null);
@@ -25,25 +27,25 @@ export default function Home() {
     return () => unsubscribe();
   }, []);
 
-  // Chargement des projets en temps réel
+  // Chargement des projets
   useEffect(() => {
     const q = query(collection(db, COLLECTION_NAME));
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Project));
-      // Tri par date de création décroissante (ou mariage)
       data.sort((a, b) => new Date(b.weddingDate).getTime() - new Date(a.weddingDate).getTime());
       setProjects(data);
     });
     return () => unsubscribe();
   }, []);
 
-  // 👇 FONCTION DE DÉCONNEXION ROBUSTE
+  // Fonction de déconnexion propre
   const handleLogout = async () => {
-      await signOut(auth); // On attend que Firebase déconnecte vraiment
-      setUser(null);       // On vide l'utilisateur localement
-      setView('landing');  // On retourne à l'accueil
+      await signOut(auth);
+      setUser(null);
+      setView('landing');
   };
 
+  // Sécurité bouton Admin
   const handleAdminClick = () => {
       if (user) {
           setView('admin');
@@ -57,7 +59,7 @@ export default function Home() {
   return (
     <div className="min-h-screen bg-stone-100 font-sans text-stone-800">
       
-      {/* VUE : ACCUEIL (LANDING) */}
+      {/* VUE : ACCUEIL */}
       {view === 'landing' && (
         <div className="h-screen flex flex-col items-center justify-center p-6 text-center space-y-8 animate-fade-in">
            <div className="w-24 h-24 bg-stone-900 rounded-full flex items-center justify-center shadow-2xl mb-4">
@@ -84,29 +86,29 @@ export default function Home() {
         </div>
       )}
 
-      {/* VUE : LOGIN ADMIN */}
+      {/* VUE : LOGIN */}
       {view === 'login' && (
           <AdminLogin onLogin={() => setView('admin')} onBack={() => setView('landing')} />
       )}
 
-      {/* VUE : PORTAIL CLIENT */}
+      {/* VUE : CLIENT */}
       {view === 'client' && (
           <ClientPortal projects={projects} onBack={() => setView('landing')} />
       )}
 
-      {/* VUE : BACKOFFICE ADMIN */}
+      {/* VUE : ADMIN */}
       {view === 'admin' && (
           <AdminDashboard 
             projects={projects} 
-            staffList={Object.keys(STAFF_DIRECTORY)} // On passe la liste des noms
-            staffDirectory={STAFF_DIRECTORY}         // On passe l'annuaire complet
+            staffList={Object.keys(STAFF_DIRECTORY)}
+            staffDirectory={STAFF_DIRECTORY}
             user={user} 
-            onLogout={handleLogout} // 👈 On passe la nouvelle fonction de déconnexion
+            onLogout={handleLogout}
             onStats={() => setView('stats')} 
           />
       )}
 
-      {/* VUE : STATISTIQUES */}
+      {/* VUE : STATS */}
       {view === 'stats' && (
           <StatsDashboard projects={projects} onBack={() => setView('admin')} />
       )}
