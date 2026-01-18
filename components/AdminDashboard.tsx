@@ -1,18 +1,34 @@
 'use client';
 import React, { useState } from 'react';
-import { Plus, Search, Loader2, Calendar, MapPin, Users } from 'lucide-react';
+import { Plus, Search, Loader2, Calendar, MapPin, Users, LogOut, BarChart3 } from 'lucide-react';
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore'; 
 import { db, appId } from '../lib/firebase';
 import { COLLECTION_NAME, PHOTO_STEPS, VIDEO_STEPS, Project } from '../lib/config';
 import ProjectEditor from './ProjectEditor';
 
-export default function AdminDashboard({ projects, staffList, staffDirectory, user }: { projects: Project[], staffList: string[], staffDirectory: Record<string, string>, user: any }) {
+// 👇 On met à jour la signature pour accepter TOUTES les props envoyées par page.tsx
+export default function AdminDashboard({ 
+    projects, 
+    staffList, 
+    staffDirectory, 
+    user, 
+    onLogout, 
+    onStats,
+    setStaffList // On l'accepte pour éviter l'erreur, même si on ne l'utilise plus activement
+}: { 
+    projects: Project[], 
+    staffList: string[], 
+    staffDirectory: Record<string, string>, 
+    user: any,
+    onLogout: () => void,
+    onStats: () => void,
+    setStaffList?: any 
+}) {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
   const [isAdding, setIsAdding] = useState(false);
   
-  // État pour le nouveau projet
   const [newProject, setNewProject] = useState({
     clientNames: '', clientEmail: '', clientEmail2: '', clientPhone: '', clientPhone2: '', 
     weddingDate: '', weddingVenue: '', weddingVenueZip: '',
@@ -49,7 +65,7 @@ export default function AdminDashboard({ projects, staffList, staffDirectory, us
           progressPhoto: 0, 
           progressVideo: 0, 
           messages: [],
-          albums: [], // ✅ LISTE VIDE À LA CRÉATION
+          albums: [], 
           internalChat: [],
           inviteCount: 0,
           createdAt: serverTimestamp() 
@@ -86,10 +102,15 @@ export default function AdminDashboard({ projects, staffList, staffDirectory, us
   return (
     <div className="min-h-screen bg-stone-100 p-4 md:p-8">
       <div className="max-w-7xl mx-auto">
-        <div className="flex flex-col md:flex-row justify-between items-center mb-8 gap-4">
+        {/* En-tête avec navigation (Stats / Logout) */}
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
           <div>
             <h1 className="text-3xl font-serif font-bold text-stone-800">Tableau de Bord</h1>
-            <p className="text-stone-500 text-sm">Gérez vos {projects.length} dossiers mariages</p>
+            <div className="flex gap-4 items-center mt-2 text-sm text-stone-500">
+                <span className="bg-stone-200 px-2 py-0.5 rounded text-stone-600 font-bold">{projects.length} dossiers</span>
+                <button onClick={onStats} className="flex items-center gap-1 hover:text-stone-900 transition"><BarChart3 className="w-4 h-4"/> Statistiques</button>
+                <button onClick={onLogout} className="flex items-center gap-1 text-red-400 hover:text-red-600 transition"><LogOut className="w-4 h-4"/> Déconnexion</button>
+            </div>
           </div>
           <button onClick={() => setIsAdding(true)} className="bg-stone-900 text-white px-6 py-3 rounded-xl font-bold flex items-center gap-2 hover:bg-black transition shadow-lg">
             <Plus className="w-5 h-5"/> Nouveau Dossier
