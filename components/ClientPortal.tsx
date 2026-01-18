@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { 
   ChevronRight, Search, AlertTriangle, ImageIcon, Film, Calendar, 
   Music, Rocket, CheckCircle, CheckSquare, BookOpen, 
-  Copy, ClipboardCheck, X, Users, Camera, Video, UserCheck, HardDrive, Download, Lock, ShoppingBag, Palette
+  Copy, ClipboardCheck, X, Users, Camera, Video, UserCheck, HardDrive, Download, Lock, ShoppingBag, Palette, PlayCircle
 } from 'lucide-react';
 import { doc, updateDoc, serverTimestamp } from 'firebase/firestore';
 import { db, appId } from '../lib/firebase';
@@ -28,7 +28,6 @@ export default function ClientPortal({ projects, onBack }: { projects: Project[]
   const [error, setError] = useState('');
   const [emailCopied, setEmailCopied] = useState(false);
 
-  // Synchronisation des données (Important pour l'image)
   useEffect(() => {
     if (projects.length === 1 && projects[0].id) {
         setFoundProject(projects[0]);
@@ -64,20 +63,15 @@ export default function ClientPortal({ projects, onBack }: { projects: Project[]
   };
 
   const confirmPhoto = async () => {
-      if(!foundProject || !confirm("Confirmer la réception ?")) return;
+      if(!foundProject || !confirm("⚠️ ATTENTION :\n\nEn confirmant, vous certifiez avoir téléchargé TOUS vos fichiers.")) return;
       const colPath = typeof appId !== 'undefined' ? `artifacts/${appId}/public/data/${COLLECTION_NAME}` : COLLECTION_NAME;
       await updateDoc(doc(db, colPath, foundProject.id), { deliveryConfirmedPhoto: true, deliveryConfirmedPhotoDate: serverTimestamp() });
   };
 
   const confirmVideo = async () => {
-      if(!foundProject || !confirm("Confirmer la réception ?")) return;
+      if(!foundProject || !confirm("⚠️ ATTENTION :\n\nEn confirmant, vous certifiez avoir téléchargé votre film.")) return;
       const colPath = typeof appId !== 'undefined' ? `artifacts/${appId}/public/data/${COLLECTION_NAME}` : COLLECTION_NAME;
       await updateDoc(doc(db, colPath, foundProject.id), { deliveryConfirmedVideo: true, deliveryConfirmedVideoDate: serverTimestamp() });
-  };
-
-  const copyProdEmail = () => {
-    navigator.clipboard.writeText('irzzenproductions@gmail.com');
-    setEmailCopied(true); setTimeout(() => setEmailCopied(false), 2000);
   };
 
   if (foundProject) {
@@ -90,8 +84,12 @@ export default function ClientPortal({ projects, onBack }: { projects: Project[]
     const isVideoExpired = deliveryDateVideo && (now > deliveryDateVideo + SIX_MONTHS_MS);
     const isBlocked = ((foundProject.totalPrice || 0) - (foundProject.depositAmount || 0)) > 0 && (foundProject.totalPrice || 0) > 0;
     
+    // Conditions d'affichage
     const canViewGallery = foundProject.statusPhoto === 'delivered' && !isBlocked && foundProject.linkPhoto && foundProject.linkPhoto.length > 5;
-    const canViewVideo = foundProject.statusVideo === 'delivered' && !isBlocked && foundProject.linkVideo && foundProject.linkVideo.length > 5;
+    
+    // 👇 NOUVELLE LOGIQUE VIDEO : Visible si 'delivered' OU 'partial'
+    const canViewVideo = (foundProject.statusVideo === 'delivered' || foundProject.statusVideo === 'partial') && !isBlocked && foundProject.linkVideo && foundProject.linkVideo.length > 5;
+    const isPartialVideo = foundProject.statusVideo === 'partial';
     
     const hasDelivery = foundProject.statusPhoto === 'delivered' || foundProject.statusVideo === 'delivered';
     const allConfirmed = foundProject.deliveryConfirmedPhoto && foundProject.deliveryConfirmedVideo;
@@ -100,7 +98,6 @@ export default function ClientPortal({ projects, onBack }: { projects: Project[]
     const rawLink = `${STRIPE_RAW_LINK}?client_reference_id=${foundProject.id}`;
     const archiveLink = `${STRIPE_ARCHIVE_RESTORE_LINK}?client_reference_id=${foundProject.id}`;
 
-    // 👇 CORRECTIF IMAGE : On s'assure qu'elle n'est pas vide
     const bgImage = (foundProject.coverImage && foundProject.coverImage.length > 10) 
         ? foundProject.coverImage 
         : 'https://images.unsplash.com/photo-1519741497674-611481863552?auto=format&fit=crop&q=80';
@@ -116,21 +113,19 @@ export default function ClientPortal({ projects, onBack }: { projects: Project[]
         
         <div className="max-w-4xl mx-auto px-4 -mt-16 space-y-8 relative z-10">
           
-          {/* Messages d'alerte */}
           {hasDelivery && !allConfirmed && (
               <div className="bg-red-600 text-white p-6 rounded-2xl shadow-xl border-2 border-red-400 flex flex-col md:flex-row gap-4 items-start animate-fade-in">
                   <div className="bg-white/20 p-3 rounded-full shrink-0"><HardDrive className="w-8 h-8 text-white" /></div>
                   <div>
                       <h3 className="font-bold text-xl uppercase tracking-wide mb-2 flex items-center gap-2">⚠️ Sauvegarde Obligatoire</h3>
-                      <p className="text-white/90 leading-relaxed mb-4"><strong>Vous disposez de 2 mois</strong> après livraison pour effectuer vos copies de sécurité.</p>
-                      <div className="text-xs font-bold bg-black/20 inline-block px-3 py-1 rounded text-red-100">Veuillez confirmer la réception ci-dessous.</div>
+                      <p className="text-white/90 leading-relaxed mb-4"><strong>Vous disposez de 2 mois</strong> après livraison finale pour effectuer vos copies de sécurité.</p>
+                      <div className="text-xs font-bold bg-black/20 inline-block px-3 py-1 rounded text-red-100">Veuillez confirmer la réception finale ci-dessous.</div>
                   </div>
               </div>
           )}
 
           {isBlocked && (<div className="bg-stone-800 text-white border border-stone-700 rounded-xl p-6 flex items-center gap-4 shadow-md"><AlertTriangle className="w-8 h-8 shrink-0 text-amber-500" /><div><h3 className="font-bold text-lg text-amber-500">Paiement en attente</h3><p className="text-sm text-stone-300">Le téléchargement sera débloqué une fois le solde réglé.</p></div></div>)}
 
-          {/* ÉQUIPE (Toujours visible si définie) */}
           {(foundProject.managerName || foundProject.photographerName || foundProject.videographerName) && (
               <div className="bg-white p-6 rounded-2xl border border-stone-200 shadow-md">
                   <h3 className="font-bold text-lg text-stone-800 flex items-center gap-2 mb-4"><Users className="w-5 h-5 text-amber-500"/> Votre Équipe RavenTech</h3>
@@ -143,7 +138,6 @@ export default function ClientPortal({ projects, onBack }: { projects: Project[]
           )}
 
           <div className="grid md:grid-cols-2 gap-6">
-              {/* Photo Card */}
               {foundProject.statusPhoto !== 'none' && (
                 <div className="bg-white rounded-2xl p-6 shadow-md border border-stone-100 flex flex-col h-full">
                   <div className="flex items-center gap-4 mb-4"><div className="w-12 h-12 bg-amber-100 text-amber-600 rounded-xl flex items-center justify-center"><ImageIcon className="w-6 h-6"/></div><h3 className="font-bold text-xl">Photos</h3></div>
@@ -159,7 +153,7 @@ export default function ClientPortal({ projects, onBack }: { projects: Project[]
               </div>
               )}
 
-              {/* Video Card */}
+              {/* VIDEO CARD MODIFIÉE POUR GÉRER LE PARTIEL */}
               {foundProject.statusVideo !== 'none' && (
                 <div className="bg-white rounded-2xl p-6 shadow-md border border-stone-100 flex flex-col h-full">
                   <div className="flex items-center gap-4 mb-4"><div className="w-12 h-12 bg-blue-100 text-blue-600 rounded-xl flex items-center justify-center"><Film className="w-6 h-6"/></div><h3 className="font-bold text-xl">Vidéo</h3></div>
@@ -170,13 +164,38 @@ export default function ClientPortal({ projects, onBack }: { projects: Project[]
                       {foundProject.estimatedDeliveryVideo && <div className="mt-4 bg-blue-50 text-blue-800 text-xs p-3 rounded-lg flex items-center gap-2"><Calendar className="w-4 h-4"/> Livraison estimée : <strong>{formatDateFR(foundProject.estimatedDeliveryVideo)}</strong></div>}
                   </div>
                   <div className="space-y-3 mt-auto pt-4 border-t border-stone-50">
-                      {canViewVideo ? (isVideoExpired ? (<div className="text-center space-y-3"><div className="bg-stone-100 p-4 rounded-xl text-stone-500 text-sm flex flex-col items-center gap-2"><Lock className="w-6 h-6 text-stone-400"/><span>Archive verrouillée</span></div><a href={archiveLink} className="block w-full bg-stone-900 text-white py-3 rounded-xl font-bold">Débloquer (290€)</a></div>) : (<><a href={foundProject.linkVideo} target="_blank" className="block w-full bg-stone-900 text-white text-center py-3 rounded-xl font-bold hover:bg-stone-800 transition shadow-lg flex items-center justify-center gap-2"><Download className="w-4 h-4"/> Télécharger le Film</a>{!foundProject.deliveryConfirmedVideo ? (<button onClick={confirmVideo} className="w-full bg-white border-2 border-green-500 text-green-600 py-3 rounded-xl font-bold hover:bg-green-50 transition flex items-center justify-center gap-2 text-sm"><CheckSquare className="w-4 h-4"/> Confirmer réception</button>) : <div className="flex items-center justify-center gap-2 text-green-600 text-xs font-bold bg-green-50 p-2 rounded-lg border border-green-100"><CheckCircle className="w-4 h-4"/> Reçu</div>}</>)) : foundProject.statusVideo === 'delivered' ? <button disabled className="block w-full bg-stone-200 text-stone-400 text-center py-3 rounded-xl font-bold cursor-not-allowed">Lien en cours...</button> : null}
+                      {canViewVideo ? (
+                          isVideoExpired ? (
+                              <div className="text-center space-y-3"><div className="bg-stone-100 p-4 rounded-xl text-stone-500 text-sm flex flex-col items-center gap-2"><Lock className="w-6 h-6 text-stone-400"/><span>Archive verrouillée</span></div><a href={archiveLink} className="block w-full bg-stone-900 text-white py-3 rounded-xl font-bold">Débloquer (290€)</a></div>
+                          ) : (
+                              <>
+                                  {/* BOUTON D'ACCÈS ADAPTÉ : CLIP OU FILM */}
+                                  <a href={foundProject.linkVideo} target="_blank" className={`block w-full text-white text-center py-3 rounded-xl font-bold transition shadow-lg flex items-center justify-center gap-2 ${isPartialVideo ? 'bg-blue-600 hover:bg-blue-700' : 'bg-stone-900 hover:bg-stone-800'}`}>
+                                      {isPartialVideo ? <PlayCircle className="w-4 h-4"/> : <Download className="w-4 h-4"/>} 
+                                      {isPartialVideo ? 'Voir le Clip (Teaser)' : 'Télécharger le Film'}
+                                  </a>
+                                  
+                                  {/* CONFIRMATION : SEULEMENT SI LIVRAISON FINALE */}
+                                  {!isPartialVideo && (
+                                      !foundProject.deliveryConfirmedVideo ? (
+                                          <button onClick={confirmVideo} className="w-full bg-white border-2 border-green-500 text-green-600 py-3 rounded-xl font-bold hover:bg-green-50 transition flex items-center justify-center gap-2 text-sm"><CheckSquare className="w-4 h-4"/> Confirmer réception</button>
+                                      ) : (
+                                          <div className="flex items-center justify-center gap-2 text-green-600 text-xs font-bold bg-green-50 p-2 rounded-lg border border-green-100"><CheckCircle className="w-4 h-4"/> Réception confirmée</div>
+                                      )
+                                  )}
+
+                                  {/* MESSAGE SI PARTIEL */}
+                                  {isPartialVideo && (
+                                      <div className="text-center text-xs text-stone-400 italic">La livraison complète du film est en cours de finition.</div>
+                                  )}
+                              </>
+                          )
+                      ) : foundProject.statusVideo === 'delivered' ? <button disabled className="block w-full bg-stone-200 text-stone-400 text-center py-3 rounded-xl font-bold cursor-not-allowed">Lien en cours...</button> : null}
                   </div>
                 </div>
               )}
           </div>
           
-          {/* BOUTIQUE */}
           <div className="space-y-6">
               <h3 className="font-serif text-2xl text-stone-800 flex items-center gap-2 border-b pb-4"><ShoppingBag className="w-6 h-6"/> Boutique & Options</h3>
               <div className="grid md:grid-cols-3 gap-6">
@@ -186,7 +205,6 @@ export default function ClientPortal({ projects, onBack }: { projects: Project[]
               </div>
           </div>
           
-          {/* Albums (S'il y en a) */}
           {foundProject.albums && foundProject.albums.length > 0 && (
               <div className="bg-white p-6 rounded-2xl border border-stone-200 shadow-md">
                   <h3 className="font-bold text-lg text-stone-800 flex items-center gap-2 mb-4"><BookOpen className="w-5 h-5"/> Commandes en cours</h3>
@@ -203,18 +221,13 @@ export default function ClientPortal({ projects, onBack }: { projects: Project[]
               </div>
           )}
 
-          {/* 👇 CORRECTIF MUSIQUE : AFFICHAGE CONDITIONNEL SIMPLIFIÉ */}
-          {/* Si Vidéo n'est pas "none" OU si l'on a déjà des instructions, on affiche la section */}
           {foundProject.statusVideo !== 'none' && (
              <div className="grid md:grid-cols-2 gap-6">
-                 {/* MOODBOARD */}
                  <div className="bg-pink-50 p-6 rounded-2xl border border-pink-100 shadow-md">
                     <h3 className="font-bold text-pink-900 flex items-center gap-2 mb-4"><Palette className="w-5 h-5"/> Inspirations & Moodboard</h3>
                     <p className="text-sm text-pink-700 mb-3 font-medium">Un tableau Pinterest ? Un compte Instagram ?</p>
                     <input className="w-full p-4 rounded-xl border border-pink-200 mb-4 focus:ring-2 ring-pink-500 outline-none bg-white placeholder-pink-200" placeholder="Ex: https://pinterest.com/..." value={moodLink} onChange={e => setMoodLink(e.target.value)}/>
                  </div>
-
-                 {/* MUSIQUE */}
                  <div className="bg-purple-50 p-6 rounded-2xl border border-purple-100 shadow-md">
                     <h3 className="font-bold text-purple-900 flex items-center gap-2 mb-4"><Music className="w-5 h-5"/> Musique & Montage</h3>
                     <p className="text-sm text-purple-700 mb-3 font-medium">Vos choix musicaux.</p>
@@ -234,7 +247,6 @@ export default function ClientPortal({ projects, onBack }: { projects: Project[]
     );
   }
 
-  // Écran de Login
   return (
     <div className="h-screen flex items-center justify-center bg-stone-100 p-4 relative">
        <button onClick={onBack} className="absolute top-6 left-6 p-3 bg-white rounded-full shadow-md text-stone-500 hover:text-stone-900 hover:scale-105 transition-all z-20"><X className="w-6 h-6"/></button>

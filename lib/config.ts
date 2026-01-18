@@ -42,8 +42,9 @@ export const VIDEO_STEPS = {
     'rushes': { label: 'Dérushage', percent: 25 },
     'cutting': { label: 'Montage Ours', percent: 50 },
     'grading': { label: 'Etalonnage & Mixage', percent: 75 },
+    'partial': { label: 'Livraison Partielle (Clip/Taki)', percent: 85 }, // 👈 NOUVELLE ÉTAPE
     'rendering': { label: 'Export Final', percent: 90 },
-    'delivered': { label: 'Livré', percent: 100 }
+    'delivered': { label: 'Livraison Finale', percent: 100 }
 };
 
 export const ALBUM_STATUSES = {
