@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { 
   ChevronRight, Search, AlertTriangle, ImageIcon, Film, Calendar, 
   Music, Rocket, CheckCircle, CheckSquare, BookOpen, 
-  Copy, ClipboardCheck, X, Users, Camera, Video, UserCheck, HardDrive, Download, Lock, ShoppingBag, CreditCard
+  Copy, ClipboardCheck, X, Users, Camera, Video, UserCheck, HardDrive, Download, Lock, ShoppingBag, Palette
 } from 'lucide-react';
 import { doc, updateDoc, serverTimestamp } from 'firebase/firestore';
 import { db, appId } from '../lib/firebase';
@@ -23,6 +23,7 @@ export default function ClientPortal({ projects, onBack }: { projects: Project[]
   const [foundProject, setFoundProject] = useState<Project | null>(null);
   const [musicLinks, setMusicLinks] = useState('');
   const [musicInstructions, setMusicInstructions] = useState('');
+  const [moodLink, setMoodLink] = useState(''); // 👈 State pour le Moodboard
   const [savingMusic, setSavingMusic] = useState(false);
   const [error, setError] = useState('');
   const [emailCopied, setEmailCopied] = useState(false);
@@ -32,31 +33,39 @@ export default function ClientPortal({ projects, onBack }: { projects: Project[]
     else if (foundProject) { const live = projects.find(p => p.id === foundProject.id); if(live) setFoundProject(live); }
   }, [projects, foundProject]);
 
-  useEffect(() => { if(foundProject) { setMusicLinks(foundProject.musicLinks || ''); setMusicInstructions(foundProject.musicInstructions || ''); } }, [foundProject]);
+  useEffect(() => { 
+      if(foundProject) { 
+          setMusicLinks(foundProject.musicLinks || ''); 
+          setMusicInstructions(foundProject.musicInstructions || '');
+          setMoodLink(foundProject.moodboardLink || ''); 
+      } 
+  }, [foundProject]);
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
     const p = projects.find(p => p.code === searchCode.trim().toUpperCase());
-    if (p) { setFoundProject(p); setError(''); } else setError('Code introuvable. Vérifiez les majuscules.');
+    if (p) { setFoundProject(p); setError(''); } else setError('Code introuvable.');
   };
 
   const handleSaveMusic = async () => {
       if(!foundProject) return;
       setSavingMusic(true);
       const colPath = typeof appId !== 'undefined' ? `artifacts/${appId}/public/data/${COLLECTION_NAME}` : COLLECTION_NAME;
-      await updateDoc(doc(db, colPath, foundProject.id), { musicLinks, musicInstructions, lastUpdated: serverTimestamp() });
-      alert("Vos choix musicaux ont été enregistrés !");
+      await updateDoc(doc(db, colPath, foundProject.id), { 
+          musicLinks, musicInstructions, moodboardLink: moodLink, lastUpdated: serverTimestamp() 
+      });
+      alert("Vos préférences ont été enregistrées !");
       setSavingMusic(false);
   };
 
   const confirmPhoto = async () => {
-      if(!foundProject || !confirm("⚠️ ATTENTION :\n\nEn confirmant, vous certifiez avoir téléchargé TOUS vos fichiers photos sur un disque dur personnel.\n\nConfirmer la bonne réception ?")) return;
+      if(!foundProject || !confirm("⚠️ ATTENTION :\n\nEn confirmant, vous certifiez avoir téléchargé TOUS vos fichiers.")) return;
       const colPath = typeof appId !== 'undefined' ? `artifacts/${appId}/public/data/${COLLECTION_NAME}` : COLLECTION_NAME;
       await updateDoc(doc(db, colPath, foundProject.id), { deliveryConfirmedPhoto: true, deliveryConfirmedPhotoDate: serverTimestamp() });
   };
 
   const confirmVideo = async () => {
-      if(!foundProject || !confirm("⚠️ ATTENTION :\n\nEn confirmant, vous certifiez avoir téléchargé votre film sur un disque dur personnel.\n\nConfirmer la bonne réception ?")) return;
+      if(!foundProject || !confirm("⚠️ ATTENTION :\n\nEn confirmant, vous certifiez avoir téléchargé votre film.")) return;
       const colPath = typeof appId !== 'undefined' ? `artifacts/${appId}/public/data/${COLLECTION_NAME}` : COLLECTION_NAME;
       await updateDoc(doc(db, colPath, foundProject.id), { deliveryConfirmedVideo: true, deliveryConfirmedVideoDate: serverTimestamp() });
   };
@@ -67,18 +76,13 @@ export default function ClientPortal({ projects, onBack }: { projects: Project[]
   };
 
   if (foundProject) {
-    // LOGIQUE DE VERROUILLAGE (LA RÈGLE STRICTE)
     const now = Date.now();
-    // On définit la date de livraison (Photo ou Vidéo)
     const deliveryDatePhoto = foundProject.estimatedDeliveryPhoto ? new Date(foundProject.estimatedDeliveryPhoto).getTime() : null;
     const deliveryDateVideo = foundProject.estimatedDeliveryVideo ? new Date(foundProject.estimatedDeliveryVideo).getTime() : null;
-    
-    // Règle : Si livré depuis plus de 60 jours (2 mois)
-    const SIX_MONTHS_MS = 60 * 24 * 60 * 60 * 1000; // 60 jours pour commencer
+    const SIX_MONTHS_MS = 60 * 24 * 60 * 60 * 1000;
     
     const isPhotoExpired = deliveryDatePhoto && (now > deliveryDatePhoto + SIX_MONTHS_MS);
     const isVideoExpired = deliveryDateVideo && (now > deliveryDateVideo + SIX_MONTHS_MS);
-
     const isBlocked = ((foundProject.totalPrice || 0) - (foundProject.depositAmount || 0)) > 0 && (foundProject.totalPrice || 0) > 0;
     
     const canViewGallery = foundProject.statusPhoto === 'delivered' && !isBlocked && foundProject.linkPhoto && foundProject.linkPhoto.length > 5;
@@ -87,9 +91,14 @@ export default function ClientPortal({ projects, onBack }: { projects: Project[]
     const hasDelivery = foundProject.statusPhoto === 'delivered' || foundProject.statusVideo === 'delivered';
     const allConfirmed = foundProject.deliveryConfirmedPhoto && foundProject.deliveryConfirmedVideo;
 
+    const fastTrackLink = `${STRIPE_PRIORITY_LINK}?client_reference_id=${foundProject.id}`;
+    const rawLink = `${STRIPE_RAW_LINK}?client_reference_id=${foundProject.id}`;
+    const archiveLink = `${STRIPE_ARCHIVE_RESTORE_LINK}?client_reference_id=${foundProject.id}`;
+
     return (
       <div className="min-h-screen bg-stone-50 pb-20">
         <div className="bg-stone-900 text-white p-10 text-center relative h-[40vh] flex flex-col justify-center items-center overflow-hidden">
+             {/* 👇 CORRECTIF IMAGE COUVERTURE : On utilise bien foundProject.coverImage */}
              <img src={foundProject.coverImage || 'https://images.unsplash.com/photo-1519741497674-611481863552?auto=format&fit=crop&q=80'} className="absolute inset-0 w-full h-full object-cover opacity-40" />
              <button onClick={onBack} className="absolute top-6 left-6 text-white/70 hover:text-white flex gap-2 items-center z-10 transition-colors"><ChevronRight className="rotate-180 w-4 h-4"/> Retour Accueil</button>
              <h2 className="text-4xl font-serif mb-2 relative z-10">{foundProject.clientNames}</h2>
@@ -103,24 +112,29 @@ export default function ClientPortal({ projects, onBack }: { projects: Project[]
                   <div className="bg-white/20 p-3 rounded-full shrink-0"><HardDrive className="w-8 h-8 text-white" /></div>
                   <div>
                       <h3 className="font-bold text-xl uppercase tracking-wide mb-2 flex items-center gap-2">⚠️ Sauvegarde Obligatoire</h3>
-                      <p className="text-white/90 leading-relaxed mb-4">
-                          <strong>Vous disposez de 2 mois</strong> après livraison pour effectuer vos copies de sécurité. 
-                          Passé ce délai, les fichiers sont archivés sur serveur froid ("Cold Storage") et leur restauration sera facturée <strong>290 €</strong>.
-                      </p>
+                      <p className="text-white/90 leading-relaxed mb-4"><strong>Vous disposez de 2 mois</strong> après livraison pour effectuer vos copies de sécurité. Passé ce délai, les fichiers sont archivés.</p>
                       <div className="text-xs font-bold bg-black/20 inline-block px-3 py-1 rounded text-red-100">Confirmez la réception pour valider votre garantie.</div>
                   </div>
               </div>
           )}
 
           {isBlocked && (
-              <div className="bg-stone-800 text-white border border-stone-700 rounded-xl p-6 flex items-center gap-4 shadow-md">
-                   <AlertTriangle className="w-8 h-8 shrink-0 text-amber-500" />
-                   <div><h3 className="font-bold text-lg text-amber-500">Paiement en attente</h3><p className="text-sm text-stone-300">Le téléchargement sera débloqué une fois le solde réglé.</p></div>
+              <div className="bg-stone-800 text-white border border-stone-700 rounded-xl p-6 flex items-center gap-4 shadow-md"><AlertTriangle className="w-8 h-8 shrink-0 text-amber-500" /><div><h3 className="font-bold text-lg text-amber-500">Paiement en attente</h3><p className="text-sm text-stone-300">Le téléchargement sera débloqué une fois le solde réglé.</p></div></div>
+          )}
+
+          {/* 👇 CORRECTIF : BLOC EQUIPE TOUJOURS VISIBLE (Sauf si vide) */}
+          {(foundProject.managerName || foundProject.photographerName || foundProject.videographerName) && (
+              <div className="bg-white p-6 rounded-2xl border border-stone-200 shadow-md">
+                  <h3 className="font-bold text-lg text-stone-800 flex items-center gap-2 mb-4"><Users className="w-5 h-5 text-amber-500"/> Votre Équipe RavenTech</h3>
+                  <div className="grid md:grid-cols-3 gap-4">
+                      {foundProject.managerName && (<div className="flex items-center gap-3 p-3 bg-stone-50 rounded-xl border border-stone-100"><div className="w-10 h-10 bg-purple-100 text-purple-600 rounded-full flex items-center justify-center"><UserCheck className="w-5 h-5"/></div><div><div className="text-xs text-stone-400 font-bold uppercase">Suivi Dossier</div><div className="font-bold text-stone-800">{foundProject.managerName}</div></div></div>)}
+                      {foundProject.photographerName && (<div className="flex items-center gap-3 p-3 bg-stone-50 rounded-xl border border-stone-100"><div className="w-10 h-10 bg-amber-100 text-amber-600 rounded-full flex items-center justify-center"><Camera className="w-5 h-5"/></div><div><div className="text-xs text-stone-400 font-bold uppercase">Photographe</div><div className="font-bold text-stone-800">{foundProject.photographerName}</div></div></div>)}
+                      {foundProject.videographerName && (<div className="flex items-center gap-3 p-3 bg-stone-50 rounded-xl border border-stone-100"><div className="w-10 h-10 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center"><Video className="w-5 h-5"/></div><div><div className="text-xs text-stone-400 font-bold uppercase">Vidéaste</div><div className="font-bold text-stone-800">{foundProject.videographerName}</div></div></div>)}
+                  </div>
               </div>
           )}
 
           <div className="grid md:grid-cols-2 gap-6">
-              {/* CARTE PHOTO */}
               {foundProject.statusPhoto !== 'none' && (
                 <div className="bg-white rounded-2xl p-6 shadow-md border border-stone-100 flex flex-col h-full">
                   <div className="flex items-center gap-4 mb-4"><div className="w-12 h-12 bg-amber-100 text-amber-600 rounded-xl flex items-center justify-center"><ImageIcon className="w-6 h-6"/></div><h3 className="font-bold text-xl">Photos</h3></div>
@@ -128,32 +142,14 @@ export default function ClientPortal({ projects, onBack }: { projects: Project[]
                       <div className="flex justify-between text-sm font-bold text-stone-500 mb-1"><span>Progression</span><span>{foundProject.progressPhoto}%</span></div>
                       <div className="h-3 bg-stone-100 rounded-full overflow-hidden"><div className="h-full bg-amber-500 transition-all duration-1000" style={{ width: `${foundProject.progressPhoto}%` }} /></div>
                       <p className="text-right text-xs mt-1 text-stone-400">{(PHOTO_STEPS as any)[foundProject.statusPhoto]?.label || foundProject.statusPhoto}</p>
+                      {foundProject.estimatedDeliveryPhoto && <div className="mt-4 bg-amber-50 text-amber-800 text-xs p-3 rounded-lg flex items-center gap-2"><Calendar className="w-4 h-4"/> Livraison estimée : <strong>{formatDateFR(foundProject.estimatedDeliveryPhoto)}</strong></div>}
                   </div>
-                  
                   <div className="space-y-3 mt-auto pt-4 border-t border-stone-50">
-                      {canViewGallery ? (
-                          isPhotoExpired ? (
-                              <div className="text-center space-y-3">
-                                  <div className="bg-stone-100 p-4 rounded-xl text-stone-500 text-sm flex flex-col items-center gap-2">
-                                      <Lock className="w-6 h-6 text-stone-400"/>
-                                      <span>Archive verrouillée (Délai dépassé)</span>
-                                  </div>
-                                  <a href={STRIPE_ARCHIVE_RESTORE_LINK} className="block w-full bg-stone-900 text-white py-3 rounded-xl font-bold hover:bg-black transition flex items-center justify-center gap-2">Débloquer l'archive (290€)</a>
-                              </div>
-                          ) : (
-                              <>
-                                <a href={foundProject.linkPhoto} target="_blank" className="block w-full bg-stone-900 text-white text-center py-3 rounded-xl font-bold hover:bg-stone-800 transition shadow-lg flex items-center justify-center gap-2"><Download className="w-4 h-4"/> Accéder à la Galerie</a>
-                                {!foundProject.deliveryConfirmedPhoto ? (
-                                    <button onClick={confirmPhoto} className="w-full bg-white border-2 border-green-500 text-green-600 py-3 rounded-xl font-bold hover:bg-green-50 transition flex items-center justify-center gap-2 text-sm"><CheckSquare className="w-4 h-4"/> Confirmer bonne réception</button>
-                                ) : <div className="flex items-center justify-center gap-2 text-green-600 text-xs font-bold bg-green-50 p-2 rounded-lg border border-green-100"><CheckCircle className="w-4 h-4"/> Réception confirmée</div>}
-                              </>
-                          )
-                      ) : foundProject.statusPhoto === 'delivered' ? <button disabled className="block w-full bg-stone-200 text-stone-400 text-center py-3 rounded-xl font-bold cursor-not-allowed">Lien en cours de génération...</button> : null}
+                      {canViewGallery ? (isPhotoExpired ? (<div className="text-center space-y-3"><div className="bg-stone-100 p-4 rounded-xl text-stone-500 text-sm flex flex-col items-center gap-2"><Lock className="w-6 h-6 text-stone-400"/><span>Archive verrouillée (Délai dépassé)</span></div><a href={archiveLink} className="block w-full bg-stone-900 text-white py-3 rounded-xl font-bold hover:bg-black transition flex items-center justify-center gap-2">Débloquer (290€)</a></div>) : (<><a href={foundProject.linkPhoto} target="_blank" className="block w-full bg-stone-900 text-white text-center py-3 rounded-xl font-bold hover:bg-stone-800 transition shadow-lg flex items-center justify-center gap-2"><Download className="w-4 h-4"/> Accéder à la Galerie</a>{!foundProject.deliveryConfirmedPhoto ? (<button onClick={confirmPhoto} className="w-full bg-white border-2 border-green-500 text-green-600 py-3 rounded-xl font-bold hover:bg-green-50 transition flex items-center justify-center gap-2 text-sm"><CheckSquare className="w-4 h-4"/> Confirmer bonne réception</button>) : <div className="flex items-center justify-center gap-2 text-green-600 text-xs font-bold bg-green-50 p-2 rounded-lg border border-green-100"><CheckCircle className="w-4 h-4"/> Réception confirmée</div>}</>)) : foundProject.statusPhoto === 'delivered' ? <button disabled className="block w-full bg-stone-200 text-stone-400 text-center py-3 rounded-xl font-bold cursor-not-allowed">Lien en cours de génération...</button> : null}
                   </div>
               </div>
               )}
 
-              {/* CARTE VIDEO */}
               {foundProject.statusVideo !== 'none' && (
                 <div className="bg-white rounded-2xl p-6 shadow-md border border-stone-100 flex flex-col h-full">
                   <div className="flex items-center gap-4 mb-4"><div className="w-12 h-12 bg-blue-100 text-blue-600 rounded-xl flex items-center justify-center"><Film className="w-6 h-6"/></div><h3 className="font-bold text-xl">Vidéo</h3></div>
@@ -161,66 +157,26 @@ export default function ClientPortal({ projects, onBack }: { projects: Project[]
                       <div className="flex justify-between text-sm font-bold text-stone-500 mb-1"><span>Progression</span><span>{foundProject.progressVideo}%</span></div>
                       <div className="h-3 bg-stone-100 rounded-full overflow-hidden"><div className="h-full bg-blue-500 transition-all duration-1000" style={{ width: `${foundProject.progressVideo}%` }} /></div>
                       <p className="text-right text-xs mt-1 text-stone-400">{(VIDEO_STEPS as any)[foundProject.statusVideo]?.label || foundProject.statusVideo}</p>
+                      {foundProject.estimatedDeliveryVideo && <div className="mt-4 bg-blue-50 text-blue-800 text-xs p-3 rounded-lg flex items-center gap-2"><Calendar className="w-4 h-4"/> Livraison estimée : <strong>{formatDateFR(foundProject.estimatedDeliveryVideo)}</strong></div>}
                   </div>
-
                   <div className="space-y-3 mt-auto pt-4 border-t border-stone-50">
-                      {canViewVideo ? (
-                          isVideoExpired ? (
-                              <div className="text-center space-y-3">
-                                  <div className="bg-stone-100 p-4 rounded-xl text-stone-500 text-sm flex flex-col items-center gap-2">
-                                      <Lock className="w-6 h-6 text-stone-400"/>
-                                      <span>Archive verrouillée (Délai dépassé)</span>
-                                  </div>
-                                  <a href={STRIPE_ARCHIVE_RESTORE_LINK} className="block w-full bg-stone-900 text-white py-3 rounded-xl font-bold hover:bg-black transition flex items-center justify-center gap-2">Débloquer l'archive (290€)</a>
-                              </div>
-                          ) : (
-                              <>
-                                  <a href={foundProject.linkVideo} target="_blank" className="block w-full bg-stone-900 text-white text-center py-3 rounded-xl font-bold hover:bg-stone-800 transition shadow-lg flex items-center justify-center gap-2"><Download className="w-4 h-4"/> Télécharger le Film</a>
-                                  {!foundProject.deliveryConfirmedVideo ? (
-                                    <button onClick={confirmVideo} className="w-full bg-white border-2 border-green-500 text-green-600 py-3 rounded-xl font-bold hover:bg-green-50 transition flex items-center justify-center gap-2 text-sm"><CheckSquare className="w-4 h-4"/> Confirmer bonne réception</button>
-                                  ) : <div className="flex items-center justify-center gap-2 text-green-600 text-xs font-bold bg-green-50 p-2 rounded-lg border border-green-100"><CheckCircle className="w-4 h-4"/> Réception confirmée</div>}
-                              </>
-                          )
-                      ) : foundProject.statusVideo === 'delivered' ? <button disabled className="block w-full bg-stone-200 text-stone-400 text-center py-3 rounded-xl font-bold cursor-not-allowed">Lien en cours de génération...</button> : null}
+                      {canViewVideo ? (isVideoExpired ? (<div className="text-center space-y-3"><div className="bg-stone-100 p-4 rounded-xl text-stone-500 text-sm flex flex-col items-center gap-2"><Lock className="w-6 h-6 text-stone-400"/><span>Archive verrouillée (Délai dépassé)</span></div><a href={archiveLink} className="block w-full bg-stone-900 text-white py-3 rounded-xl font-bold hover:bg-black transition flex items-center justify-center gap-2">Débloquer (290€)</a></div>) : (<><a href={foundProject.linkVideo} target="_blank" className="block w-full bg-stone-900 text-white text-center py-3 rounded-xl font-bold hover:bg-stone-800 transition shadow-lg flex items-center justify-center gap-2"><Download className="w-4 h-4"/> Télécharger le Film</a>{!foundProject.deliveryConfirmedVideo ? (<button onClick={confirmVideo} className="w-full bg-white border-2 border-green-500 text-green-600 py-3 rounded-xl font-bold hover:bg-green-50 transition flex items-center justify-center gap-2 text-sm"><CheckSquare className="w-4 h-4"/> Confirmer bonne réception</button>) : <div className="flex items-center justify-center gap-2 text-green-600 text-xs font-bold bg-green-50 p-2 rounded-lg border border-green-100"><CheckCircle className="w-4 h-4"/> Réception confirmée</div>}</>)) : foundProject.statusVideo === 'delivered' ? <button disabled className="block w-full bg-stone-200 text-stone-400 text-center py-3 rounded-xl font-bold cursor-not-allowed">Lien en cours de génération...</button> : null}
                   </div>
                 </div>
               )}
           </div>
           
-          {/* BOUTIQUE / OPTIONS (NIVEAU 2) */}
+          {/* BOUTIQUE */}
           <div className="space-y-6">
               <h3 className="font-serif text-2xl text-stone-800 flex items-center gap-2 border-b pb-4"><ShoppingBag className="w-6 h-6"/> Boutique & Options</h3>
-              
               <div className="grid md:grid-cols-3 gap-6">
-                  {/* Option 1: Fast Track */}
-                  {!foundProject.isPriority && (
-                      <div className="bg-white p-6 rounded-2xl shadow-sm border border-stone-100 flex flex-col">
-                          <div className="w-12 h-12 bg-amber-100 text-amber-600 rounded-xl flex items-center justify-center mb-4"><Rocket className="w-6 h-6"/></div>
-                          <h4 className="font-bold text-lg mb-2">Fast Track ⚡️</h4>
-                          <p className="text-sm text-stone-500 mb-6 flex-1">Coupez la file d'attente. Vos médias traités en priorité et livrés sous 14 jours ouvrés.</p>
-                          <a href={STRIPE_PRIORITY_LINK} className="w-full bg-stone-900 text-white py-3 rounded-xl font-bold text-center hover:bg-black transition text-sm">Activer (290 €)</a>
-                      </div>
-                  )}
-                  
-                  {/* Option 2: Fichiers RAW */}
-                  <div className="bg-white p-6 rounded-2xl shadow-sm border border-stone-100 flex flex-col">
-                      <div className="w-12 h-12 bg-stone-100 text-stone-600 rounded-xl flex items-center justify-center mb-4"><HardDrive className="w-6 h-6"/></div>
-                      <h4 className="font-bold text-lg mb-2">Pack RAW + Rushes</h4>
-                      <p className="text-sm text-stone-500 mb-6 flex-1">L'intégralité des fichiers bruts (vidéo et photo) non retouchés. Idéal pour une sécurité patrimoniale.</p>
-                      <a href={STRIPE_RAW_LINK} className="w-full border-2 border-stone-900 text-stone-900 py-3 rounded-xl font-bold text-center hover:bg-stone-50 transition text-sm">Commander (490 €)</a>
-                  </div>
-
-                  {/* Option 3: Albums */}
-                  <div className="bg-white p-6 rounded-2xl shadow-sm border border-stone-100 flex flex-col">
-                      <div className="w-12 h-12 bg-purple-100 text-purple-600 rounded-xl flex items-center justify-center mb-4"><BookOpen className="w-6 h-6"/></div>
-                      <h4 className="font-bold text-lg mb-2">Livre d'Art</h4>
-                      <p className="text-sm text-stone-500 mb-6 flex-1">Un livre photo premium 30x30cm, couverture lin, papier Fine Art. Mise en page incluse.</p>
-                      <button onClick={() => alert("Pour commander un album, merci d'utiliser le chat ci-dessous.")} className="w-full border-2 border-stone-200 text-stone-400 py-3 rounded-xl font-bold text-center hover:bg-stone-50 transition text-sm">Sur devis</button>
-                  </div>
+                  {!foundProject.isPriority && (<div className="bg-white p-6 rounded-2xl shadow-sm border border-stone-100 flex flex-col"><div className="w-12 h-12 bg-amber-100 text-amber-600 rounded-xl flex items-center justify-center mb-4"><Rocket className="w-6 h-6"/></div><h4 className="font-bold text-lg mb-2">Fast Track ⚡️</h4><p className="text-sm text-stone-500 mb-6 flex-1">Vos médias traités en priorité et livrés sous 14 jours ouvrés.</p><a href={fastTrackLink} className="w-full bg-stone-900 text-white py-3 rounded-xl font-bold text-center hover:bg-black transition text-sm">Activer (290 €)</a></div>)}
+                  <div className="bg-white p-6 rounded-2xl shadow-sm border border-stone-100 flex flex-col"><div className="w-12 h-12 bg-stone-100 text-stone-600 rounded-xl flex items-center justify-center mb-4"><HardDrive className="w-6 h-6"/></div><h4 className="font-bold text-lg mb-2">Pack RAW + Rushes</h4><p className="text-sm text-stone-500 mb-6 flex-1">L'intégralité des fichiers bruts non retouchés.</p><a href={rawLink} className="w-full border-2 border-stone-900 text-stone-900 py-3 rounded-xl font-bold text-center hover:bg-stone-50 transition text-sm">Commander (490 €)</a></div>
+                  <div className="bg-white p-6 rounded-2xl shadow-sm border border-stone-100 flex flex-col"><div className="w-12 h-12 bg-purple-100 text-purple-600 rounded-xl flex items-center justify-center mb-4"><BookOpen className="w-6 h-6"/></div><h4 className="font-bold text-lg mb-2">Livre d'Art</h4><p className="text-sm text-stone-500 mb-6 flex-1">Livre photo premium 30x30cm.</p><button onClick={() => alert("Utilisez le chat ci-dessous.")} className="w-full border-2 border-stone-200 text-stone-400 py-3 rounded-xl font-bold text-center hover:bg-stone-50 transition text-sm">Sur devis</button></div>
               </div>
           </div>
-
-          {/* ... BLOC ALBUMS EXISTANT (S'IL Y A DES COMMANDES EN COURS) ... */}
+          
+          {/* 👇 CORRECTIF ALBUMS : On map seulement l'array existant */}
           {foundProject.albums && foundProject.albums.length > 0 && (
               <div className="bg-white p-6 rounded-2xl border border-stone-200 shadow-md">
                   <h3 className="font-bold text-lg text-stone-800 flex items-center gap-2 mb-4"><BookOpen className="w-5 h-5"/> Commandes en cours</h3>
@@ -237,14 +193,27 @@ export default function ClientPortal({ projects, onBack }: { projects: Project[]
               </div>
           )}
 
-          {foundProject.statusVideo !== 'none' && (
-             <div className="bg-purple-50 p-6 rounded-2xl border border-purple-100 shadow-md">
-                <h3 className="font-bold text-purple-900 flex items-center gap-2 mb-4"><Music/> Brief Montage & Musique</h3>
-                <textarea className="w-full p-4 rounded-xl border border-purple-200 mb-3 focus:ring-2 ring-purple-500 outline-none min-h-[100px]" rows={3} placeholder="Ex: Musique d'ouverture..." value={musicInstructions} onChange={e => setMusicInstructions(e.target.value)}/>
-                <input className="w-full p-4 rounded-xl border border-purple-200 mb-4 focus:ring-2 ring-purple-500 outline-none" placeholder="Lien Spotify..." value={musicLinks} onChange={e => setMusicLinks(e.target.value)}/>
-                <button onClick={handleSaveMusic} disabled={savingMusic} className="bg-purple-600 hover:bg-purple-700 text-white px-6 py-3 rounded-xl font-bold transition shadow-lg disabled:opacity-50">Enregistrer</button>
-             </div>
-          )}
+          {/* 👇 CORRECTIF BRIEF : NOUVELLE DISPOSITION AVEC MOODBOARD */}
+          <div className="grid md:grid-cols-2 gap-6">
+                 {/* BLOC 1 : MOODBOARD */}
+                 <div className="bg-pink-50 p-6 rounded-2xl border border-pink-100 shadow-md">
+                    <h3 className="font-bold text-pink-900 flex items-center gap-2 mb-4"><Palette className="w-5 h-5"/> Inspirations & Moodboard</h3>
+                    <p className="text-sm text-pink-700 mb-3 font-medium">Un tableau Pinterest ? Un compte Instagram ?</p>
+                    <input className="w-full p-4 rounded-xl border border-pink-200 mb-4 focus:ring-2 ring-pink-500 outline-none bg-white placeholder-pink-200" placeholder="Ex: https://pinterest.com/..." value={moodLink} onChange={e => setMoodLink(e.target.value)}/>
+                 </div>
+
+                 {/* BLOC 2 : MUSIQUE (Seulement si Vidéo) */}
+                 {foundProject.statusVideo !== 'none' && (
+                     <div className="bg-purple-50 p-6 rounded-2xl border border-purple-100 shadow-md">
+                        <h3 className="font-bold text-purple-900 flex items-center gap-2 mb-4"><Music className="w-5 h-5"/> Musique & Montage</h3>
+                        <p className="text-sm text-purple-700 mb-3 font-medium">Vos choix musicaux.</p>
+                        <textarea className="w-full p-4 rounded-xl border border-purple-200 mb-3 focus:ring-2 ring-purple-500 outline-none min-h-[80px]" rows={2} placeholder="Ex: Musique d'ouverture..." value={musicInstructions} onChange={e => setMusicInstructions(e.target.value)}/>
+                        <input className="w-full p-4 rounded-xl border border-purple-200 mb-4 focus:ring-2 ring-purple-500 outline-none" placeholder="Lien Spotify..." value={musicLinks} onChange={e => setMusicLinks(e.target.value)}/>
+                     </div>
+                 )}
+          </div>
+          
+          <button onClick={handleSaveMusic} disabled={savingMusic} className="w-full bg-stone-900 hover:bg-black text-white py-4 rounded-xl font-bold transition shadow-lg disabled:opacity-50 mt-4 flex items-center justify-center gap-2">{savingMusic ? 'Enregistrement...' : 'Enregistrer mes préférences artistiques'}</button>
           
           <ChatBox project={foundProject} userType="client" />
         </div>
@@ -252,7 +221,6 @@ export default function ClientPortal({ projects, onBack }: { projects: Project[]
     );
   }
 
-  // ... (Le retour du LOGIN reste identique)
   return (
     <div className="h-screen flex items-center justify-center bg-stone-100 p-4 relative">
        <button onClick={onBack} className="absolute top-6 left-6 p-3 bg-white rounded-full shadow-md text-stone-500 hover:text-stone-900 hover:scale-105 transition-all z-20"><X className="w-6 h-6"/></button>

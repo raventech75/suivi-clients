@@ -1,0 +1,78 @@
+'use client';
+import React, { useState, useEffect, useRef } from 'react';
+import { Send, ShieldAlert } from 'lucide-react';
+import { doc, updateDoc, arrayUnion } from 'firebase/firestore';
+import { db, appId } from '../lib/firebase';
+import { COLLECTION_NAME, Project, InternalMessage } from '../lib/config';
+
+export default function TeamChat({ project, user }: { project: Project, user: any }) {
+  const [newMessage, setNewMessage] = useState('');
+  const [sending, setSending] = useState(false);
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+  }, [project.internalChat]);
+
+  const sendMessage = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newMessage.trim()) return;
+    setSending(true);
+
+    const userName = user.email ? user.email.split('@')[0] : 'Inconnu';
+    let role = 'Équipe';
+    if (user.email?.includes('irzzen')) role = 'Admin';
+
+    const msg: InternalMessage = {
+        id: Date.now().toString(),
+        author: userName,
+        role: role,
+        text: newMessage.trim(),
+        date: new Date().toISOString()
+    };
+
+    const colPath = typeof appId !== 'undefined' ? `artifacts/${appId}/public/data/${COLLECTION_NAME}` : COLLECTION_NAME;
+    await updateDoc(doc(db, colPath, project.id), {
+        internalChat: arrayUnion(msg)
+    });
+
+    setNewMessage('');
+    setSending(false);
+  };
+
+  const formatTime = (iso: string) => {
+      return new Date(iso).toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', hour:'2-digit', minute:'2-digit' });
+  };
+
+  return (
+    <div className="flex flex-col h-full bg-amber-50/50 rounded-xl border border-amber-100 overflow-hidden">
+        <div className="bg-amber-100/80 p-3 border-b border-amber-200 flex justify-between items-center">
+            <h4 className="font-bold text-amber-900 text-sm flex items-center gap-2">
+                <ShieldAlert className="w-4 h-4"/> Chat Équipe (Interne)
+            </h4>
+            <span className="text-[10px] text-amber-700 uppercase font-bold tracking-wider">Invisible Client</span>
+        </div>
+        <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 space-y-4 min-h-[200px] max-h-[300px]">
+            {(!project.internalChat || project.internalChat.length === 0) && (
+                <div className="text-center text-amber-800/40 text-xs italic mt-10">Aucune note d'équipe.<br/>Utilisez cet espace pour le briefing.</div>
+            )}
+            {(project.internalChat || []).map((msg) => {
+                const isMe = user.email && msg.author === user.email.split('@')[0];
+                return (
+                    <div key={msg.id} className={`flex flex-col ${isMe ? 'items-end' : 'items-start'}`}>
+                        <div className="flex items-center gap-1.5 mb-1">
+                            <span className="text-[10px] font-bold text-amber-900 bg-amber-100 px-1.5 rounded">{msg.author}</span>
+                            <span className="text-[10px] text-amber-600/70">{formatTime(msg.date)}</span>
+                        </div>
+                        <div className={`p-3 rounded-lg text-sm max-w-[90%] shadow-sm ${isMe ? 'bg-amber-200 text-amber-900 rounded-tr-none' : 'bg-white border border-amber-100 text-stone-700 rounded-tl-none'}`}>{msg.text}</div>
+                    </div>
+                );
+            })}
+        </div>
+        <form onSubmit={sendMessage} className="p-3 bg-white border-t border-amber-100 flex gap-2">
+            <input className="flex-1 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-300 placeholder-amber-300" placeholder="Message interne..." value={newMessage} onChange={e => setNewMessage(e.target.value)}/>
+            <button disabled={sending} className="bg-amber-500 hover:bg-amber-600 text-white p-2 rounded-lg transition shadow-sm disabled:opacity-50"><Send className="w-4 h-4" /></button>
+        </form>
+    </div>
+  );
+}

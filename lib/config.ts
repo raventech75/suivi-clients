@@ -20,12 +20,10 @@ export const SETTINGS_COLLECTION = 'settings';
 export const MAKE_WEBHOOK_URL = 'https://hook.eu2.make.com/iwf8nbt3tywmywp6u89xgn7e2nar0bbs'; 
 
 // Liens Stripe
-export const STRIPE_PRIORITY_LINK = 'https://buy.stripe.com/fZu4gz07eaPzcRt54Y5gc0c'; 
-export const STRIPE_RAW_LINK = 'https://buy.stripe.com/cNi5kD5rye1L2cP2WQ5gc0d';
-export const STRIPE_ARCHIVE_RESTORE_LINK = 'https://buy.stripe.com/fZu00j3jq4rb5p140U5gc0e';
-
-// 👇 CORRECTIF : On remet l'ancien nom (Alias) pour éviter l'erreur dans page.tsx
-export const STRIPE_ARCHIVE_LINK = STRIPE_ARCHIVE_RESTORE_LINK;
+export const STRIPE_PRIORITY_LINK = 'https://buy.stripe.com/test_...'; 
+export const STRIPE_RAW_LINK = 'https://buy.stripe.com/test_...';
+export const STRIPE_ARCHIVE_RESTORE_LINK = 'https://buy.stripe.com/test_...';
+export const STRIPE_ARCHIVE_LINK = STRIPE_ARCHIVE_RESTORE_LINK; // Alias
 
 export const SUPER_ADMINS = ['irzzenproductions@gmail.com']; 
 
@@ -75,6 +73,15 @@ export interface Message {
     date: any; 
 }
 
+// Structure Chat Interne
+export interface InternalMessage {
+    id: string;
+    author: string;
+    role: string;
+    text: string;
+    date: string;
+}
+
 export interface HistoryLog {
     date: string;
     user: string;
@@ -102,7 +109,6 @@ export interface Project {
     weddingDate: string;
     weddingVenue?: string | null;
     weddingVenueZip?: string | null;
-    inviteCount?: number;
     
     // Status
     statusPhoto: keyof typeof PHOTO_STEPS;
@@ -114,7 +120,7 @@ export interface Project {
     estimatedDeliveryPhoto?: string;
     estimatedDeliveryVideo?: string;
 
-    // Staff (Noms + Emails)
+    // Staff
     photographerName?: string;
     photographerEmail?: string | null;
     videographerName?: string;
@@ -122,15 +128,17 @@ export interface Project {
     managerName?: string;
     managerEmail?: string | null;
 
-    // Livrables
+    // Livrables & Contenu
     linkPhoto?: string;
     linkVideo?: string;
     coverImage?: string;
+    moodboardLink?: string; // 👈 Nouveau
     
     // Options
     isPriority: boolean;
     fastTrackActivationDate?: string | null;
     isArchived?: boolean;
+    inviteCount?: number; // 👈 Nouveau
 
     // Financier
     totalPrice?: number;
@@ -139,17 +147,16 @@ export interface Project {
     
     // Communication & Contenu
     messages?: Message[];
+    internalChat?: InternalMessage[]; // 👈 Nouveau
     hasUnreadMessage?: boolean;
     albums?: Album[];
     musicInstructions?: string;
     musicLinks?: string;
     adminNotes?: string;
 
-    // Confirmations de livraison
+    // Confirmations
     deliveryConfirmed?: boolean; 
     deliveryConfirmationDate?: any;
-    
-    // Nouveaux champs V45
     deliveryConfirmedPhoto?: boolean;
     deliveryConfirmedPhotoDate?: any;
     deliveryConfirmedVideo?: boolean;
