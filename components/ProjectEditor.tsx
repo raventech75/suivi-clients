@@ -14,7 +14,7 @@ import {
   STAFF_DIRECTORY 
 } from '../lib/config';
 import ChatBox from './ChatSystem';
-import TeamChat from './TeamChat'; // 👈 Import du nouveau chat
+import TeamChat from './TeamChat';
 
 const formatDateFR = (dateString: string) => {
     if (!dateString) return "";
@@ -30,7 +30,10 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, staffD
   const [isExpanded, setIsExpanded] = useState(false);
   const [localData, setLocalData] = useState(project);
   const [hasChanges, setHasChanges] = useState(false);
-  const [newAlbum, setNewAlbum] = useState({ name: 'Album', format: '30x30', price: 0 });
+  
+  // 👇 MODIFICATION ICI : On initialise avec le premier format de la liste
+  const [newAlbum, setNewAlbum] = useState({ name: '', format: ALBUM_FORMATS[0], price: 0 });
+  
   const [uploading, setUploading] = useState(false);
   const [sendingInvite, setSendingInvite] = useState(false);
   
@@ -100,9 +103,12 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, staffD
   };
 
   const addAlbum = () => {
+      if(!newAlbum.name) return alert("Nom de l'album requis");
       const albums = localData.albums || [];
+      // 👇 ON UTILISE BIEN LE FORMAT CHOISI DANS LE SELECT
       updateField('albums', [...albums, { id: Date.now().toString(), ...newAlbum, status: 'pending', paid: false }]);
-      setNewAlbum({ name: 'Album', format: '30x30', price: 0 });
+      // Reset avec valeurs par défaut
+      setNewAlbum({ name: '', format: ALBUM_FORMATS[0], price: 0 });
   };
 
   const updateAlbum = (idx: number, field: string, val: any) => {
@@ -143,8 +149,6 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, staffD
       if (!localData.clientEmail || !localData.clientEmail.includes('@')) { alert("⛔️ Email client manquant."); return; }
       
       let updatedHistory = [...(localData.history || [])];
-      // Logique historique simplifiée pour la démo
-      
       const cleanData = { ...localData } as any;
       if (cleanData.photographerEmail === undefined) cleanData.photographerEmail = null;
       if (cleanData.videographerEmail === undefined) cleanData.videographerEmail = null;
@@ -156,7 +160,6 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, staffD
       try { await updateDoc(doc(db, colPath, project.id), finalData); } 
       catch (error) { console.error("Erreur Sauvegarde:", error); return; }
 
-      // Webhook Trigger Logic
       const hasPhotoChanged = localData.statusPhoto !== project.statusPhoto;
       const hasVideoChanged = localData.statusVideo !== project.statusVideo;
       
@@ -252,7 +255,7 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, staffD
                                 <div className="pt-2 border-t border-dashed mt-2"><div className="grid grid-cols-3 gap-2"><div className="col-span-1"><label className="text-[10px] uppercase font-bold text-stone-400">Date Mariage</label><input required type="date" disabled={!canEdit} className="w-full p-2 border rounded bg-stone-50" value={localData.weddingDate} onChange={e=>updateField('weddingDate', e.target.value)} /></div><div className="col-span-2"><label className="text-[10px] uppercase font-bold text-stone-400">Nom Salle / Lieu</label><input disabled={!canEdit} className="w-full p-2 border rounded bg-stone-50" placeholder="Château de..." value={localData.weddingVenue || ''} onChange={e=>updateField('weddingVenue', e.target.value)} /></div></div><div className="mt-2"><label className="text-[10px] uppercase font-bold text-stone-400">Code Postal</label><input disabled={!canEdit} className="w-full p-2 border rounded bg-stone-50" placeholder="75000" value={localData.weddingVenueZip || ''} onChange={e=>updateField('weddingVenueZip', e.target.value)} /></div></div>
                             </div>
                         </div>
-                        {/* CHAT EQUIPE (Remplace Notes) */}
+                        {/* CHAT EQUIPE */}
                         <div className="h-[400px]"><TeamChat project={project} user={user} /></div>
                     </div>
 
@@ -269,7 +272,7 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, staffD
                         <div className="bg-white p-6 rounded-xl border border-stone-200 shadow-sm">
                             <h4 className="font-bold text-stone-800 mb-4 flex items-center gap-2"><Camera className="w-5 h-5 text-stone-400"/> Production</h4>
                             
-                            {/* MOODBOARD LINK DISPLAY */}
+                            {/* MOODBOARD */}
                             <div className="mb-6 p-3 bg-pink-50 rounded-lg border border-pink-100 flex items-center justify-between">
                                 <div className="flex items-center gap-2 text-pink-800"><Palette className="w-4 h-4"/><span className="text-xs font-bold uppercase">Moodboard Client</span></div>
                                 {localData.moodboardLink ? (<a href={localData.moodboardLink} target="_blank" className="flex items-center gap-1 bg-white text-pink-600 px-3 py-1.5 rounded-md text-xs font-bold border border-pink-200 hover:bg-pink-100 transition shadow-sm"><ExternalLink className="w-3 h-3"/> Voir le style</a>) : (<span className="text-xs text-pink-300 italic">Aucun lien fourni</span>)}
@@ -292,14 +295,33 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, staffD
                             <div className="space-y-2">
                                 {(localData.albums || []).map((album, idx) => (
                                     <div key={idx} className="flex flex-wrap gap-2 items-center bg-stone-50 p-2 rounded-lg text-sm">
-                                        <div className="font-bold flex-1">{album.name}</div>
+                                        {/* 👇 AFFICHAGE CORRECT DU FORMAT EXISTANT */}
+                                        <div className="flex-1">
+                                            <div className="font-bold">{album.name}</div>
+                                            <div className="text-[10px] text-stone-400">{album.format}</div>
+                                        </div>
                                         <select disabled={!canEdit} value={album.status} onChange={e => updateAlbum(idx, 'status', e.target.value)} className="p-1 border rounded text-xs">{Object.entries(ALBUM_STATUSES).map(([k,v]) => <option key={k} value={k}>{v}</option>)}</select>
                                         <button disabled={!canEdit} onClick={() => updateAlbum(idx, 'paid', !album.paid)} className={`px-2 py-1 rounded text-[10px] font-bold ${album.paid ? 'bg-green-200 text-green-800' : 'bg-red-100 text-red-800'}`}>{album.paid ? 'PAYÉ' : 'DÛ'}</button>
                                         {canEdit && <button onClick={() => { const a = [...(localData.albums||[])]; a.splice(idx, 1); updateField('albums', a); }} className="text-red-400"><Trash2 className="w-3 h-3"/></button>}
                                     </div>
                                 ))}
                             </div>
-                            {canEdit && <div className="mt-4 pt-4 border-t flex gap-2"><input className="flex-1 p-2 border rounded text-xs" placeholder="Nouvel Album" value={newAlbum.name} onChange={e => setNewAlbum({...newAlbum, name: e.target.value})} /><button onClick={addAlbum} className="bg-stone-900 text-white px-3 rounded text-xs font-bold">Ajouter</button></div>}
+                            
+                            {/* 👇 FORMULAIRE D'AJOUT CORRIGÉ (Menu déroulant + Prix) */}
+                            {canEdit && (
+                                <div className="mt-4 pt-4 border-t flex flex-col gap-2">
+                                    <div className="flex gap-2">
+                                        <input className="flex-1 p-2 border rounded text-xs" placeholder="Nom (Ex: Livre Parents)" value={newAlbum.name} onChange={e => setNewAlbum({...newAlbum, name: e.target.value})} />
+                                        <select className="p-2 border rounded text-xs bg-white" value={newAlbum.format} onChange={e => setNewAlbum({...newAlbum, format: e.target.value})}>
+                                            {ALBUM_FORMATS.map(f => <option key={f} value={f}>{f}</option>)}
+                                        </select>
+                                    </div>
+                                    <div className="flex gap-2">
+                                         <input type="number" className="w-20 p-2 border rounded text-xs" placeholder="Prix €" value={newAlbum.price} onChange={e => setNewAlbum({...newAlbum, price: Number(e.target.value)})} />
+                                         <button onClick={addAlbum} className="flex-1 bg-stone-900 text-white px-3 py-2 rounded text-xs font-bold hover:bg-black">Ajouter la commande</button>
+                                    </div>
+                                </div>
+                            )}
                         </div>
                     </div>
                 </div>
