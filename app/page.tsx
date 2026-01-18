@@ -69,10 +69,12 @@ export default function Home() {
            
            {/* 1. IMAGE DE FOND (Changez l'URL ici si vous avez votre propre photo) */}
            <img 
-             src="https://images.unsplash.com/photo-1511285560982-1351cdeb9821?q=80&w=2940&auto=format&fit=crop" 
-             className="absolute inset-0 w-full h-full object-cover transform scale-105"
-             alt="Wedding Background"
+           src="https://images.unsplash.com/photo-1519741497674-611481863552?q=80&w=2000&auto=format&fit=crop" 
+                 className="w-full h-full object-cover transform scale-105"
+                 alt="Wedding Background"
            />
+           {/* Calque noir par-dessus pour la lisibilité */}
+               <div className="absolute inset-0 bg-stone-900/80 backdrop-blur-[1px]"></div>
            
            {/* 2. FILTRE SOMBRE (Pour la lisibilité) */}
            <div className="absolute inset-0 bg-black/60 backdrop-blur-[2px]"></div>
