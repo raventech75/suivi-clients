@@ -35,7 +35,7 @@ export const VIDEO_STEPS = {
     'none': { label: 'En attente', percent: 0 },
     'waiting': { label: 'En attente des fichiers', percent: 10 },
     'rushes': { label: 'Dérushage', percent: 25 },
-    'cutting': { label: 'Montage Ours', percent: 50 },
+    'cutting': { label: 'Montage en cours', percent: 50 },
     'grading': { label: 'Etalonnage & Mixage', percent: 75 },
     'partial': { label: 'Livraison Partielle (Clip)', percent: 85 },
     'rendering': { label: 'Export Final', percent: 90 },
