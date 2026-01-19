@@ -2,7 +2,7 @@
 // CONFIGURATION GLOBALE DU PROJET
 // ---------------------------------------------------------------------------
 
-export const COLLECTION_NAME = "projects";
+export const COLLECTION_NAME = "wedding_projects";
 export const SETTINGS_COLLECTION = "settings";
 
 // 👇 METTEZ VOS URLS ICI
