@@ -6,18 +6,17 @@ export const COLLECTION_NAME = "projects";
 export const SETTINGS_COLLECTION = "settings";
 
 // 👇 METTEZ VOS URLS ICI
-export const MAKE_WEBHOOK_URL = "https://hook.eu2.make.com/xxxxxxxxxxxxxxxxxxxx"; 
-export const STRIPE_PRIORITY_LINK = "https://buy.stripe.com/xxxx";
-export const STRIPE_RAW_LINK = "https://buy.stripe.com/xxxx";
-export const STRIPE_ARCHIVE_RESTORE_LINK = "https://buy.stripe.com/xxxx";
+export const MAKE_WEBHOOK_URL = "https://hook.eu2.make.com/iwf8nbt3tywmywp6u89xgn7e2nar0bbs"; 
+export const STRIPE_PRIORITY_LINK = "https://buy.stripe.com/fZu4gz07eaPzcRt54Y5gc0c";
+export const STRIPE_RAW_LINK = "https://buy.stripe.com/cNi5kD5rye1L2cP2WQ5gc0d";
+export const STRIPE_ARCHIVE_RESTORE_LINK = "https://buy.stripe.com/fZu00j3jq4rb5p140U5gc0e";
 
-// Annuaire de l'équipe (Nom -> Email)
+/// Annuaire de l'équipe (Nom -> Email)
 export const STAFF_DIRECTORY: Record<string, string> = {
     'Alexandre': 'alexandre@raventech.com',
     'Sarah': 'sarah@raventech.com',
     'Volkan': 'volkan@raventech.com',
     'Feridun': 'feridun@raventech.com',
-    // Ajoutez vos membres ici
 };
 
 // Étapes Photo
@@ -31,7 +30,7 @@ export const PHOTO_STEPS = {
     'delivered': { label: 'Livraison Finale', percent: 100 }
 };
 
-// Étapes Vidéo (Avec l'étape PARTIAL ajoutée récemment)
+// Étapes Vidéo
 export const VIDEO_STEPS = {
     'none': { label: 'En attente', percent: 0 },
     'waiting': { label: 'En attente des fichiers', percent: 10 },
@@ -75,7 +74,7 @@ export interface Album {
 
 export interface Message {
     id: string;
-    author: string; // 👈 C'EST ICI LA CORRECTION (C'était 'admin' | 'client')
+    author: string;
     text: string;
     date: string;
     isStaff: boolean;
@@ -87,6 +86,15 @@ export interface InternalMessage {
     role: string;
     text: string;
     date: string;
+}
+
+// 👇 NOUVELLE INTERFACE POUR CORRIGER L'ERREUR
+export interface TeamPayment {
+    id: string;
+    recipient: string;
+    amount: number;
+    date: string;
+    note?: string;
 }
 
 export interface Project {
@@ -145,12 +153,15 @@ export interface Project {
     internalChat: InternalMessage[];
     history: HistoryLog[];
     
+    // 👇 AJOUTÉ POUR CORRIGER L'ERREUR STATS
+    teamPayments?: TeamPayment[];
+    
     // Meta
     inviteCount?: number;
     createdAt?: any;
     lastUpdated?: any;
     
-    // Financier (Optionnel)
+    // Financier
     totalPrice?: number;
     depositAmount?: number;
 }
