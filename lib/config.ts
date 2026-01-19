@@ -13,10 +13,10 @@ export const STRIPE_ARCHIVE_RESTORE_LINK = "https://buy.stripe.com/fZu00j3jq4rb5
 
 /// Annuaire de l'équipe (Nom -> Email)
 export const STAFF_DIRECTORY: Record<string, string> = {
-    'Alexandre': 'alexandre@raventech.com',
-    'Sarah': 'sarah@raventech.com',
-    'Volkan': 'volkan@raventech.com',
-    'Feridun': 'feridun@raventech.com',
+    'Yunus': 'yunus34@hotmail.fr',
+    'Serife': 'serifevideography@gmail.com',
+    'Volkan': 'mariages.paris.productions@gmail.com',
+    'Feridun': 'feridun.kizgin@gmail.com',
 };
 
 // Étapes Photo
