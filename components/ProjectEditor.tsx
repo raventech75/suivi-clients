@@ -5,12 +5,12 @@ import {
   BookOpen, Trash2, Image as ImageIcon, CheckSquare, 
   Upload, Loader2, MapPin, FileText, Users, Calendar, Eye, Timer, Music, Briefcase, History, Archive, RefreshCw, UserCheck, Send, Palette, ExternalLink
 } from 'lucide-react';
-import { doc, updateDoc, deleteDoc, serverTimestamp, setDoc } from 'firebase/firestore'; 
+import { doc, updateDoc, deleteDoc, serverTimestamp } from 'firebase/firestore'; 
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { db, storage, appId } from '../lib/firebase';
 import { 
-  COLLECTION_NAME, MAKE_WEBHOOK_URL, PHOTO_STEPS, SETTINGS_COLLECTION,
-  VIDEO_STEPS, ALBUM_FORMATS, ALBUM_STATUSES, Project, HistoryLog,
+  COLLECTION_NAME, MAKE_WEBHOOK_URL, PHOTO_STEPS, 
+  VIDEO_STEPS, ALBUM_FORMATS, ALBUM_STATUSES, Project, 
   STAFF_DIRECTORY 
 } from '../lib/config';
 import ChatBox from './ChatSystem';
@@ -31,7 +31,7 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, staffD
   const [localData, setLocalData] = useState(project);
   const [hasChanges, setHasChanges] = useState(false);
   
-  // 👇 MODIF : Format vide par défaut pour vous laisser le choix
+  // Format vide par défaut pour laisser le choix (Texte libre)
   const [newAlbum, setNewAlbum] = useState({ name: '', format: '', price: 0 });
   
   const [uploading, setUploading] = useState(false);
@@ -84,8 +84,9 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, staffD
     if(!canEdit) return;
     setLocalData(p => {
         const newState = { ...p, [k]: v };
-        if(k === 'statusPhoto' && PHOTO_STEPS[v as keyof typeof PHOTO_STEPS]) newState.progressPhoto = PHOTO_STEPS[v as keyof typeof PHOTO_STEPS].percent;
-        if(k === 'statusVideo' && VIDEO_STEPS[v as keyof typeof VIDEO_STEPS]) newState.progressVideo = VIDEO_STEPS[v as keyof typeof VIDEO_STEPS].percent;
+        // Casting "as any" ici aussi pour éviter les soucis d'indexation
+        if(k === 'statusPhoto' && (PHOTO_STEPS as any)[v]) newState.progressPhoto = (PHOTO_STEPS as any)[v].percent;
+        if(k === 'statusVideo' && (VIDEO_STEPS as any)[v]) newState.progressVideo = (VIDEO_STEPS as any)[v].percent;
         return newState;
     });
     setHasChanges(true); 
@@ -113,7 +114,7 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, staffD
 
   const addAlbum = () => {
       if(!newAlbum.name) return alert("Nom de l'album requis");
-      // Si format vide, on met un défaut générique ou on laisse vide
+      // Si format vide, on met un défaut générique
       const finalFormat = newAlbum.format || "Format Standard";
       const albums = localData.albums || [];
       updateField('albums', [...albums, { id: Date.now().toString(), name: newAlbum.name, format: finalFormat, price: newAlbum.price, status: 'pending', paid: false }]);
@@ -134,7 +135,6 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, staffD
       let storageRef = ref(storage, `covers/${fileName}`);
       await uploadBytes(storageRef, file);
       const url = await getDownloadURL(storageRef);
-      // Update local + DB
       setLocalData(prev => ({ ...prev, coverImage: url }));
       const colPath = typeof appId !== 'undefined' ? `artifacts/${appId}/public/data/${COLLECTION_NAME}` : COLLECTION_NAME;
       await updateDoc(doc(db, colPath, project.id), { coverImage: url, lastUpdated: serverTimestamp() });
@@ -176,8 +176,9 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, staffD
       const hasVideoChanged = localData.statusVideo !== project.statusVideo;
       
       if (hasPhotoChanged || hasVideoChanged) {
-          let stepLabel = PHOTO_STEPS[localData.statusPhoto]?.label || "Mise à jour";
-          if (hasVideoChanged) stepLabel = VIDEO_STEPS[localData.statusVideo]?.label || "Mise à jour";
+          // 👇 LA CORRECTION EST ICI : (PHOTO_STEPS as any)
+          let stepLabel = (PHOTO_STEPS as any)[localData.statusPhoto]?.label || "Mise à jour";
+          if (hasVideoChanged) stepLabel = (VIDEO_STEPS as any)[localData.statusVideo]?.label || "Mise à jour";
           
           fetch(MAKE_WEBHOOK_URL, {
               method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -309,11 +310,11 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, staffD
                                     <div key={idx} className="flex flex-wrap gap-2 items-center bg-stone-50 p-2 rounded-lg text-sm">
                                         <div className="flex-1">
                                             <div className="font-bold">{album.name}</div>
-                                            {/* 👇 MODIF : CHAMP TEXTE LIBRE POUR CORRIGER LE FORMAT */}
+                                            {/* CHAMP TEXTE LIBRE POUR FORMAT (Visible et modifiable) */}
                                             <div className="flex items-center gap-1">
                                                 <span className="text-[10px] text-stone-400">Format :</span>
                                                 <input 
-                                                    className="text-[10px] font-bold text-stone-600 bg-transparent border-none p-0 focus:ring-0 w-20" 
+                                                    className="text-[10px] font-bold text-stone-600 bg-transparent border-none p-0 focus:ring-0 w-24" 
                                                     value={album.format} 
                                                     disabled={!canEdit}
                                                     onChange={(e) => updateAlbum(idx, 'format', e.target.value)}
@@ -327,7 +328,7 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, staffD
                                 ))}
                             </div>
                             
-                            {/* 👇 MODIF : AJOUT TEXTE LIBRE POUR LE FORMAT */}
+                            {/* AJOUT ALBUM (Format Texte Libre) */}
                             {canEdit && (
                                 <div className="mt-4 pt-4 border-t flex flex-col gap-2">
                                     <div className="flex gap-2">
