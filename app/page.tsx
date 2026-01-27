@@ -1,243 +1,168 @@
 'use client';
-import React, { useState } from 'react';
-import { Plus, Search, Calendar, MapPin, Users, LogOut, BarChart3, Settings, Trash2, Save, AlertCircle, Clock, CheckCircle2, Rocket, Camera, Video } from 'lucide-react';
-import { collection, addDoc, serverTimestamp, setDoc, doc } from 'firebase/firestore'; 
-import { db, appId } from '../lib/firebase';
-import { COLLECTION_NAME, PHOTO_STEPS, VIDEO_STEPS, Project } from '../lib/config';
-import ProjectEditor from './ProjectEditor';
+import React, { useState, useEffect } from 'react';
+import { onAuthStateChanged, signOut } from 'firebase/auth'; 
+import { collection, query, onSnapshot, doc } from 'firebase/firestore'; 
+import { HeartHandshake, ChevronRight, Lock, Sparkles, ShieldCheck, Clock, ChevronDown } from 'lucide-react';
 
-export default function AdminDashboard({ 
-    projects, 
-    staffList, 
-    staffDirectory, 
-    user, 
-    onLogout, 
-    onStats,
-    setStaffList 
-}: { 
-    projects: Project[], 
-    staffList: string[], 
-    staffDirectory: Record<string, string>, 
-    user: any,
-    onLogout: () => void,
-    onStats: () => void,
-    setStaffList?: any 
-}) {
-  const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState('all');
-  const [selectedProject, setSelectedProject] = useState<Project | null>(null);
-  const [isAdding, setIsAdding] = useState(false);
-  const [isManagingTeam, setIsManagingTeam] = useState(false);
+import { auth, db } from '../lib/firebase';
+import { COLLECTION_NAME, Project, STAFF_DIRECTORY } from '../lib/config';
+import AdminDashboard from '../components/AdminDashboard'; // Il va chercher le dashboard ici
+import ClientPortal from '../components/ClientPortal';
+import StatsDashboard from '../components/StatsDashboard';
+import AdminLogin from '../components/AdminLogin';
+
+export default function Home() {
+  const [user, setUser] = useState<any>(null);
+  const [view, setView] = useState<'landing' | 'client' | 'admin' | 'login' | 'stats'>('landing');
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [loading, setLoading] = useState(true);
   
-  const [newStaffName, setNewStaffName] = useState('');
-  const [newStaffEmail, setNewStaffEmail] = useState('');
+  const [dynamicStaff, setDynamicStaff] = useState<Record<string, string>>({});
+  
+  // 1. Auth avec Redirection Intelligente
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+      setUser(currentUser);
+      if (currentUser) {
+          setView('admin'); // Redirection auto si connecté
+      }
+      setLoading(false);
+    });
+    return () => unsubscribe();
+  }, []);
 
-  const [newProject, setNewProject] = useState({
-    clientNames: '', clientEmail: '', clientEmail2: '', clientPhone: '', clientPhone2: '', 
-    weddingDate: '', weddingVenue: '', weddingVenueZip: '',
-    photographerName: '', videographerName: '', managerName: '', managerEmail: '',
-    hasPhoto: true, hasVideo: true
-  });
+  // 2. Chargement des Projets
+  useEffect(() => {
+    const q = query(collection(db, COLLECTION_NAME));
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Project));
+      data.sort((a, b) => new Date(b.weddingDate).getTime() - new Date(a.weddingDate).getTime());
+      setProjects(data);
+    });
+    return () => unsubscribe();
+  }, []);
 
-  const isSuperAdmin = user?.email && (user.email.includes('irzzen') || user.email === 'admin@raventech.com');
+  // 3. Chargement équipe dynamique
+  useEffect(() => {
+    const unsub = onSnapshot(doc(db, "settings", "general"), (docSnap) => {
+        if (docSnap.exists()) {
+            const data = docSnap.data();
+            if (data.staffDirectory) setDynamicStaff(data.staffDirectory);
+        }
+    });
+    return () => unsub();
+  }, []);
 
-  const filteredProjects = projects.filter(p => {
-    const matchesSearch = p.clientNames.toLowerCase().includes(searchTerm.toLowerCase()) || p.code.toLowerCase().includes(searchTerm.toLowerCase());
-    if (statusFilter === 'all') return matchesSearch;
-    if (statusFilter === 'archived') return matchesSearch && p.isArchived;
-    if (statusFilter === 'active') return matchesSearch && !p.isArchived;
-    return matchesSearch;
-  });
+  const fullStaffDirectory = { ...STAFF_DIRECTORY, ...dynamicStaff };
+  const fullStaffList = Object.keys(fullStaffDirectory);
 
-  const addStaffMember = async () => {
-      if(!newStaffName || !newStaffEmail) return alert("Nom et Email requis");
-      const updatedDirectory = { ...staffDirectory, [newStaffName]: newStaffEmail };
-      await setDoc(doc(db, "settings", "general"), { staffDirectory: updatedDirectory }, { merge: true });
-      setNewStaffName('');
-      setNewStaffEmail('');
-      alert(`✅ ${newStaffName} ajouté à l'équipe !`);
+  const handleLogout = async () => {
+      await signOut(auth);
+      setUser(null);
+      setView('landing');
   };
 
-  const removeStaffMember = async (name: string) => {
-      if(!confirm(`Supprimer ${name} de la liste ?`)) return;
-      const updatedDirectory = { ...staffDirectory };
-      delete updatedDirectory[name];
-      await setDoc(doc(db, "settings", "general"), { staffDirectory: updatedDirectory }, { merge: true });
+  const handleAdminClick = () => {
+      if (user) setView('admin');
+      else setView('login');
   };
 
-  const createProject = async (e: any) => {
-      e.preventDefault();
-      if (!newProject.clientEmail || !newProject.clientEmail.includes('@')) return alert("⛔️ Email client obligatoire.");
-      
-      const code = (newProject.clientNames.split(' ')[0] + '-' + Math.floor(Math.random()*1000)).toUpperCase();
-      const colPath = typeof appId !== 'undefined' ? `artifacts/${appId}/public/data/${COLLECTION_NAME}` : COLLECTION_NAME;
-      
-      // On initialise avec des champs vides
-      await addDoc(collection(db, colPath), { 
-          ...newProject, 
-          code, 
-          statusPhoto: newProject.hasPhoto ? 'waiting' : 'none', 
-          statusVideo: newProject.hasVideo ? 'waiting' : 'none', 
-          progressPhoto: 0, 
-          progressVideo: 0, 
-          messages: [], albums: [], internalChat: [], inviteCount: 0, createdAt: serverTimestamp() 
-      });
-      setIsAdding(false);
-      setNewProject({ 
-        clientNames: '', clientEmail: '', clientEmail2: '', clientPhone: '', clientPhone2: '', 
-        weddingDate: '', weddingVenue: '', weddingVenueZip: '',
-        photographerName: '', videographerName: '', managerName: '', managerEmail: '',
-        hasPhoto: true, hasVideo: true
-      });
-  };
-
-  // --- LOGIQUE VISUELLE "TICKETING" ---
-  const getProjectStatus = (p: Project) => {
-      const now = Date.now();
-      const wedDate = new Date(p.weddingDate).getTime();
-      const isDelivered = (p.statusPhoto === 'delivered' || p.statusPhoto === 'none') && (p.statusVideo === 'delivered' || p.statusVideo === 'none');
-      // En retard si > 2 mois post mariage et pas livré
-      const isLate = !isDelivered && (now > wedDate + (60 * 24 * 3600 * 1000));
-      // Urgent si > 2 semaines post mariage
-      const isUrgent = !isDelivered && !isLate && (now > wedDate + (15 * 24 * 3600 * 1000));
-
-      return { isDelivered, isLate, isUrgent };
-  };
-
-  if (selectedProject) {
-    return (
-      <div className="min-h-screen bg-stone-100">
-        <div className="max-w-7xl mx-auto p-4">
-          <button onClick={() => setSelectedProject(null)} className="mb-4 text-sm font-bold text-stone-500 hover:text-stone-800 flex items-center gap-2">← Retour au tableau de bord</button>
-          <ProjectEditor project={selectedProject} isSuperAdmin={!!isSuperAdmin} staffList={staffList} staffDirectory={staffDirectory} user={user} />
-        </div>
-      </div>
-    );
-  }
+  if (loading) return (
+    <div className="h-screen flex flex-col items-center justify-center bg-stone-50">
+        <HeartHandshake className="w-12 h-12 text-amber-600 animate-pulse mb-4"/>
+        <span className="text-xs font-serif tracking-[0.2em] text-stone-500 uppercase">Chargement Studio...</span>
+    </div>
+  );
 
   return (
-    <div className="min-h-screen bg-stone-100 p-4 md:p-8">
-      <div className="max-w-7xl mx-auto">
-        {/* Header */}
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
-          <div>
-            <h1 className="text-3xl font-serif font-bold text-stone-800">Tableau de Bord</h1>
-            <div className="flex gap-4 items-center mt-2 text-sm text-stone-500">
-                <span className="bg-stone-200 px-2 py-0.5 rounded text-stone-600 font-bold">{projects.length} dossiers</span>
-                <button onClick={onStats} className="flex items-center gap-1 hover:text-stone-900 transition"><BarChart3 className="w-4 h-4"/> Statistiques</button>
-                <button onClick={() => setIsManagingTeam(true)} className="flex items-center gap-1 hover:text-stone-900 transition text-amber-600 font-bold"><Settings className="w-4 h-4"/> Gérer l'équipe</button>
-                <button onClick={onLogout} className="flex items-center gap-1 text-red-400 hover:text-red-600 transition"><LogOut className="w-4 h-4"/> Déconnexion</button>
-            </div>
-          </div>
-          <button onClick={() => setIsAdding(true)} className="bg-stone-900 text-white px-6 py-3 rounded-xl font-bold flex items-center gap-2 hover:bg-black transition shadow-lg">
-            <Plus className="w-5 h-5"/> Nouveau Dossier
-          </button>
+    <div className="min-h-screen font-sans text-stone-800 bg-stone-50 overflow-x-hidden">
+      
+      {view === 'landing' && (
+        <div className="flex flex-col">
+           {/* HERO SECTION */}
+           <section className="relative h-screen flex flex-col items-center justify-center text-center px-6">
+               <div className="absolute inset-0 z-0">
+                   <img src="https://images.unsplash.com/photo-1606800052052-a08af7148866?q=80&w=2940&auto=format&fit=crop" className="w-full h-full object-cover" alt="Wedding Atmosphere" />
+                   <div className="absolute inset-0 bg-gradient-to-t from-stone-900/95 via-stone-900/60 to-stone-900/40"></div>
+               </div>
+               <div className="relative z-10 max-w-4xl mx-auto flex flex-col items-center animate-fade-in-up delay-200">
+                   <div className="mb-8 animate-fade-in">
+                      <img src="/logo.png" onError={(e) => { e.currentTarget.style.display = 'none'; e.currentTarget.nextElementSibling?.classList.remove('hidden'); }} alt="RavenTech Luxury Logo" className="w-40 h-auto drop-shadow-2xl" />
+                      <div className="hidden text-amber-400 opacity-80"><HeartHandshake className="w-20 h-20"/></div>
+                   </div>
+                   <h1 className="text-5xl md:text-7xl font-serif text-white tracking-tight mb-6 drop-shadow-sm">RavenTech <span className="text-amber-400">Studio</span></h1>
+                   <p className="text-xl md:text-2xl text-stone-200 font-light max-w-2xl leading-relaxed mb-12">L'excellence visuelle au service de vos souvenirs.<br/><span className="font-serif italic text-amber-200/80 text-lg">Cinéma & Photographie de Mariage</span></p>
+                   <div className="flex flex-col sm:flex-row gap-6 w-full max-w-lg justify-center">
+                      <button onClick={() => setView('client')} className="group relative overflow-hidden bg-white text-stone-900 py-5 px-8 rounded-xl font-bold text-lg hover:shadow-[0_0_30px_rgba(251,191,36,0.4)] transition-all transform hover:-translate-y-1 flex items-center justify-center gap-3 border border-white">
+                        <div className="absolute inset-0 w-full h-full bg-gradient-to-r from-amber-100 via-white to-amber-50 opacity-0 group-hover:opacity-100 transition-opacity"></div>
+                        <span className="relative z-10 font-serif tracking-wide">ESPACE MARIÉS</span>
+                        <ChevronRight className="w-4 h-4 relative z-10 group-hover:translate-x-1 transition-transform text-amber-700"/>
+                      </button>
+                      <button onClick={handleAdminClick} className="group bg-stone-900/40 backdrop-blur-md border border-white/20 text-white py-5 px-8 rounded-xl font-bold text-lg hover:bg-stone-900/80 hover:border-amber-500/50 transition-all flex items-center justify-center gap-3">
+                        <Lock className="w-4 h-4 text-amber-400 group-hover:text-amber-300 transition-colors"/> <span className="font-serif tracking-wide text-sm">ACCÈS STUDIO</span>
+                      </button>
+                   </div>
+               </div>
+               <div className="absolute bottom-10 animate-bounce text-white/30 z-10"><ChevronDown className="w-6 h-6"/></div>
+           </section>
+
+           {/* FEATURES SECTION */}
+           <section className="py-24 px-6 bg-stone-50 relative z-10">
+               <div className="max-w-6xl mx-auto">
+                   <div className="text-center mb-20 animate-fade-in">
+                       <span className="text-amber-600 font-bold tracking-widest text-xs uppercase mb-2 block">Notre Engagement</span>
+                       <h2 className="text-3xl md:text-5xl font-serif font-bold text-stone-900 mb-6">L'Art de la Post-Production</h2>
+                       <div className="w-24 h-1 bg-amber-400 mx-auto rounded-full mb-6"></div>
+                       <p className="text-stone-600 text-lg max-w-2xl mx-auto leading-relaxed">Nous avons conçu une plateforme unique pour prolonger la magie de votre mariage. Une transparence totale, de la production à la livraison finale.</p>
+                   </div>
+                   <div className="grid md:grid-cols-3 gap-8">
+                       <div className="group bg-white p-10 rounded-3xl shadow-sm hover:shadow-2xl hover:shadow-stone-200/50 transition-all duration-500 transform hover:-translate-y-2 border border-stone-100">
+                           <div className="w-16 h-16 bg-stone-50 text-stone-800 rounded-2xl flex items-center justify-center mb-8 group-hover:bg-amber-500 group-hover:text-white transition-colors duration-300"><Clock className="w-8 h-8"/></div>
+                           <h3 className="text-2xl font-serif font-bold mb-4 text-stone-800">Suivi Temps Réel</h3>
+                           <p className="text-stone-500 leading-relaxed">Ne vous demandez plus où en sont vos souvenirs. Suivez chaque étape, du dérushage à l'étalonnage, via votre timeline personnelle.</p>
+                       </div>
+                       <div className="group bg-white p-10 rounded-3xl shadow-sm hover:shadow-2xl hover:shadow-stone-200/50 transition-all duration-500 transform hover:-translate-y-2 border border-stone-100">
+                           <div className="w-16 h-16 bg-stone-50 text-stone-800 rounded-2xl flex items-center justify-center mb-8 group-hover:bg-amber-500 group-hover:text-white transition-colors duration-300"><ShieldCheck className="w-8 h-8"/></div>
+                           <h3 className="text-2xl font-serif font-bold mb-4 text-stone-800">Archive Sécurisée</h3>
+                           <p className="text-stone-500 leading-relaxed">Vos galeries photos et vos films 4K sont hébergés sur des serveurs privés sécurisés, accessibles uniquement via votre code unique.</p>
+                       </div>
+                       <div className="group bg-white p-10 rounded-3xl shadow-sm hover:shadow-2xl hover:shadow-stone-200/50 transition-all duration-500 transform hover:-translate-y-2 border border-stone-100">
+                           <div className="w-16 h-16 bg-stone-50 text-stone-800 rounded-2xl flex items-center justify-center mb-8 group-hover:bg-amber-500 group-hover:text-white transition-colors duration-300"><Sparkles className="w-8 h-8"/></div>
+                           <h3 className="text-2xl font-serif font-bold mb-4 text-stone-800">Expérience Luxe</h3>
+                           <p className="text-stone-500 leading-relaxed">Commandez vos livres d'art, activez des options prioritaires (Fast Track) et dialoguez avec votre équipe dédiée directement.</p>
+                       </div>
+                   </div>
+               </div>
+           </section>
+
+           <footer className="bg-[#0f0f0f] text-stone-500 py-16 text-center border-t border-white/5">
+               <div className="flex items-center justify-center gap-3 mb-6 opacity-50">
+                   <div className="h-px w-12 bg-white/20"></div><HeartHandshake className="w-6 h-6"/><div className="h-px w-12 bg-white/20"></div>
+               </div>
+               <p className="font-serif text-xl text-white mb-2 tracking-wide">RavenTech Studio</p>
+               <p className="text-sm mb-8 font-light">Paris • International Wedding Cinematography</p>
+               <div className="text-[10px] uppercase tracking-[0.2em] opacity-40">© {new Date().getFullYear()} RavenTech Systems. All rights reserved.</div>
+           </footer>
         </div>
+      )}
 
-        {/* Barre Recherche et Filtres */}
-        <div className="bg-white p-4 rounded-2xl shadow-sm border border-stone-200 mb-6 flex flex-col md:flex-row gap-4">
-          <div className="flex-1 relative">
-            <Search className="absolute left-3 top-3.5 text-stone-400 w-5 h-5"/>
-            <input type="text" placeholder="Rechercher un client, un code..." className="w-full pl-10 p-3 bg-stone-50 rounded-xl border-none focus:ring-2 focus:ring-stone-200 outline-none" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
-          </div>
-          <div className="flex items-center gap-2 overflow-x-auto pb-2 md:pb-0">
-            <button onClick={() => setStatusFilter('all')} className={`px-4 py-2 rounded-lg text-sm font-bold whitespace-nowrap ${statusFilter === 'all' ? 'bg-stone-900 text-white' : 'bg-stone-100 text-stone-500'}`}>Tous</button>
-            <button onClick={() => setStatusFilter('active')} className={`px-4 py-2 rounded-lg text-sm font-bold whitespace-nowrap ${statusFilter === 'active' ? 'bg-stone-900 text-white' : 'bg-stone-100 text-stone-500'}`}>En cours</button>
-            <button onClick={() => setStatusFilter('archived')} className={`px-4 py-2 rounded-lg text-sm font-bold whitespace-nowrap ${statusFilter === 'archived' ? 'bg-stone-900 text-white' : 'bg-stone-100 text-stone-500'}`}>Archivés</button>
-          </div>
-        </div>
+      {view === 'login' && <AdminLogin onLogin={() => setView('admin')} onBack={() => setView('landing')} />}
+      {view === 'client' && <ClientPortal projects={projects} onBack={() => setView('landing')} />}
+      
+      {/* VUE ADMIN */}
+      {view === 'admin' && (
+          <AdminDashboard 
+            projects={projects} 
+            staffList={fullStaffList} 
+            staffDirectory={fullStaffDirectory} 
+            user={user} 
+            onLogout={handleLogout} 
+            onStats={() => setView('stats')} 
+          />
+      )}
+      
+      {view === 'stats' && <StatsDashboard projects={projects} onBack={() => setView('admin')} />}
 
-        {/* MODALE TEAM */}
-        {isManagingTeam && (
-          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white p-8 rounded-2xl shadow-2xl max-w-md w-full animate-fade-in">
-                <h3 className="text-xl font-bold mb-4 flex items-center gap-2"><Users className="w-5 h-5"/> Gestion de l'équipe</h3>
-                <div className="space-y-2 mb-6 max-h-[200px] overflow-y-auto bg-stone-50 p-2 rounded-lg">
-                    {Object.entries(staffDirectory).map(([name, email]) => (
-                        <div key={name} className="flex justify-between items-center bg-white p-2 rounded border border-stone-100 shadow-sm text-sm">
-                            <div><div className="font-bold">{name}</div><div className="text-xs text-stone-400">{email}</div></div>
-                            <button onClick={() => removeStaffMember(name)} className="text-red-400 hover:text-red-600"><Trash2 className="w-4 h-4"/></button>
-                        </div>
-                    ))}
-                </div>
-                <div className="space-y-3 pt-4 border-t border-stone-100">
-                    <input className="w-full p-2 border rounded text-sm" placeholder="Prénom" value={newStaffName} onChange={e => setNewStaffName(e.target.value)} />
-                    <input className="w-full p-2 border rounded text-sm" placeholder="Email" value={newStaffEmail} onChange={e => setNewStaffEmail(e.target.value)} />
-                    <button onClick={addStaffMember} className="w-full bg-stone-900 text-white py-2 rounded-lg font-bold text-sm hover:bg-black flex justify-center gap-2"><Save className="w-4 h-4"/> Enregistrer</button>
-                </div>
-                <button onClick={() => setIsManagingTeam(false)} className="w-full mt-4 text-stone-400 text-sm hover:text-stone-600">Fermer</button>
-            </div>
-          </div>
-        )}
-
-        {/* LISTE PROJETS DESIGN "TICKETING" */}
-        <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {filteredProjects.map(project => {
-            const { isDelivered, isLate, isUrgent } = getProjectStatus(project);
-            
-            // Calcul des classes CSS dynamiques
-            let borderClass = 'border-l-4 border-l-blue-500'; // Normal
-            let bgClass = 'bg-white';
-            let badge = null;
-
-            if (project.isArchived) {
-                borderClass = 'border-l-4 border-l-stone-300';
-                bgClass = 'bg-stone-50 opacity-70 grayscale';
-            } else if (isDelivered) {
-                borderClass = 'border-l-4 border-l-emerald-500';
-                badge = <span className="bg-emerald-100 text-emerald-700 text-[10px] font-bold px-2 py-0.5 rounded flex items-center gap-1"><CheckCircle2 className="w-3 h-3"/> LIVRÉ</span>;
-            } else if (isLate) {
-                borderClass = 'border-l-4 border-l-red-500';
-                bgClass = 'bg-red-50/50';
-                badge = <span className="bg-red-100 text-red-700 text-[10px] font-bold px-2 py-0.5 rounded flex items-center gap-1"><AlertCircle className="w-3 h-3"/> RETARD</span>;
-            } else if (isUrgent || project.isPriority) {
-                borderClass = 'border-l-4 border-l-orange-500';
-                bgClass = 'bg-orange-50/50';
-                badge = <span className="bg-orange-100 text-orange-700 text-[10px] font-bold px-2 py-0.5 rounded flex items-center gap-1"><Clock className="w-3 h-3"/> URGENT</span>;
-            } else {
-                // Normal
-                const daysDiff = Math.ceil((new Date(project.weddingDate).getTime() - Date.now()) / (1000 * 3600 * 24));
-                if (daysDiff > 0) badge = <span className="bg-blue-100 text-blue-700 text-[10px] font-bold px-2 py-0.5 rounded">J-{daysDiff}</span>;
-            }
-
-            return (
-                <div key={project.id} onClick={() => setSelectedProject(project)} className={`relative rounded-xl shadow-sm border border-stone-200 p-5 hover:shadow-md transition-all cursor-pointer group ${borderClass} ${bgClass}`}>
-                    
-                    <div className="flex justify-between items-start mb-3">
-                        <div>
-                            <h3 className="font-bold text-lg text-stone-900 group-hover:text-stone-700">{project.clientNames}</h3>
-                            <span className="text-[10px] font-mono text-stone-400">{project.code}</span>
-                        </div>
-                        {badge}
-                        {project.isPriority && !isDelivered && !project.isArchived && <span className="absolute top-2 right-2 flex h-3 w-3"><span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-orange-400 opacity-75"></span><span className="relative inline-flex rounded-full h-3 w-3 bg-orange-500"></span></span>}
-                    </div>
-
-                    <div className="flex flex-col gap-1 mb-4 text-xs text-stone-600">
-                        <div className="flex items-center gap-2"><Calendar className="w-3 h-3 text-stone-400"/> {new Date(project.weddingDate).toLocaleDateString()}</div>
-                        <div className="flex items-center gap-2"><MapPin className="w-3 h-3 text-stone-400"/> <span className="truncate max-w-[200px]">{project.weddingVenue || 'Lieu non défini'}</span></div>
-                        <div className="flex items-center gap-2"><Users className="w-3 h-3 text-stone-400"/> <span className="truncate max-w-[200px]">{project.photographerName || project.videographerName || 'Staff non assigné'}</span></div>
-                    </div>
-
-                    {/* Barres de progression Mini */}
-                    <div className="flex gap-2 pt-3 border-t border-stone-200/50">
-                        {project.statusPhoto !== 'none' && (
-                            <div className="flex-1">
-                                <div className="flex justify-between text-[10px] mb-1 font-bold text-stone-500"><span>Photo</span><span>{project.progressPhoto}%</span></div>
-                                <div className="h-1.5 bg-stone-200 rounded-full overflow-hidden"><div className={`h-full ${project.statusPhoto === 'delivered' ? 'bg-emerald-500' : 'bg-stone-500'}`} style={{width: `${project.progressPhoto}%`}}></div></div>
-                            </div>
-                        )}
-                        {project.statusVideo !== 'none' && (
-                            <div className="flex-1">
-                                <div className="flex justify-between text-[10px] mb-1 font-bold text-stone-500"><span>Vidéo</span><span>{project.progressVideo}%</span></div>
-                                <div className="h-1.5 bg-stone-200 rounded-full overflow-hidden"><div className={`h-full ${project.statusVideo === 'delivered' ? 'bg-emerald-500' : 'bg-blue-500'}`} style={{width: `${project.progressVideo}%`}}></div></div>
-                            </div>
-                        )}
-                    </div>
-                </div>
-            );
-          })}
-        </div>
-      </div>
     </div>
   );
 }
