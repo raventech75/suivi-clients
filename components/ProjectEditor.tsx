@@ -10,7 +10,7 @@ import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { db, storage, appId } from '../lib/firebase';
 import { 
   COLLECTION_NAME, MAKE_WEBHOOK_URL, PHOTO_STEPS, 
-  VIDEO_STEPS, ALBUM_FORMATS, ALBUM_STATUSES, Project, 
+  VIDEO_STEPS, ALBUM_STATUSES, Project, 
   STAFF_DIRECTORY 
 } from '../lib/config';
 import ChatBox from './ChatSystem';
@@ -27,16 +27,16 @@ const formatDateTimeFR = (dateString: string) => {
 };
 
 export default function ProjectEditor({ project, isSuperAdmin, staffList, staffDirectory, user }: { project: Project, isSuperAdmin: boolean, staffList: string[], staffDirectory: Record<string, string>, user: any }) {
-  const [isExpanded, setIsExpanded] = useState(false);
-  const [localData, setLocalData] = useState(project);
+  // 👇 MODIF : Ouvert par défaut pour éviter le clic supplémentaire
+  const [isExpanded, setIsExpanded] = useState(true);
+  const [localData, setLocalData] = useState<Project>(project);
   const [hasChanges, setHasChanges] = useState(false);
   
-  // Format vide par défaut pour laisser le choix (Texte libre)
+  const originalDataRef = useRef<Project>(JSON.parse(JSON.stringify(project)));
+
   const [newAlbum, setNewAlbum] = useState({ name: '', format: '', price: 0 });
-  
   const [uploading, setUploading] = useState(false);
   const [sendingInvite, setSendingInvite] = useState(false);
-  
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -48,7 +48,6 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, staffD
       ? Math.ceil((new Date(project.fastTrackActivationDate).getTime() + (14 * 24 * 60 * 60 * 1000) - now) / (1000 * 60 * 60 * 24))
       : 0;
   
-  // Couleurs de priorité
   let borderStyle = 'border-l-4 border-l-stone-300 border-y border-r border-stone-200';
   let bgStyle = 'bg-white';
   
@@ -68,7 +67,13 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, staffD
       bgStyle = 'bg-orange-50/20';
   }
 
-  useEffect(() => { if (!hasChanges) setLocalData(project); }, [project, hasChanges]);
+  // Synchronisation intelligente
+  useEffect(() => { 
+      if (!hasChanges) {
+          setLocalData(project);
+          originalDataRef.current = JSON.parse(JSON.stringify(project));
+      }
+  }, [project]);
 
   const handleStaffChange = (roleNameKey: 'photographerName' | 'videographerName' | 'managerName', roleEmailKey: 'photographerEmail' | 'videographerEmail' | 'managerEmail', name: string) => {
       let newData = { ...localData, [roleNameKey]: name };
@@ -84,7 +89,6 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, staffD
     if(!canEdit) return;
     setLocalData(p => {
         const newState = { ...p, [k]: v };
-        // Casting "as any" ici aussi pour éviter les soucis d'indexation
         if(k === 'statusPhoto' && (PHOTO_STEPS as any)[v]) newState.progressPhoto = (PHOTO_STEPS as any)[v].percent;
         if(k === 'statusVideo' && (VIDEO_STEPS as any)[v]) newState.progressVideo = (VIDEO_STEPS as any)[v].percent;
         return newState;
@@ -100,10 +104,14 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, staffD
           user: user.email ? user.email.split('@')[0] : 'Admin',
           action: newStatus ? 'DOSSIER ARCHIVÉ' : 'DOSSIER RÉACTIVÉ'
       }, ...(localData.history || [])];
+      
+      setLocalData(prev => ({ ...prev, isArchived: newStatus, history: newHistory }));
+      
       await updateDoc(doc(db, typeof appId !== 'undefined' ? `artifacts/${appId}/public/data/${COLLECTION_NAME}` : COLLECTION_NAME, project.id), {
           isArchived: newStatus, history: newHistory, lastUpdated: serverTimestamp()
       });
-      setIsExpanded(false);
+      // 👇 MODIF : On laisse ouvert
+      // setIsExpanded(false); 
   };
 
   const toggleFastTrack = () => {
@@ -114,7 +122,6 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, staffD
 
   const addAlbum = () => {
       if(!newAlbum.name) return alert("Nom de l'album requis");
-      // Si format vide, on met un défaut générique
       const finalFormat = newAlbum.format || "Format Standard";
       const albums = localData.albums || [];
       updateField('albums', [...albums, { id: Date.now().toString(), name: newAlbum.name, format: finalFormat, price: newAlbum.price, status: 'pending', paid: false }]);
@@ -157,29 +164,90 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, staffD
       if (e.dataTransfer.files && e.dataTransfer.files[0]) processFile(e.dataTransfer.files[0]);
   };
 
+  // --- SAUVEGARDE ---
   const save = async () => {
       if (!localData.clientEmail || !localData.clientEmail.includes('@')) { alert("⛔️ Email client manquant."); return; }
       
-      let updatedHistory = [...(localData.history || [])];
-      const cleanData = { ...localData } as any;
-      if (cleanData.photographerEmail === undefined) cleanData.photographerEmail = null;
-      if (cleanData.videographerEmail === undefined) cleanData.videographerEmail = null;
-      if (cleanData.managerEmail === undefined) cleanData.managerEmail = null;
+      const changes: string[] = [];
+      const old = originalDataRef.current;
+      const cur = localData;
 
-      const finalData = { ...cleanData, history: updatedHistory, lastUpdated: serverTimestamp() };
-      const colPath = typeof appId !== 'undefined' ? `artifacts/${appId}/public/data/${COLLECTION_NAME}` : COLLECTION_NAME;
+      if (!old) return; 
+
+      if (old.clientNames !== cur.clientNames) changes.push(`Noms : ${old.clientNames} ➔ ${cur.clientNames}`);
+      if (old.clientEmail !== cur.clientEmail) changes.push(`Email : ${old.clientEmail} ➔ ${cur.clientEmail}`);
+      if (old.clientEmail2 !== cur.clientEmail2) changes.push(`Email 2 modifié`);
+      if (old.clientPhone !== cur.clientPhone) changes.push(`Tel : ${old.clientPhone} ➔ ${cur.clientPhone}`);
       
-      try { await updateDoc(doc(db, colPath, project.id), finalData); } 
+      if (old.weddingDate !== cur.weddingDate) changes.push(`Date : ${old.weddingDate} ➔ ${cur.weddingDate}`);
+      if (old.weddingVenue !== cur.weddingVenue) changes.push(`Lieu : ${old.weddingVenue || 'Vide'} ➔ ${cur.weddingVenue}`);
+      if (old.weddingVenueZip !== cur.weddingVenueZip) changes.push(`CP : ${old.weddingVenueZip} ➔ ${cur.weddingVenueZip}`);
+      
+      if (old.statusPhoto !== cur.statusPhoto) changes.push(`Statut Photo : ${old.statusPhoto} ➔ ${cur.statusPhoto}`);
+      if (old.statusVideo !== cur.statusVideo) changes.push(`Statut Vidéo : ${old.statusVideo} ➔ ${cur.statusVideo}`);
+      if (old.isPriority !== cur.isPriority) changes.push(`Fast Track : ${cur.isPriority ? 'ACTIVÉ' : 'DÉSACTIVÉ'}`);
+      
+      if (old.estimatedDeliveryPhoto !== cur.estimatedDeliveryPhoto) changes.push(`Prévu Photo : ${old.estimatedDeliveryPhoto || '-'} ➔ ${cur.estimatedDeliveryPhoto}`);
+      if (old.estimatedDeliveryVideo !== cur.estimatedDeliveryVideo) changes.push(`Prévu Vidéo : ${old.estimatedDeliveryVideo || '-'} ➔ ${cur.estimatedDeliveryVideo}`);
+      
+      if (old.photographerName !== cur.photographerName) changes.push(`Photographe : ${old.photographerName || '-'} ➔ ${cur.photographerName}`);
+      if (old.videographerName !== cur.videographerName) changes.push(`Vidéaste : ${old.videographerName || '-'} ➔ ${cur.videographerName}`);
+      if (old.managerName !== cur.managerName) changes.push(`Responsable : ${old.managerName || '-'} ➔ ${cur.managerName}`);
+
+      if (old.linkPhoto !== cur.linkPhoto) changes.push(`Lien Galerie ${cur.linkPhoto ? 'MAJ' : 'Supprimé'}`);
+      if (old.linkVideo !== cur.linkVideo) changes.push(`Lien Vidéo ${cur.linkVideo ? 'MAJ' : 'Supprimé'}`);
+      if (old.moodboardLink !== cur.moodboardLink) changes.push(`Moodboard ${cur.moodboardLink ? 'MAJ' : 'Supprimé'}`);
+
+      const oldAlbums = JSON.stringify(old.albums || []);
+      const curAlbums = JSON.stringify(cur.albums || []);
+      if (oldAlbums !== curAlbums) {
+          if ((old.albums?.length || 0) !== (cur.albums?.length || 0)) {
+               changes.push(`Albums : ${old.albums?.length || 0} ➔ ${cur.albums?.length || 0} commande(s)`);
+          } else {
+               changes.push(`Mise à jour Albums (Prix/Format/Statut)`);
+          }
+      }
+
+      let updatedHistory = [...(localData.history || [])];
+      
+      if (changes.length > 0) {
+          const newLog = {
+              date: new Date().toISOString(),
+              user: user.email ? user.email.split('@')[0] : 'Admin',
+              action: changes.join(' | ')
+          };
+          updatedHistory.unshift(newLog);
+      }
+
+      const cleanData = { ...localData } as any;
+      ['photographerEmail', 'videographerEmail', 'managerEmail', 'clientEmail2', 'clientPhone2', 'weddingVenueZip'].forEach(k => {
+          if (cleanData[k] === undefined) cleanData[k] = null;
+      });
+
+      const finalLocalState = { ...cleanData, history: updatedHistory };
+      const finalDbState = { ...finalLocalState, lastUpdated: serverTimestamp() };
+
+      setLocalData(finalLocalState); 
+      originalDataRef.current = JSON.parse(JSON.stringify(finalLocalState));
+
+      const colPath = typeof appId !== 'undefined' ? `artifacts/${appId}/public/data/${COLLECTION_NAME}` : COLLECTION_NAME;
+      try { 
+          await updateDoc(doc(db, colPath, project.id), finalDbState); 
+          // 👇 AJOUT : Feedback visuel
+          alert("✅ Sauvegarde effectuée !");
+      } 
       catch (error) { console.error("Erreur Sauvegarde:", error); return; }
 
+      setHasChanges(false); 
+      // 👇 MODIF IMPORTANTE : On ne ferme PAS la fenêtre
+      // setIsExpanded(false);
+
+      // Webhooks (inchangé)
       const hasPhotoChanged = localData.statusPhoto !== project.statusPhoto;
       const hasVideoChanged = localData.statusVideo !== project.statusVideo;
-      
       if (hasPhotoChanged || hasVideoChanged) {
-          // 👇 LA CORRECTION EST ICI : (PHOTO_STEPS as any)
           let stepLabel = (PHOTO_STEPS as any)[localData.statusPhoto]?.label || "Mise à jour";
           if (hasVideoChanged) stepLabel = (VIDEO_STEPS as any)[localData.statusVideo]?.label || "Mise à jour";
-          
           fetch(MAKE_WEBHOOK_URL, {
               method: 'POST', headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ 
@@ -190,7 +258,6 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, staffD
               })
           }).catch(err => console.error("Erreur Webhook", err));
       }
-      setHasChanges(false); setIsExpanded(false);
   };
 
   const invite = async () => {
@@ -203,9 +270,10 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, staffD
           });
           const newCount = (localData.inviteCount || 0) + 1;
           const newHistory = [{ date: new Date().toISOString(), user: user.email?.split('@')[0] || 'Admin', action: `INVITATION ENVOYÉE (N°${newCount})` }, ...(localData.history||[])];
+          setLocalData(prev => ({ ...prev, inviteCount: newCount, history: newHistory }));
+          originalDataRef.current = { ...originalDataRef.current, inviteCount: newCount, history: newHistory };
           const colPath = typeof appId !== 'undefined' ? `artifacts/${appId}/public/data/${COLLECTION_NAME}` : COLLECTION_NAME;
           await updateDoc(doc(db, colPath, project.id), { inviteCount: newCount, history: newHistory, lastUpdated: serverTimestamp() });
-          setLocalData(prev => ({ ...prev, inviteCount: newCount, history: newHistory }));
           alert(`✅ Invitation envoyée (N°${newCount})`);
       } catch (err) { alert("Erreur envoi"); } finally { setSendingInvite(false); }
   };
@@ -285,7 +353,6 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, staffD
                         <div className="bg-white p-6 rounded-xl border border-stone-200 shadow-sm">
                             <h4 className="font-bold text-stone-800 mb-4 flex items-center gap-2"><Camera className="w-5 h-5 text-stone-400"/> Production</h4>
                             
-                            {/* MOODBOARD */}
                             <div className="mb-6 p-3 bg-pink-50 rounded-lg border border-pink-100 flex items-center justify-between">
                                 <div className="flex items-center gap-2 text-pink-800"><Palette className="w-4 h-4"/><span className="text-xs font-bold uppercase">Moodboard Client</span></div>
                                 {localData.moodboardLink ? (<a href={localData.moodboardLink} target="_blank" className="flex items-center gap-1 bg-white text-pink-600 px-3 py-1.5 rounded-md text-xs font-bold border border-pink-200 hover:bg-pink-100 transition shadow-sm"><ExternalLink className="w-3 h-3"/> Voir le style</a>) : (<span className="text-xs text-pink-300 italic">Aucun lien fourni</span>)}
@@ -310,7 +377,6 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, staffD
                                     <div key={idx} className="flex flex-wrap gap-2 items-center bg-stone-50 p-2 rounded-lg text-sm">
                                         <div className="flex-1">
                                             <div className="font-bold">{album.name}</div>
-                                            {/* CHAMP TEXTE LIBRE POUR FORMAT (Visible et modifiable) */}
                                             <div className="flex items-center gap-1">
                                                 <span className="text-[10px] text-stone-400">Format :</span>
                                                 <input 
@@ -328,7 +394,6 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, staffD
                                 ))}
                             </div>
                             
-                            {/* AJOUT ALBUM (Format Texte Libre) */}
                             {canEdit && (
                                 <div className="mt-4 pt-4 border-t flex flex-col gap-2">
                                     <div className="flex gap-2">

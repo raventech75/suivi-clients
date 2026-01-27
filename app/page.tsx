@@ -1,8 +1,8 @@
 'use client';
 import React, { useState, useEffect } from 'react';
 import { onAuthStateChanged, signOut } from 'firebase/auth'; 
-import { collection, query, onSnapshot } from 'firebase/firestore';
-import { Loader2, Lock, HeartHandshake, ChevronRight, Sparkles, ShieldCheck, Clock, ChevronDown } from 'lucide-react';
+import { collection, query, onSnapshot, doc } from 'firebase/firestore';
+import { HeartHandshake, ChevronRight, Lock, Sparkles, ShieldCheck, Clock, ChevronDown } from 'lucide-react';
 
 import { auth, db } from '../lib/firebase';
 import { COLLECTION_NAME, Project, STAFF_DIRECTORY } from '../lib/config';
@@ -17,14 +17,23 @@ export default function Home() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
   
+  // État pour l'équipe dynamique
+  const [dynamicStaff, setDynamicStaff] = useState<Record<string, string>>({});
+  
+  // 1. Auth - CORRIGÉ POUR GARDER LA SESSION
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
       setUser(currentUser);
+      if (currentUser) {
+          // Si l'utilisateur est connecté, on va direct sur l'admin
+          setView('admin');
+      }
       setLoading(false);
     });
     return () => unsubscribe();
   }, []);
 
+  // 2. Projets
   useEffect(() => {
     const q = query(collection(db, COLLECTION_NAME));
     const unsubscribe = onSnapshot(q, (snapshot) => {
@@ -34,6 +43,22 @@ export default function Home() {
     });
     return () => unsubscribe();
   }, []);
+
+  // 3. Chargement équipe dynamique
+  useEffect(() => {
+    const unsub = onSnapshot(doc(db, "settings", "general"), (docSnap) => {
+        if (docSnap.exists()) {
+            const data = docSnap.data();
+            if (data.staffDirectory) {
+                setDynamicStaff(data.staffDirectory);
+            }
+        }
+    });
+    return () => unsub();
+  }, []);
+
+  const fullStaffDirectory = { ...STAFF_DIRECTORY, ...dynamicStaff };
+  const fullStaffList = Object.keys(fullStaffDirectory);
 
   const handleLogout = async () => {
       await signOut(auth);
@@ -59,43 +84,30 @@ export default function Home() {
   return (
     <div className="min-h-screen font-sans text-stone-800 bg-stone-50 overflow-x-hidden">
       
-      {/* =====================================================================================
-          VUE : ACCUEIL PREMIUM (LANDING PAGE COMPLETE)
-         ===================================================================================== */}
+      {/* VUE : ACCUEIL PREMIUM */}
       {view === 'landing' && (
         <div className="flex flex-col">
-           
-           {/* --- SECTION 1 : HERO (HAUT DE PAGE IMMERSIF) --- */}
            <section className="relative h-screen flex flex-col items-center justify-center text-center px-6">
-               {/* Image de fond Cinématographique */}
                <div className="absolute inset-0 z-0">
                    <img 
                      src="https://images.unsplash.com/photo-1606800052052-a08af7148866?q=80&w=2940&auto=format&fit=crop" 
                      className="w-full h-full object-cover"
                      alt="Wedding Atmosphere"
                    />
-                   {/* Voile dégradé élégant pour la lisibilité */}
                    <div className="absolute inset-0 bg-gradient-to-t from-stone-900/95 via-stone-900/60 to-stone-900/40"></div>
                </div>
 
-               {/* Contenu Principal (Animé) */}
                <div className="relative z-10 max-w-4xl mx-auto flex flex-col items-center animate-fade-in-up delay-200">
-                   
-                   {/* 👇 LOGO LUXE TRANSPARENT (Sans contour ni boîte) */}
-                   {/* Assurez-vous que le fichier logo.png (votre image_20.png) est dans le dossier public/ */}
                    <div className="mb-8 animate-fade-in">
                       <img 
                         src="/logo.png" 
                         onError={(e) => {
-                            // Fallback discret si l'image n'est pas encore là
                             e.currentTarget.style.display = 'none';
                             e.currentTarget.nextElementSibling?.classList.remove('hidden');
                         }}
                         alt="RavenTech Luxury Logo" 
-                        // J'ai augmenté la taille (w-40) et ajouté une grosse ombre (drop-shadow-2xl) pour le volume
                         className="w-40 h-auto drop-shadow-2xl" 
                       />
-                      {/* Fallback Icon (caché si l'image charge) */}
                       <div className="hidden text-amber-400 opacity-80">
                           <HeartHandshake className="w-20 h-20"/>
                       </div>
@@ -109,7 +121,6 @@ export default function Home() {
                        <span className="font-serif italic text-amber-200/80 text-lg">Cinéma & Photographie de Mariage</span>
                    </p>
                    
-                   {/* Boutons d'action Premium */}
                    <div className="flex flex-col sm:flex-row gap-6 w-full max-w-lg justify-center">
                       <button 
                         onClick={() => setView('client')} 
@@ -130,13 +141,11 @@ export default function Home() {
                    </div>
                </div>
 
-               {/* Indicateur de scroll */}
                <div className="absolute bottom-10 animate-bounce text-white/30 z-10">
                    <ChevronDown className="w-6 h-6"/>
                </div>
            </section>
 
-           {/* --- SECTION 2 : PRÉSENTATION & VALEURS --- */}
            <section className="py-24 px-6 bg-stone-50 relative z-10">
                <div className="max-w-6xl mx-auto">
                    <div className="text-center mb-20 animate-fade-in">
@@ -147,7 +156,6 @@ export default function Home() {
                    </div>
 
                    <div className="grid md:grid-cols-3 gap-8">
-                       {/* Feature 1 */}
                        <div className="group bg-white p-10 rounded-3xl shadow-sm hover:shadow-2xl hover:shadow-stone-200/50 transition-all duration-500 transform hover:-translate-y-2 border border-stone-100">
                            <div className="w-16 h-16 bg-stone-50 text-stone-800 rounded-2xl flex items-center justify-center mb-8 group-hover:bg-amber-500 group-hover:text-white transition-colors duration-300">
                                <Clock className="w-8 h-8"/>
@@ -155,7 +163,6 @@ export default function Home() {
                            <h3 className="text-2xl font-serif font-bold mb-4 text-stone-800">Suivi Temps Réel</h3>
                            <p className="text-stone-500 leading-relaxed">Ne vous demandez plus où en sont vos souvenirs. Suivez chaque étape, du dérushage à l'étalonnage, via votre timeline personnelle.</p>
                        </div>
-                       {/* Feature 2 */}
                        <div className="group bg-white p-10 rounded-3xl shadow-sm hover:shadow-2xl hover:shadow-stone-200/50 transition-all duration-500 transform hover:-translate-y-2 border border-stone-100">
                            <div className="w-16 h-16 bg-stone-50 text-stone-800 rounded-2xl flex items-center justify-center mb-8 group-hover:bg-amber-500 group-hover:text-white transition-colors duration-300">
                                <ShieldCheck className="w-8 h-8"/>
@@ -163,7 +170,6 @@ export default function Home() {
                            <h3 className="text-2xl font-serif font-bold mb-4 text-stone-800">Archive Sécurisée</h3>
                            <p className="text-stone-500 leading-relaxed">Vos galeries photos et vos films 4K sont hébergés sur des serveurs privés sécurisés, accessibles uniquement via votre code unique.</p>
                        </div>
-                       {/* Feature 3 */}
                        <div className="group bg-white p-10 rounded-3xl shadow-sm hover:shadow-2xl hover:shadow-stone-200/50 transition-all duration-500 transform hover:-translate-y-2 border border-stone-100">
                            <div className="w-16 h-16 bg-stone-50 text-stone-800 rounded-2xl flex items-center justify-center mb-8 group-hover:bg-amber-500 group-hover:text-white transition-colors duration-300">
                                <Sparkles className="w-8 h-8"/>
@@ -175,7 +181,6 @@ export default function Home() {
                </div>
            </section>
 
-           {/* --- FOOTER --- */}
            <footer className="bg-[#0f0f0f] text-stone-500 py-16 text-center border-t border-white/5">
                <div className="flex items-center justify-center gap-3 mb-6 opacity-50">
                    <div className="h-px w-12 bg-white/20"></div>
@@ -191,10 +196,20 @@ export default function Home() {
         </div>
       )}
 
-      {/* AUTRES VUES */}
       {view === 'login' && <AdminLogin onLogin={() => setView('admin')} onBack={() => setView('landing')} />}
       {view === 'client' && <ClientPortal projects={projects} onBack={() => setView('landing')} />}
-      {view === 'admin' && <AdminDashboard projects={projects} staffList={Object.keys(STAFF_DIRECTORY)} staffDirectory={STAFF_DIRECTORY} user={user} onLogout={handleLogout} onStats={() => setView('stats')} />}
+      
+      {view === 'admin' && (
+          <AdminDashboard 
+            projects={projects} 
+            staffList={fullStaffList} 
+            staffDirectory={fullStaffDirectory} 
+            user={user} 
+            onLogout={handleLogout} 
+            onStats={() => setView('stats')} 
+          />
+      )}
+      
       {view === 'stats' && <StatsDashboard projects={projects} onBack={() => setView('admin')} />}
 
     </div>
