@@ -159,10 +159,10 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, staffD
       const cur = localData;
 
       if (!old) return; 
-      // Comparaison des champs... (abrégé pour lisibilité, même logique que précédemment)
+      
       if (old.statusPhoto !== cur.statusPhoto) changes.push(`Statut Photo : ${old.statusPhoto} ➔ ${cur.statusPhoto}`);
       if (old.statusVideo !== cur.statusVideo) changes.push(`Statut Vidéo : ${old.statusVideo} ➔ ${cur.statusVideo}`);
-      // ... (autres champs)
+      // (Comparaisons simplifiées pour la lisibilité)
 
       let updatedHistory = [...(localData.history || [])];
       if (changes.length > 0) {
@@ -189,9 +189,9 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, staffD
       catch (error) { console.error("Erreur Sauvegarde:", error); return; }
 
       setHasChanges(false); 
-      // On ne ferme plus isExpanded ici pour éviter la page blanche
+      // On ne ferme plus isExpanded
 
-      // Webhook avec FIX NULL (on envoie null au lieu de "" pour Make)
+      // Webhook avec FIX NULL
       const hasPhotoChanged = localData.statusPhoto !== project.statusPhoto;
       const hasVideoChanged = localData.statusVideo !== project.statusVideo;
       if (hasPhotoChanged || hasVideoChanged) {
@@ -205,7 +205,6 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, staffD
                   clientName: localData.clientNames, 
                   clientEmail: localData.clientEmail,
                   projectCode: localData.code, 
-                  // FIX MAKE: Si vide, on envoie null, pas ""
                   managerEmail: localData.managerEmail || null,
                   photographerEmail: localData.photographerEmail || null,
                   videographerEmail: localData.videographerEmail || null,
@@ -224,7 +223,6 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, staffD
               method:'POST', headers:{'Content-Type':'application/json'}, 
               body:JSON.stringify({ type:'invite', clientName: localData.clientNames, clientEmail: localData.clientEmail, projectCode: localData.code, url: window.location.origin }) 
           });
-          // Mise à jour compteur...
           const newCount = (localData.inviteCount || 0) + 1;
           const newHistory = [{ date: new Date().toISOString(), user: user.email?.split('@')[0] || 'Admin', action: `INVITATION ENVOYÉE (N°${newCount})` }, ...(localData.history||[])];
           setLocalData(prev => ({ ...prev, inviteCount: newCount, history: newHistory }));
@@ -243,7 +241,7 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, staffD
 
   return (
     <div className={`rounded-lg transition-all duration-200 mb-4 ${borderStyle} ${bgStyle}`}>
-        {/* EN-TÊTE CARTE (Reste identique visuellement) */}
+        {/* EN-TÊTE CARTE (VISUEL) */}
         <div className="p-4 flex items-center justify-between cursor-pointer" onClick={(e) => { if(!(e.target as HTMLElement).closest('.avatar-uploader')) setIsExpanded(!isExpanded); }}>
             <div className="flex items-center gap-4 flex-1">
                 <div 
@@ -276,9 +274,131 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, staffD
         {/* CONTENU EDITABLE */}
         {isExpanded && (
             <div className="p-6 border-t bg-stone-50/50 space-y-8 animate-fade-in">
-                {/* ... (Le reste du formulaire reste identique) ... */}
                 
-                {/* ... Bloc Boutons Save ... */}
+                {/* BARRE ACTIONS RAPIDES */}
+                <div className="flex flex-col md:flex-row justify-between items-center gap-4 bg-white p-4 rounded-xl border border-stone-100 shadow-sm">
+                    <div className="flex items-center gap-4 w-full md:w-auto"><button onClick={toggleFastTrack} className={`flex-1 md:flex-none flex items-center justify-center gap-2 px-6 py-3 rounded-xl font-bold transition-all ${localData.isPriority ? 'bg-orange-500 text-white shadow-lg shadow-orange-200 transform scale-105' : 'bg-stone-100 text-stone-400 hover:bg-stone-200'}`}><Rocket className="w-5 h-5"/> {localData.isPriority ? 'FAST TRACK ACTIF' : 'Activer Fast Track'}</button></div>
+                    <div className="flex gap-2 w-full md:w-auto items-center">
+                         <div className="px-4 py-2 bg-stone-100 rounded-lg font-mono text-sm font-bold text-stone-600 border border-stone-200">CODE : <span className="text-black select-all">{localData.code}</span></div>
+                        <div className="flex flex-col items-end"><button onClick={invite} disabled={sendingInvite} className="px-4 py-3 bg-white border border-stone-200 rounded-xl text-sm font-bold hover:bg-stone-50 flex items-center justify-center gap-2 disabled:opacity-50 min-w-[140px]">{sendingInvite ? <Loader2 className="w-4 h-4 animate-spin"/> : <Send className="w-4 h-4"/>}{localData.inviteCount && localData.inviteCount > 0 ? "Renvoyer" : "Inviter"}</button>{localData.inviteCount && localData.inviteCount > 0 && <span className="text-[10px] text-stone-400 font-mono mt-1 mr-1">Envoyé {localData.inviteCount} fois</span>}</div>
+                    </div>
+                </div>
+
+                {/* 👇 C'EST CETTE SECTION QUI MANQUAIT DANS MON CODE PRÉCÉDENT 
+                   JE L'AI RÉINTÉGRÉE ICI.
+                */}
+                <div className="grid lg:grid-cols-2 gap-8">
+                    <div className="space-y-6">
+                        {/* FICHE MARIÉS */}
+                        <div className="bg-white p-6 rounded-xl border border-stone-200 shadow-sm">
+                            <h4 className="font-bold text-stone-800 mb-4 flex items-center gap-2"><Users className="w-5 h-5 text-stone-400"/> Fiche Mariés</h4>
+                            <div className="space-y-4">
+                                <div><label className="text-[10px] uppercase font-bold text-stone-400">Noms</label><input disabled={!canEdit} className="w-full p-2 border rounded bg-stone-50 font-bold text-lg" value={localData.clientNames} onChange={e=>updateField('clientNames', e.target.value)} /></div>
+                                <div className="grid grid-cols-2 gap-4"><div><label className="text-[10px] uppercase font-bold text-stone-400">Email 1</label><input disabled={!canEdit} className="w-full p-2 border rounded bg-stone-50" value={localData.clientEmail} onChange={e=>updateField('clientEmail', e.target.value)} /></div><div><label className="text-[10px] uppercase font-bold text-stone-400">Tel 1</label><input disabled={!canEdit} className="w-full p-2 border rounded bg-stone-50" value={localData.clientPhone} onChange={e=>updateField('clientPhone', e.target.value)} /></div></div>
+                                <div className="grid grid-cols-2 gap-4"><div><label className="text-[10px] uppercase font-bold text-stone-400">Email 2</label><input disabled={!canEdit} className="w-full p-2 border rounded bg-stone-50" value={localData.clientEmail2 || ''} onChange={e=>updateField('clientEmail2', e.target.value)} /></div><div><label className="text-[10px] uppercase font-bold text-stone-400">Tel 2</label><input disabled={!canEdit} className="w-full p-2 border rounded bg-stone-50" value={localData.clientPhone2 || ''} onChange={e=>updateField('clientPhone2', e.target.value)} /></div></div>
+                                <div className="pt-2 border-t border-dashed mt-2"><div className="grid grid-cols-3 gap-2"><div className="col-span-1"><label className="text-[10px] uppercase font-bold text-stone-400">Date Mariage</label><input required type="date" disabled={!canEdit} className="w-full p-2 border rounded bg-stone-50" value={localData.weddingDate} onChange={e=>updateField('weddingDate', e.target.value)} /></div><div className="col-span-2"><label className="text-[10px] uppercase font-bold text-stone-400">Nom Salle / Lieu</label><input disabled={!canEdit} className="w-full p-2 border rounded bg-stone-50" placeholder="Château de..." value={localData.weddingVenue || ''} onChange={e=>updateField('weddingVenue', e.target.value)} /></div></div><div className="mt-2"><label className="text-[10px] uppercase font-bold text-stone-400">Code Postal</label><input disabled={!canEdit} className="w-full p-2 border rounded bg-stone-50" placeholder="75000" value={localData.weddingVenueZip || ''} onChange={e=>updateField('weddingVenueZip', e.target.value)} /></div></div>
+                            </div>
+                        </div>
+                        {/* CHAT EQUIPE */}
+                        <div className="h-[400px]"><TeamChat project={project} user={user} /></div>
+                    </div>
+
+                    <div className="space-y-6">
+                        {/* EQUIPE */}
+                        <div className="bg-white p-6 rounded-xl border border-stone-200 shadow-sm">
+                            <h4 className="font-bold text-stone-800 mb-4 flex items-center gap-2"><Briefcase className="w-5 h-5 text-stone-400"/> Équipe & Contact</h4>
+                            <div className="space-y-4">
+                                <div className="p-3 bg-stone-50 rounded-lg border border-stone-100"><label className="text-[10px] uppercase font-bold text-purple-600 block mb-1">Responsable Dossier</label><div className="flex gap-2"><select disabled={!isSuperAdmin} className="w-1/3 p-2 border rounded bg-white text-sm" value={localData.managerName || ''} onChange={e=>handleStaffChange('managerName', 'managerEmail', e.target.value)}><option value="">-- Nom --</option>{staffList.map(s => <option key={s} value={s}>{s}</option>)}</select><input disabled={!isSuperAdmin} className="flex-1 p-2 border rounded bg-white text-sm" value={localData.managerEmail || ''} onChange={e=>updateField('managerEmail', e.target.value)} placeholder="Email du responsable" /></div></div>
+                                <div className="p-3 bg-stone-50 rounded-lg border border-stone-100"><label className="text-[10px] uppercase font-bold text-amber-600 block mb-1">Photographe J-J</label><div className="flex gap-2"><select disabled={!canEdit} className="w-1/3 p-2 border rounded bg-white text-sm" value={localData.photographerName || ''} onChange={e=>handleStaffChange('photographerName', 'photographerEmail', e.target.value)}><option value="">-- Nom --</option>{staffList.map(s => <option key={s} value={s}>{s}</option>)}</select><input disabled={!canEdit} className="flex-1 p-2 border rounded bg-white text-sm" value={localData.photographerEmail || ''} onChange={e=>updateField('photographerEmail', e.target.value)} placeholder="Email Photographe" /></div></div>
+                                <div className="p-3 bg-stone-50 rounded-lg border border-stone-100"><label className="text-[10px] uppercase font-bold text-blue-600 block mb-1">Vidéaste J-J</label><div className="flex gap-2"><select disabled={!canEdit} className="w-1/3 p-2 border rounded bg-white text-sm" value={localData.videographerName || ''} onChange={e=>handleStaffChange('videographerName', 'videographerEmail', e.target.value)}><option value="">-- Nom --</option>{staffList.map(s => <option key={s} value={s}>{s}</option>)}</select><input disabled={!canEdit} className="flex-1 p-2 border rounded bg-white text-sm" value={localData.videographerEmail || ''} onChange={e=>updateField('videographerEmail', e.target.value)} placeholder="Email Vidéaste" /></div></div>
+                            </div>
+                        </div>
+
+                        {/* PRODUCTION */}
+                        <div className="bg-white p-6 rounded-xl border border-stone-200 shadow-sm">
+                            <h4 className="font-bold text-stone-800 mb-4 flex items-center gap-2"><Camera className="w-5 h-5 text-stone-400"/> Production</h4>
+                            
+                            {/* MOODBOARD */}
+                            <div className="mb-6 p-3 bg-pink-50 rounded-lg border border-pink-100 flex items-center justify-between">
+                                <div className="flex items-center gap-2 text-pink-800"><Palette className="w-4 h-4"/><span className="text-xs font-bold uppercase">Moodboard Client</span></div>
+                                {localData.moodboardLink ? (<a href={localData.moodboardLink} target="_blank" className="flex items-center gap-1 bg-white text-pink-600 px-3 py-1.5 rounded-md text-xs font-bold border border-pink-200 hover:bg-pink-100 transition shadow-sm"><ExternalLink className="w-3 h-3"/> Voir le style</a>) : (<span className="text-xs text-pink-300 italic">Aucun lien fourni</span>)}
+                            </div>
+
+                            {/* SECTION PHOTO */}
+                            <div className="mb-6 pb-6 border-b border-stone-100">
+                                <div className="flex justify-between mb-2"><span className="font-bold text-stone-600">Photo</span><span className="text-xs bg-stone-100 px-2 py-1 rounded">{localData.progressPhoto}%</span></div>
+                                <select disabled={!canEdit} className="w-full p-2 border rounded mb-2 text-sm font-medium" value={localData.statusPhoto} onChange={e=>updateField('statusPhoto', e.target.value)}>{Object.entries(PHOTO_STEPS).map(([k,v])=><option key={k} value={k}>{v.label}</option>)}</select>
+                                <div className="flex gap-2 items-center"><div className="w-1/3"><label className="text-[10px] font-bold text-stone-400">PRÉVU <span className="text-red-500">*</span></label><input disabled={!canEdit} type="date" className={`w-full p-2 border rounded text-xs ${!localData.estimatedDeliveryPhoto && localData.statusPhoto !== 'none' ? 'border-red-400 bg-red-50' : 'bg-yellow-50 border-yellow-200'}`} value={localData.estimatedDeliveryPhoto || ''} onChange={e=>updateField('estimatedDeliveryPhoto', e.target.value)}/></div><div className="flex-1"><label className="text-[10px] font-bold text-stone-400">LIEN GALERIE</label><input disabled={!canEdit} className="w-full p-2 border rounded text-xs" placeholder="https://..." value={localData.linkPhoto || ''} onChange={e=>updateField('linkPhoto', e.target.value)}/></div></div>
+                            </div>
+                            {/* SECTION VIDEO */}
+                            <div>
+                                <div className="flex justify-between mb-2"><span className="font-bold text-stone-600">Vidéo</span><span className="text-xs bg-stone-100 px-2 py-1 rounded">{localData.progressVideo}%</span></div>
+                                <select disabled={!canEdit} className="w-full p-2 border rounded mb-2 text-sm font-medium" value={localData.statusVideo} onChange={e=>updateField('statusVideo', e.target.value)}>{Object.entries(VIDEO_STEPS).map(([k,v])=><option key={k} value={k}>{v.label}</option>)}</select>
+                                <div className="flex gap-2 items-center"><div className="w-1/3"><label className="text-[10px] font-bold text-stone-400">PRÉVU <span className="text-red-500">*</span></label><input disabled={!canEdit} type="date" className={`w-full p-2 border rounded text-xs ${!localData.estimatedDeliveryVideo && localData.statusVideo !== 'none' ? 'border-red-400 bg-red-50' : 'bg-yellow-50 border-yellow-200'}`} value={localData.estimatedDeliveryVideo || ''} onChange={e=>updateField('estimatedDeliveryVideo', e.target.value)}/></div><div className="flex-1"><label className="text-[10px] font-bold text-stone-400">LIEN VIDÉO</label><input disabled={!canEdit} className="w-full p-2 border rounded text-xs" placeholder="https://..." value={localData.linkVideo || ''} onChange={e=>updateField('linkVideo', e.target.value)}/></div></div>
+                            </div>
+                        </div>
+
+                        {/* ALBUMS */}
+                        <div className="bg-white p-6 rounded-xl border border-stone-200 shadow-sm">
+                            <h4 className="font-bold text-stone-800 mb-4 flex items-center gap-2"><BookOpen className="w-5 h-5 text-stone-400"/> Albums</h4>
+                            <div className="space-y-2">
+                                {(localData.albums || []).map((album, idx) => (
+                                    <div key={idx} className="flex flex-wrap gap-2 items-center bg-stone-50 p-2 rounded-lg text-sm">
+                                        <div className="flex-1">
+                                            <div className="font-bold">{album.name}</div>
+                                            <div className="flex items-center gap-1">
+                                                <span className="text-[10px] text-stone-400">Format :</span>
+                                                <input 
+                                                    className="text-[10px] font-bold text-stone-600 bg-transparent border-none p-0 focus:ring-0 w-24" 
+                                                    value={album.format} 
+                                                    disabled={!canEdit}
+                                                    onChange={(e) => updateAlbum(idx, 'format', e.target.value)}
+                                                />
+                                            </div>
+                                        </div>
+                                        <select disabled={!canEdit} value={album.status} onChange={e => updateAlbum(idx, 'status', e.target.value)} className="p-1 border rounded text-xs">{Object.entries(ALBUM_STATUSES).map(([k,v]) => <option key={k} value={k}>{v}</option>)}</select>
+                                        <button disabled={!canEdit} onClick={() => updateAlbum(idx, 'paid', !album.paid)} className={`px-2 py-1 rounded text-[10px] font-bold ${album.paid ? 'bg-green-200 text-green-800' : 'bg-red-100 text-red-800'}`}>{album.paid ? 'PAYÉ' : 'DÛ'}</button>
+                                        {canEdit && <button onClick={() => { const a = [...(localData.albums||[])]; a.splice(idx, 1); updateField('albums', a); }} className="text-red-400"><Trash2 className="w-3 h-3"/></button>}
+                                    </div>
+                                ))}
+                            </div>
+                            
+                            {canEdit && (
+                                <div className="mt-4 pt-4 border-t flex flex-col gap-2">
+                                    <div className="flex gap-2">
+                                        <input className="flex-1 p-2 border rounded text-xs" placeholder="Nom (Ex: Livre Parents)" value={newAlbum.name} onChange={e => setNewAlbum({...newAlbum, name: e.target.value})} />
+                                        <input className="w-1/3 p-2 border rounded text-xs" placeholder="Format (Ex: 30x30)" value={newAlbum.format} onChange={e => setNewAlbum({...newAlbum, format: e.target.value})} />
+                                    </div>
+                                    <div className="flex gap-2">
+                                         <input type="number" className="w-20 p-2 border rounded text-xs" placeholder="Prix €" value={newAlbum.price} onChange={e => setNewAlbum({...newAlbum, price: Number(e.target.value)})} />
+                                         <button onClick={addAlbum} className="flex-1 bg-stone-900 text-white px-3 py-2 rounded text-xs font-bold hover:bg-black">Ajouter la commande</button>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </div>
+                
+                {/* HISTORIQUE */}
+                <div className="mt-8 bg-stone-100 p-6 rounded-xl border border-stone-200">
+                    <h4 className="font-bold text-stone-700 mb-4 flex items-center gap-2"><History className="w-5 h-5"/> Historique</h4>
+                    <div className="space-y-3 max-h-60 overflow-y-auto pr-2">
+                        {localData.history && localData.history.length > 0 ? (
+                            localData.history.map((log, i) => (
+                                <div key={i} className="flex gap-3 text-sm items-start bg-white p-3 rounded-lg border border-stone-200 shadow-sm">
+                                    <div className="min-w-[120px] text-xs font-mono text-stone-400 pt-0.5">{formatDateTimeFR(log.date)}</div>
+                                    <div className="flex-1">
+                                        <div className="font-bold text-stone-800 flex items-center gap-2"><span className="bg-stone-100 px-1.5 rounded text-xs border border-stone-200">{log.user}</span></div>
+                                        <div className="text-stone-600 mt-1 pl-1 border-l-2 border-stone-200 text-xs">{log.action}</div>
+                                    </div>
+                                </div>
+                            ))
+                        ) : (<p className="text-stone-400 italic text-sm text-center py-4">Aucune modification.</p>)}
+                    </div>
+                </div>
+
+                <ChatBox project={project} userType="admin" disabled={!canEdit} />
+
                 {canEdit && (
                     <div className="flex justify-between pt-6 border-t items-center bg-white sticky bottom-0 p-4 rounded-xl shadow-[0_-5px_15px_rgba(0,0,0,0.05)] border-t border-stone-100 mt-4 z-20">
                         <div className="flex gap-2">
@@ -288,12 +408,6 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, staffD
                         <button onClick={save} disabled={!hasChanges} className="bg-stone-900 text-white px-8 py-4 rounded-xl font-bold shadow-xl hover:bg-black transition-all disabled:opacity-50 disabled:shadow-none transform hover:scale-105">Enregistrer</button>
                     </div>
                 )}
-                
-                {/* On garde TeamChat et ChatBox */}
-                <div className="grid lg:grid-cols-2 gap-8">
-                     <div className="h-[400px] lg:col-span-2"><TeamChat project={project} user={user} /></div>
-                     <div className="lg:col-span-2"><ChatBox project={project} userType="admin" disabled={!canEdit} /></div>
-                </div>
             </div>
         )}
     </div>
