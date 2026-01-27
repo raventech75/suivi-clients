@@ -8,18 +8,15 @@ import { MAKE_WEBHOOK_URL, COLLECTION_NAME, Project, InternalMessage } from '../
 export default function TeamChat({ project, user }: { project: Project, user: any }) {
   const [newMessage, setNewMessage] = useState('');
   const [sending, setSending] = useState(false);
-  // 👇 État local pour affichage instantané sans attendre la BDD
   const [localMessages, setLocalMessages] = useState<InternalMessage[]>(project.internalChat || []);
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  // Synchronisation si le projet change (ex: chargement initial)
   useEffect(() => {
     if (project.internalChat) {
         setLocalMessages(project.internalChat);
     }
   }, [project.internalChat]);
 
-  // Scroll automatique vers le bas
   useEffect(() => {
     if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
   }, [localMessages]);
@@ -30,13 +27,11 @@ export default function TeamChat({ project, user }: { project: Project, user: an
     
     setSending(true);
     const msgText = newMessage.trim();
-    
     const userName = user.email ? user.email.split('@')[0] : 'Inconnu';
     const userEmail = user.email || '';
     let role = 'Équipe';
     if (user.email?.includes('irzzen')) role = 'Admin';
 
-    // 1. Création du message
     const msg: InternalMessage = {
         id: Date.now().toString(),
         author: userName,
@@ -45,21 +40,18 @@ export default function TeamChat({ project, user }: { project: Project, user: an
         date: new Date().toISOString()
     };
 
-    // 2. Affichage INSTANTANÉ (Optimistic UI)
     setLocalMessages(prev => [...prev, msg]);
-    setNewMessage(''); // On vide l'input tout de suite
+    setNewMessage(''); 
 
     try {
-        // 3. Sauvegarde Firestore
         const colPath = typeof appId !== 'undefined' ? `artifacts/${appId}/public/data/${COLLECTION_NAME}` : COLLECTION_NAME;
         await updateDoc(doc(db, colPath, project.id), {
             internalChat: arrayUnion(msg)
         });
 
-        // 4. Envoi Webhook Make (En toile de fond)
-        // On vérifie s'il y a des destinataires pour éviter les erreurs inutiles
+        // FIX MAKE: On envoie NULL si l'email est vide
+        // Make comprend que NULL = pas de valeur (donc pas d'erreur sur le champ obligatoire)
         if (project.managerEmail || project.photographerEmail || project.videographerEmail) {
-            console.log("Envoi Webhook Make..."); // Debug
             fetch(MAKE_WEBHOOK_URL, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -70,18 +62,15 @@ export default function TeamChat({ project, user }: { project: Project, user: an
                     author: userName,
                     senderEmail: userEmail,
                     text: msgText,
-                    // Emails des destinataires
-                    managerEmail: project.managerEmail || '',
-                    photographerEmail: project.photographerEmail || '',
-                    videographerEmail: project.videographerEmail || ''
+                    managerEmail: project.managerEmail || null,
+                    photographerEmail: project.photographerEmail || null,
+                    videographerEmail: project.videographerEmail || null
                 })
-            }).then(() => console.log("Webhook envoyé"))
-              .catch(err => console.error("Erreur Webhook Chat", err));
+            }).catch(err => console.error("Erreur Webhook Chat", err));
         }
 
     } catch (error) {
         console.error("Erreur critique Chat:", error);
-        alert("Le message n'a pas pu être sauvegardé en base de données.");
     } finally {
         setSending(false);
     }
