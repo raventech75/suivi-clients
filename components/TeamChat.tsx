@@ -11,7 +11,7 @@ export default function TeamChat({ project, user }: { project: Project, user: an
   const [localMessages, setLocalMessages] = useState<InternalMessage[]>(project.internalChat || []);
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  // Cases à cocher (Tout le monde par défaut)
+  // État pour gérer les destinataires sélectionnés (Tout le monde coché par défaut)
   const [recipients, setRecipients] = useState({
     manager: true,
     photographer: true,
@@ -19,7 +19,9 @@ export default function TeamChat({ project, user }: { project: Project, user: an
   });
 
   useEffect(() => {
-    if (project.internalChat) setLocalMessages(project.internalChat);
+    if (project.internalChat) {
+        setLocalMessages(project.internalChat);
+    }
   }, [project.internalChat]);
 
   useEffect(() => {
@@ -37,11 +39,14 @@ export default function TeamChat({ project, user }: { project: Project, user: an
     setSending(true);
     const msgText = newMessage.trim();
     const userName = user.email ? user.email.split('@')[0] : 'Inconnu';
-    
+    const userEmail = user.email || '';
+    let role = 'Équipe';
+    if (user.email?.includes('irzzen')) role = 'Admin';
+
     const msg: InternalMessage = {
         id: Date.now().toString(),
         author: userName,
-        role: user.email?.includes('irzzen') ? 'Admin' : 'Équipe',
+        role: role,
         text: msgText,
         date: new Date().toISOString()
     };
@@ -51,9 +56,12 @@ export default function TeamChat({ project, user }: { project: Project, user: an
 
     try {
         const colPath = typeof appId !== 'undefined' ? `artifacts/${appId}/public/data/${COLLECTION_NAME}` : COLLECTION_NAME;
-        await updateDoc(doc(db, colPath, project.id), { internalChat: arrayUnion(msg) });
+        await updateDoc(doc(db, colPath, project.id), {
+            internalChat: arrayUnion(msg)
+        });
 
-        // --- PRÉPARATION INTELLIGENTE DES EMAILS ---
+        // --- 👇 CORRECTION MAJEURE ICI 👇 ---
+        // On construit une liste propre pour Make
         const activeEmails = [];
         
         // On ajoute l'email SEULEMENT si la case est cochée ET que l'email existe
@@ -61,10 +69,10 @@ export default function TeamChat({ project, user }: { project: Project, user: an
         if (recipients.photographer && project.photographerEmail) activeEmails.push(project.photographerEmail);
         if (recipients.videographer && project.videographerEmail) activeEmails.push(project.videographerEmail);
 
-        // On transforme le tableau en une chaîne propre : "email1@test.com, email2@test.com"
+        // On transforme le tableau en une chaîne unique (ex: "mail1@test.com, mail2@test.com")
         const emailListString = activeEmails.join(', ');
 
-        // On envoie le webhook seulement s'il y a au moins un destinataire
+        // On n'envoie le webhook QUE si on a au moins un email valide
         if (activeEmails.length > 0) {
             fetch(MAKE_WEBHOOK_URL, {
                 method: 'POST',
@@ -74,17 +82,18 @@ export default function TeamChat({ project, user }: { project: Project, user: an
                     projectCode: project.code,
                     clientNames: project.clientNames,
                     author: userName,
+                    senderEmail: userEmail,
                     text: msgText,
-                    // 👇 C'EST CE CHAMP QUE MAKE DOIT LIRE
+                    // C'est ce champ magique qui résout tout :
                     emailTarget: emailListString 
                 })
-            }).catch(err => console.error("Erreur Webhook", err));
+            }).catch(err => console.error("Erreur Webhook Chat", err));
         } else {
-            console.log("Aucun destinataire valide sélectionné.");
+            console.log("Aucun destinataire valide, Webhook ignoré (Pas d'erreur Make).");
         }
 
     } catch (error) {
-        console.error("Erreur Chat:", error);
+        console.error("Erreur critique Chat:", error);
     } finally {
         setSending(false);
     }
@@ -98,32 +107,70 @@ export default function TeamChat({ project, user }: { project: Project, user: an
   return (
     <div className="flex flex-col h-full bg-amber-50/50 rounded-xl border border-amber-100 overflow-hidden">
         <div className="bg-amber-100/80 p-3 border-b border-amber-200 flex justify-between items-center">
-            <h4 className="font-bold text-amber-900 text-sm flex items-center gap-2"><ShieldAlert className="w-4 h-4"/> Chat Équipe</h4>
+            <h4 className="font-bold text-amber-900 text-sm flex items-center gap-2">
+                <ShieldAlert className="w-4 h-4"/> Chat Équipe (Interne)
+            </h4>
             <span className="text-[10px] text-amber-700 uppercase font-bold tracking-wider">Invisible Client</span>
         </div>
         
         <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 space-y-4 min-h-[200px] max-h-[300px]">
-            {localMessages.length === 0 && <div className="text-center text-amber-800/40 text-xs italic mt-10">Aucune note d'équipe.</div>}
-            {localMessages.map((msg, i) => (
-                <div key={i} className={`flex flex-col ${user.email && msg.author === user.email.split('@')[0] ? 'items-end' : 'items-start'}`}>
-                    <div className="flex items-center gap-1.5 mb-1"><span className="text-[10px] font-bold text-amber-900 bg-amber-100 px-1.5 rounded">{msg.author}</span><span className="text-[10px] text-amber-600/70">{formatTime(msg.date)}</span></div>
-                    <div className={`p-3 rounded-lg text-sm max-w-[90%] shadow-sm bg-white border border-amber-100 text-stone-700`}>{msg.text}</div>
-                </div>
-            ))}
+            {localMessages.length === 0 && (
+                <div className="text-center text-amber-800/40 text-xs italic mt-10">Aucune note d'équipe.<br/>Utilisez cet espace pour le briefing.</div>
+            )}
+            
+            {localMessages.map((msg, index) => {
+                const isMe = user.email && msg.author === user.email.split('@')[0];
+                return (
+                    <div key={msg.id || index} className={`flex flex-col ${isMe ? 'items-end' : 'items-start'}`}>
+                        <div className="flex items-center gap-1.5 mb-1">
+                            <span className="text-[10px] font-bold text-amber-900 bg-amber-100 px-1.5 rounded">{msg.author}</span>
+                            <span className="text-[10px] text-amber-600/70">{formatTime(msg.date)}</span>
+                        </div>
+                        <div className={`p-3 rounded-lg text-sm max-w-[90%] shadow-sm ${isMe ? 'bg-amber-200 text-amber-900 rounded-tr-none' : 'bg-white border border-amber-100 text-stone-700 rounded-tl-none'}`}>
+                            {msg.text}
+                        </div>
+                    </div>
+                );
+            })}
         </div>
 
-        {/* SÉLECTION DESTINATAIRES */}
+        {/* BARRE DE SÉLECTION DES DESTINATAIRES */}
         <div className="px-3 py-2 bg-amber-50 border-t border-amber-100 flex flex-wrap gap-2 text-xs">
             <span className="flex items-center gap-1 text-amber-800 font-bold mr-2"><Users className="w-3 h-3"/> Notifier :</span>
-            {project.managerEmail && <button onClick={() => toggleRecipient('manager')} className={`flex items-center gap-1 px-2 py-1 rounded-md border transition-all ${recipients.manager ? 'bg-amber-200 border-amber-300 text-amber-900' : 'bg-white border-amber-100 text-stone-400'}`}>{recipients.manager && <Check className="w-3 h-3"/>} Manager</button>}
-            {project.photographerEmail && <button onClick={() => toggleRecipient('photographer')} className={`flex items-center gap-1 px-2 py-1 rounded-md border transition-all ${recipients.photographer ? 'bg-amber-200 border-amber-300 text-amber-900' : 'bg-white border-amber-100 text-stone-400'}`}>{recipients.photographer && <Check className="w-3 h-3"/>} Photo</button>}
-            {project.videographerEmail && <button onClick={() => toggleRecipient('videographer')} className={`flex items-center gap-1 px-2 py-1 rounded-md border transition-all ${recipients.videographer ? 'bg-amber-200 border-amber-300 text-amber-900' : 'bg-white border-amber-100 text-stone-400'}`}>{recipients.videographer && <Check className="w-3 h-3"/>} Vidéo</button>}
-            {!project.managerEmail && !project.photographerEmail && !project.videographerEmail && <span className="text-amber-400 italic">Aucun email disponible.</span>}
+            
+            {project.managerEmail && (
+                <button type="button" onClick={() => toggleRecipient('manager')} className={`flex items-center gap-1 px-2 py-1 rounded-md border transition-all ${recipients.manager ? 'bg-amber-200 border-amber-300 text-amber-900' : 'bg-white border-amber-100 text-stone-400'}`}>
+                    {recipients.manager && <Check className="w-3 h-3"/>} Manager
+                </button>
+            )}
+            
+            {project.photographerEmail && (
+                <button type="button" onClick={() => toggleRecipient('photographer')} className={`flex items-center gap-1 px-2 py-1 rounded-md border transition-all ${recipients.photographer ? 'bg-amber-200 border-amber-300 text-amber-900' : 'bg-white border-amber-100 text-stone-400'}`}>
+                    {recipients.photographer && <Check className="w-3 h-3"/>} Photo
+                </button>
+            )}
+
+            {project.videographerEmail && (
+                <button type="button" onClick={() => toggleRecipient('videographer')} className={`flex items-center gap-1 px-2 py-1 rounded-md border transition-all ${recipients.videographer ? 'bg-amber-200 border-amber-300 text-amber-900' : 'bg-white border-amber-100 text-stone-400'}`}>
+                    {recipients.videographer && <Check className="w-3 h-3"/>} Vidéo
+                </button>
+            )}
+            
+            {!project.managerEmail && !project.photographerEmail && !project.videographerEmail && (
+                <span className="text-amber-400 italic">Aucun membre assigné avec email.</span>
+            )}
         </div>
 
         <form onSubmit={sendMessage} className="p-3 bg-white border-t border-amber-100 flex gap-2">
-            <input className="flex-1 bg-white border border-amber-200 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-amber-300" placeholder="Message interne..." value={newMessage} onChange={e => setNewMessage(e.target.value)} />
-            <button disabled={sending} className="bg-amber-500 hover:bg-amber-600 text-white p-2 rounded-lg transition">{sending ? <Loader2 className="w-4 h-4 animate-spin"/> : <Send className="w-4 h-4" />}</button>
+            <input 
+                className="flex-1 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-300 placeholder-amber-300" 
+                placeholder="Message interne..." 
+                value={newMessage} 
+                onChange={e => setNewMessage(e.target.value)}
+            />
+            <button disabled={sending} className="bg-amber-500 hover:bg-amber-600 text-white p-2 rounded-lg transition shadow-sm disabled:opacity-50 flex items-center justify-center min-w-[40px]">
+                {sending ? <Loader2 className="w-4 h-4 animate-spin"/> : <Send className="w-4 h-4" />}
+            </button>
         </form>
     </div>
   );
