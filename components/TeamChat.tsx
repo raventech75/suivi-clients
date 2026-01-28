@@ -55,19 +55,21 @@ export default function TeamChat({ project, user }: { project: Project, user: an
         const colPath = typeof appId !== 'undefined' ? `artifacts/${appId}/public/data/${COLLECTION_NAME}` : COLLECTION_NAME;
         await updateDoc(doc(db, colPath, project.id), { internalChat: arrayUnion(msg) });
 
+        // --- PRÉPARATION DES DONNÉES MAKE ---
+        
+        // 1. Liste des emails destinataires
         const activeEmails = [];
         if (recipients.manager && project.managerEmail) activeEmails.push(project.managerEmail);
         if (recipients.photographer && project.photographerEmail) activeEmails.push(project.photographerEmail);
         if (recipients.videographer && project.videographerEmail) activeEmails.push(project.videographerEmail);
-
         const emailListString = activeEmails.join(', ');
 
-        if (activeEmails.length > 0) {
-            // 👇 PRÉPARATION DE LA DATE FORMATÉE
-            const dateMariage = project.weddingDate 
-                ? new Date(project.weddingDate).toLocaleDateString('fr-FR') 
-                : "Date inconnue";
+        // 2. Formatage de la date (pour qu'elle soit lisible : 12/05/2026)
+        const dateMariage = project.weddingDate 
+            ? new Date(project.weddingDate).toLocaleDateString('fr-FR') 
+            : "Date non définie";
 
+        if (activeEmails.length > 0) {
             fetch(MAKE_WEBHOOK_URL, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -75,9 +77,10 @@ export default function TeamChat({ project, user }: { project: Project, user: an
                     type: 'internal_chat',
                     projectCode: project.code,
                     clientNames: project.clientNames,
-                    // 👇 ON AJOUTE CES INFOS
+                    // 👇 C'EST ICI QUE C'ÉTAIT MANQUANT :
                     weddingDate: dateMariage,
                     weddingVenue: project.weddingVenue || "Lieu non défini",
+                    
                     author: userName,
                     senderEmail: userEmail,
                     text: msgText,
