@@ -3,14 +3,14 @@ import React, { useState, useEffect, useRef } from 'react';
 import { 
   Camera, Video, Ban, ChevronRight, Rocket, Mail, 
   BookOpen, Trash2, Image as ImageIcon, CheckSquare, 
-  Upload, Loader2, MapPin, FileText, Users, Calendar, Eye, Timer, Music, Briefcase, History, Archive, RefreshCw, UserCheck, Send, Palette, ExternalLink
+  Upload, Loader2, MapPin, FileText, Users, Calendar, Eye, Timer, Music, Briefcase, History, Archive, RefreshCw, UserCheck, Send, Palette, ExternalLink, HardDrive
 } from 'lucide-react';
 import { doc, updateDoc, deleteDoc, serverTimestamp } from 'firebase/firestore'; 
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { db, storage, appId } from '../lib/firebase';
 import { 
   COLLECTION_NAME, MAKE_WEBHOOK_URL, PHOTO_STEPS, 
-  VIDEO_STEPS, ALBUM_STATUSES, Project, 
+  VIDEO_STEPS, ALBUM_STATUSES, USB_STATUSES, Project, 
   STAFF_DIRECTORY 
 } from '../lib/config';
 import ChatBox from './ChatSystem';
@@ -46,7 +46,7 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, staffD
       ? Math.ceil((new Date(project.fastTrackActivationDate).getTime() + (14 * 24 * 60 * 60 * 1000) - now) / (1000 * 60 * 60 * 24))
       : 0;
 
-  // Style Bordure (réplique du Dashboard)
+  // Style Bordure
   let borderStyle = 'border-l-4 border-l-stone-300 border-y border-r border-stone-200';
   let bgStyle = 'bg-white';
   const wedDate = new Date(project.weddingDate).getTime();
@@ -150,7 +150,7 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, staffD
   const handleDrag = (e: React.DragEvent) => { e.preventDefault(); setIsDragging(e.type === "dragenter" || e.type === "dragover"); };
   const handleDrop = (e: React.DragEvent) => { e.preventDefault(); setIsDragging(false); if (e.dataTransfer.files[0]) processFile(e.dataTransfer.files[0]); };
 
-  // --- SAUVEGARDE & FIX MAKE ---
+  // --- SAUVEGARDE ---
   const save = async () => {
       if (!localData.clientEmail || !localData.clientEmail.includes('@')) { alert("⛔️ Email client manquant."); return; }
       
@@ -162,16 +162,22 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, staffD
       
       if (old.statusPhoto !== cur.statusPhoto) changes.push(`Statut Photo : ${old.statusPhoto} ➔ ${cur.statusPhoto}`);
       if (old.statusVideo !== cur.statusVideo) changes.push(`Statut Vidéo : ${old.statusVideo} ➔ ${cur.statusVideo}`);
-      // (Comparaisons simplifiées pour la lisibilité)
+      
+      // LOGS USB
+      if (old.usbStatus !== cur.usbStatus) changes.push(`Statut USB : ${old.usbStatus || 'aucun'} ➔ ${cur.usbStatus}`);
+      if (old.usbAddress !== cur.usbAddress) changes.push(`Adresse USB modifiée`);
+
+      // Liens
+      if (old.linkPhoto !== cur.linkPhoto) changes.push(`Lien Galerie ${cur.linkPhoto ? 'MAJ' : 'Supprimé'}`);
+      if (old.linkVideo !== cur.linkVideo) changes.push(`Lien Vidéo ${cur.linkVideo ? 'MAJ' : 'Supprimé'}`);
 
       let updatedHistory = [...(localData.history || [])];
       if (changes.length > 0) {
           updatedHistory.unshift({ date: new Date().toISOString(), user: user.email ? user.email.split('@')[0] : 'Admin', action: changes.join(' | ') });
       }
 
-      // Nettoyage des données pour éviter les undefined
       const cleanData = { ...localData } as any;
-      ['photographerEmail', 'videographerEmail', 'managerEmail', 'clientEmail2', 'clientPhone2', 'weddingVenueZip'].forEach(k => {
+      ['photographerEmail', 'videographerEmail', 'managerEmail', 'clientEmail2', 'clientPhone2', 'weddingVenueZip', 'usbAddress'].forEach(k => {
           if (cleanData[k] === undefined) cleanData[k] = null;
       });
 
@@ -189,9 +195,8 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, staffD
       catch (error) { console.error("Erreur Sauvegarde:", error); return; }
 
       setHasChanges(false); 
-      // On ne ferme plus isExpanded
 
-      // Webhook avec FIX NULL
+      // Webhook
       const hasPhotoChanged = localData.statusPhoto !== project.statusPhoto;
       const hasVideoChanged = localData.statusVideo !== project.statusVideo;
       if (hasPhotoChanged || hasVideoChanged) {
@@ -241,7 +246,7 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, staffD
 
   return (
     <div className={`rounded-lg transition-all duration-200 mb-4 ${borderStyle} ${bgStyle}`}>
-        {/* EN-TÊTE CARTE (VISUEL) */}
+        {/* EN-TÊTE CARTE */}
         <div className="p-4 flex items-center justify-between cursor-pointer" onClick={(e) => { if(!(e.target as HTMLElement).closest('.avatar-uploader')) setIsExpanded(!isExpanded); }}>
             <div className="flex items-center gap-4 flex-1">
                 <div 
@@ -275,7 +280,7 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, staffD
         {isExpanded && (
             <div className="p-6 border-t bg-stone-50/50 space-y-8 animate-fade-in">
                 
-                {/* BARRE ACTIONS RAPIDES */}
+                {/* BARRE ACTIONS */}
                 <div className="flex flex-col md:flex-row justify-between items-center gap-4 bg-white p-4 rounded-xl border border-stone-100 shadow-sm">
                     <div className="flex items-center gap-4 w-full md:w-auto"><button onClick={toggleFastTrack} className={`flex-1 md:flex-none flex items-center justify-center gap-2 px-6 py-3 rounded-xl font-bold transition-all ${localData.isPriority ? 'bg-orange-500 text-white shadow-lg shadow-orange-200 transform scale-105' : 'bg-stone-100 text-stone-400 hover:bg-stone-200'}`}><Rocket className="w-5 h-5"/> {localData.isPriority ? 'FAST TRACK ACTIF' : 'Activer Fast Track'}</button></div>
                     <div className="flex gap-2 w-full md:w-auto items-center">
@@ -284,9 +289,6 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, staffD
                     </div>
                 </div>
 
-                {/* 👇 C'EST CETTE SECTION QUI MANQUAIT DANS MON CODE PRÉCÉDENT 
-                   JE L'AI RÉINTÉGRÉE ICI.
-                */}
                 <div className="grid lg:grid-cols-2 gap-8">
                     <div className="space-y-6">
                         {/* FICHE MARIÉS */}
@@ -324,17 +326,43 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, staffD
                                 {localData.moodboardLink ? (<a href={localData.moodboardLink} target="_blank" className="flex items-center gap-1 bg-white text-pink-600 px-3 py-1.5 rounded-md text-xs font-bold border border-pink-200 hover:bg-pink-100 transition shadow-sm"><ExternalLink className="w-3 h-3"/> Voir le style</a>) : (<span className="text-xs text-pink-300 italic">Aucun lien fourni</span>)}
                             </div>
 
-                            {/* SECTION PHOTO */}
                             <div className="mb-6 pb-6 border-b border-stone-100">
                                 <div className="flex justify-between mb-2"><span className="font-bold text-stone-600">Photo</span><span className="text-xs bg-stone-100 px-2 py-1 rounded">{localData.progressPhoto}%</span></div>
                                 <select disabled={!canEdit} className="w-full p-2 border rounded mb-2 text-sm font-medium" value={localData.statusPhoto} onChange={e=>updateField('statusPhoto', e.target.value)}>{Object.entries(PHOTO_STEPS).map(([k,v])=><option key={k} value={k}>{v.label}</option>)}</select>
                                 <div className="flex gap-2 items-center"><div className="w-1/3"><label className="text-[10px] font-bold text-stone-400">PRÉVU <span className="text-red-500">*</span></label><input disabled={!canEdit} type="date" className={`w-full p-2 border rounded text-xs ${!localData.estimatedDeliveryPhoto && localData.statusPhoto !== 'none' ? 'border-red-400 bg-red-50' : 'bg-yellow-50 border-yellow-200'}`} value={localData.estimatedDeliveryPhoto || ''} onChange={e=>updateField('estimatedDeliveryPhoto', e.target.value)}/></div><div className="flex-1"><label className="text-[10px] font-bold text-stone-400">LIEN GALERIE</label><input disabled={!canEdit} className="w-full p-2 border rounded text-xs" placeholder="https://..." value={localData.linkPhoto || ''} onChange={e=>updateField('linkPhoto', e.target.value)}/></div></div>
                             </div>
-                            {/* SECTION VIDEO */}
                             <div>
                                 <div className="flex justify-between mb-2"><span className="font-bold text-stone-600">Vidéo</span><span className="text-xs bg-stone-100 px-2 py-1 rounded">{localData.progressVideo}%</span></div>
                                 <select disabled={!canEdit} className="w-full p-2 border rounded mb-2 text-sm font-medium" value={localData.statusVideo} onChange={e=>updateField('statusVideo', e.target.value)}>{Object.entries(VIDEO_STEPS).map(([k,v])=><option key={k} value={k}>{v.label}</option>)}</select>
                                 <div className="flex gap-2 items-center"><div className="w-1/3"><label className="text-[10px] font-bold text-stone-400">PRÉVU <span className="text-red-500">*</span></label><input disabled={!canEdit} type="date" className={`w-full p-2 border rounded text-xs ${!localData.estimatedDeliveryVideo && localData.statusVideo !== 'none' ? 'border-red-400 bg-red-50' : 'bg-yellow-50 border-yellow-200'}`} value={localData.estimatedDeliveryVideo || ''} onChange={e=>updateField('estimatedDeliveryVideo', e.target.value)}/></div><div className="flex-1"><label className="text-[10px] font-bold text-stone-400">LIEN VIDÉO</label><input disabled={!canEdit} className="w-full p-2 border rounded text-xs" placeholder="https://..." value={localData.linkVideo || ''} onChange={e=>updateField('linkVideo', e.target.value)}/></div></div>
+                            </div>
+                        </div>
+
+                        {/* 👇 NOUVEAU : SECTION CLEF USB */}
+                        <div className="bg-white p-6 rounded-xl border border-stone-200 shadow-sm">
+                            <h4 className="font-bold text-stone-800 mb-4 flex items-center gap-2"><HardDrive className="w-5 h-5 text-stone-400"/> Coffret USB</h4>
+                            <div className="space-y-4">
+                                <div>
+                                    <label className="text-[10px] uppercase font-bold text-stone-400">Statut Envoi</label>
+                                    <select 
+                                        disabled={!canEdit} 
+                                        className="w-full p-2 border rounded bg-stone-50 text-sm font-medium mt-1" 
+                                        value={localData.usbStatus || 'none'} 
+                                        onChange={e => updateField('usbStatus', e.target.value)}
+                                    >
+                                        {Object.entries(USB_STATUSES).map(([k,v]) => <option key={k} value={k}>{v}</option>)}
+                                    </select>
+                                </div>
+                                <div>
+                                    <label className="text-[10px] uppercase font-bold text-stone-400">Adresse d'expédition</label>
+                                    <textarea 
+                                        disabled={!canEdit} 
+                                        className="w-full p-3 border rounded bg-stone-50 text-sm min-h-[80px]" 
+                                        placeholder="Nom, Rue, CP, Ville..." 
+                                        value={localData.usbAddress || ''} 
+                                        onChange={e => updateField('usbAddress', e.target.value)}
+                                    />
+                                </div>
                             </div>
                         </div>
 

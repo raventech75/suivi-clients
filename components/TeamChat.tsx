@@ -1,6 +1,6 @@
 'use client';
 import React, { useState, useEffect, useRef } from 'react';
-import { Send, ShieldAlert, Loader2 } from 'lucide-react';
+import { Send, ShieldAlert, Loader2, Users, Check, UserCheck } from 'lucide-react';
 import { doc, updateDoc, arrayUnion } from 'firebase/firestore';
 import { db, appId } from '../lib/firebase';
 import { MAKE_WEBHOOK_URL, COLLECTION_NAME, Project, InternalMessage } from '../lib/config';
@@ -10,6 +10,13 @@ export default function TeamChat({ project, user }: { project: Project, user: an
   const [sending, setSending] = useState(false);
   const [localMessages, setLocalMessages] = useState<InternalMessage[]>(project.internalChat || []);
   const scrollRef = useRef<HTMLDivElement>(null);
+
+  // État pour gérer les destinataires sélectionnés
+  const [recipients, setRecipients] = useState({
+    manager: true,
+    photographer: true,
+    videographer: true
+  });
 
   useEffect(() => {
     if (project.internalChat) {
@@ -21,6 +28,10 @@ export default function TeamChat({ project, user }: { project: Project, user: an
     if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
   }, [localMessages]);
 
+  const toggleRecipient = (role: 'manager' | 'photographer' | 'videographer') => {
+      setRecipients(prev => ({ ...prev, [role]: !prev[role] }));
+  };
+
   const sendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newMessage.trim()) return;
@@ -31,6 +42,12 @@ export default function TeamChat({ project, user }: { project: Project, user: an
     const userEmail = user.email || '';
     let role = 'Équipe';
     if (user.email?.includes('irzzen')) role = 'Admin';
+
+    // On prépare la liste des gens notifiés pour l'historique (visuel seulement)
+    const notifiedRoles = [];
+    if (recipients.manager && project.managerEmail) notifiedRoles.push('Manager');
+    if (recipients.photographer && project.photographerEmail) notifiedRoles.push('Photo');
+    if (recipients.videographer && project.videographerEmail) notifiedRoles.push('Vidéo');
 
     const msg: InternalMessage = {
         id: Date.now().toString(),
@@ -49,23 +66,26 @@ export default function TeamChat({ project, user }: { project: Project, user: an
             internalChat: arrayUnion(msg)
         });
 
-        // FIX MAKE: On envoie NULL si l'email est vide
-        // Make comprend que NULL = pas de valeur (donc pas d'erreur sur le champ obligatoire)
-        if (project.managerEmail || project.photographerEmail || project.videographerEmail) {
+        // LOGIQUE CIBLÉE : On envoie l'email SEULEMENT si la case est cochée
+        const payload = {
+            type: 'internal_chat',
+            projectCode: project.code,
+            clientNames: project.clientNames,
+            author: userName,
+            senderEmail: userEmail,
+            text: msgText,
+            // Si la case est cochée ET qu'il y a un email -> on l'envoie. Sinon null.
+            managerEmail: (recipients.manager && project.managerEmail) ? project.managerEmail : null,
+            photographerEmail: (recipients.photographer && project.photographerEmail) ? project.photographerEmail : null,
+            videographerEmail: (recipients.videographer && project.videographerEmail) ? project.videographerEmail : null
+        };
+
+        // On n'appelle le webhook que s'il y a au moins un destinataire
+        if (payload.managerEmail || payload.photographerEmail || payload.videographerEmail) {
             fetch(MAKE_WEBHOOK_URL, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    type: 'internal_chat',
-                    projectCode: project.code,
-                    clientNames: project.clientNames,
-                    author: userName,
-                    senderEmail: userEmail,
-                    text: msgText,
-                    managerEmail: project.managerEmail || null,
-                    photographerEmail: project.photographerEmail || null,
-                    videographerEmail: project.videographerEmail || null
-                })
+                body: JSON.stringify(payload)
             }).catch(err => console.error("Erreur Webhook Chat", err));
         }
 
@@ -109,6 +129,41 @@ export default function TeamChat({ project, user }: { project: Project, user: an
                     </div>
                 );
             })}
+        </div>
+
+        {/* BARRE DE SÉLECTION DES DESTINATAIRES */}
+        <div className="px-3 py-2 bg-amber-50 border-t border-amber-100 flex flex-wrap gap-2 text-xs">
+            <span className="flex items-center gap-1 text-amber-800 font-bold mr-2"><Users className="w-3 h-3"/> Notifier :</span>
+            
+            {project.managerEmail && (
+                <button 
+                    type="button"
+                    onClick={() => toggleRecipient('manager')}
+                    className={`flex items-center gap-1 px-2 py-1 rounded-md border transition-all ${recipients.manager ? 'bg-amber-200 border-amber-300 text-amber-900' : 'bg-white border-amber-100 text-stone-400'}`}
+                >
+                    {recipients.manager && <Check className="w-3 h-3"/>} Manager
+                </button>
+            )}
+            
+            {project.photographerEmail && (
+                <button 
+                    type="button"
+                    onClick={() => toggleRecipient('photographer')}
+                    className={`flex items-center gap-1 px-2 py-1 rounded-md border transition-all ${recipients.photographer ? 'bg-amber-200 border-amber-300 text-amber-900' : 'bg-white border-amber-100 text-stone-400'}`}
+                >
+                    {recipients.photographer && <Check className="w-3 h-3"/>} Photo ({project.photographerName})
+                </button>
+            )}
+
+            {project.videographerEmail && (
+                <button 
+                    type="button"
+                    onClick={() => toggleRecipient('videographer')}
+                    className={`flex items-center gap-1 px-2 py-1 rounded-md border transition-all ${recipients.videographer ? 'bg-amber-200 border-amber-300 text-amber-900' : 'bg-white border-amber-100 text-stone-400'}`}
+                >
+                    {recipients.videographer && <Check className="w-3 h-3"/>} Vidéo ({project.videographerName})
+                </button>
+            )}
         </div>
 
         <form onSubmit={sendMessage} className="p-3 bg-white border-t border-amber-100 flex gap-2">

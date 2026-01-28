@@ -1,10 +1,14 @@
 'use client';
-import React, { useState } from 'react';
-import { Plus, Search, Calendar, MapPin, Users, LogOut, BarChart3, Settings, Trash2, Save, AlertCircle, Clock, CheckCircle2, Rocket, Camera, Video } from 'lucide-react';
+import React, { useState, useMemo } from 'react';
+import { 
+  Plus, Search, Calendar, MapPin, Users, LogOut, BarChart3, 
+  Settings, Trash2, Save, AlertCircle, Clock, CheckCircle2, 
+  Rocket, Bell, MessageSquare, AlertTriangle 
+} from 'lucide-react';
 import { collection, addDoc, serverTimestamp, setDoc, doc } from 'firebase/firestore'; 
 import { db, appId } from '../lib/firebase';
-import { COLLECTION_NAME, PHOTO_STEPS, VIDEO_STEPS, Project } from '../lib/config';
-import ProjectEditor from './ProjectEditor'; // C'est ici qu'il importe ProjectEditor
+import { COLLECTION_NAME, Project } from '../lib/config';
+import ProjectEditor from './ProjectEditor';
 
 export default function AdminDashboard({ 
     projects, staffList, staffDirectory, user, onLogout, onStats, setStaffList 
@@ -16,6 +20,8 @@ export default function AdminDashboard({
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
   const [isAdding, setIsAdding] = useState(false);
   const [isManagingTeam, setIsManagingTeam] = useState(false);
+  const [showNotifications, setShowNotifications] = useState(false); // État pour le panneau notifs
+  
   const [newStaffName, setNewStaffName] = useState('');
   const [newStaffEmail, setNewStaffEmail] = useState('');
 
@@ -27,6 +33,56 @@ export default function AdminDashboard({
   });
 
   const isSuperAdmin = user?.email && (user.email.includes('irzzen') || user.email === 'admin@raventech.com');
+
+  // --- 1. SYSTÈME DE NOTIFICATIONS INTELLIGENT ---
+  const notifications = useMemo(() => {
+    const notifs: any[] = [];
+    const now = Date.now();
+
+    projects.forEach(p => {
+        if (p.isArchived) return;
+
+        // A. MESSAGES NON LUS (Le dernier message vient du client)
+        // On vérifie s'il y a des messages et si le dernier n'est PAS du staff
+        if (p.messages && p.messages.length > 0) {
+            const lastMsg = p.messages[p.messages.length - 1];
+            if (!lastMsg.isStaff) {
+                notifs.push({
+                    id: `msg-${p.id}`,
+                    type: 'message',
+                    level: 'high',
+                    project: p,
+                    text: `Réponse de ${p.clientNames}`,
+                    date: lastMsg.date
+                });
+            }
+        }
+
+        // B. RETARDS LIVRAISON
+        if (p.estimatedDeliveryPhoto && new Date(p.estimatedDeliveryPhoto).getTime() < now && p.statusPhoto !== 'delivered' && p.statusPhoto !== 'none') {
+            notifs.push({ id: `late-p-${p.id}`, type: 'late', level: 'critical', project: p, text: `Retard Photo : ${p.clientNames}`, date: p.estimatedDeliveryPhoto });
+        }
+        if (p.estimatedDeliveryVideo && new Date(p.estimatedDeliveryVideo).getTime() < now && p.statusVideo !== 'delivered' && p.statusVideo !== 'none') {
+            notifs.push({ id: `late-v-${p.id}`, type: 'late', level: 'critical', project: p, text: `Retard Vidéo : ${p.clientNames}`, date: p.estimatedDeliveryVideo });
+        }
+
+        // C. DÉMARRAGE REQUIS (Mariage passé > 15j et statut toujours "Waiting")
+        const weddingTime = new Date(p.weddingDate).getTime();
+        const daysSinceWedding = (now - weddingTime) / (1000 * 60 * 60 * 24);
+        if (daysSinceWedding > 15 && (p.statusPhoto === 'waiting' || p.statusVideo === 'waiting')) {
+            notifs.push({ id: `start-${p.id}`, type: 'start', level: 'medium', project: p, text: `Dossier à démarrer : ${p.clientNames}`, date: new Date().toISOString() });
+        }
+    });
+
+    // Tri par urgence (Critical > High > Medium) puis par date
+    return notifs.sort((a, b) => {
+        const levels = { critical: 3, high: 2, medium: 1 };
+        if ((levels[a.level as keyof typeof levels] || 0) !== (levels[b.level as keyof typeof levels] || 0)) {
+            return (levels[b.level as keyof typeof levels] || 0) - (levels[a.level as keyof typeof levels] || 0);
+        }
+        return new Date(b.date).getTime() - new Date(a.date).getTime();
+    });
+  }, [projects]);
 
   const filteredProjects = projects.filter(p => {
     const matchesSearch = p.clientNames.toLowerCase().includes(searchTerm.toLowerCase()) || p.code.toLowerCase().includes(searchTerm.toLowerCase());
@@ -83,6 +139,7 @@ export default function AdminDashboard({
   return (
     <div className="min-h-screen bg-stone-100 p-4 md:p-8">
       <div className="max-w-7xl mx-auto">
+        {/* HEADER */}
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
           <div>
             <h1 className="text-3xl font-serif font-bold text-stone-800">Tableau de Bord</h1>
@@ -93,9 +150,67 @@ export default function AdminDashboard({
                 <button onClick={onLogout} className="flex items-center gap-1 text-red-400 hover:text-red-600 transition"><LogOut className="w-4 h-4"/> Déconnexion</button>
             </div>
           </div>
-          <button onClick={() => setIsAdding(true)} className="bg-stone-900 text-white px-6 py-3 rounded-xl font-bold flex items-center gap-2 hover:bg-black transition shadow-lg"><Plus className="w-5 h-5"/> Nouveau Dossier</button>
+          
+          <div className="flex items-center gap-3">
+              {/* BOUTON NOTIFICATION AVEC BADGE */}
+              <div className="relative">
+                  <button 
+                    onClick={() => setShowNotifications(!showNotifications)} 
+                    className={`p-3 rounded-xl transition shadow-sm ${showNotifications ? 'bg-stone-800 text-white' : 'bg-white text-stone-600 hover:bg-stone-50'}`}
+                  >
+                      <Bell className="w-5 h-5"/>
+                      {notifications.length > 0 && (
+                          <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white text-[10px] font-bold flex items-center justify-center rounded-full shadow-md animate-pulse">
+                              {notifications.length}
+                          </span>
+                      )}
+                  </button>
+
+                  {/* PANNEAU DÉROULANT NOTIFICATIONS */}
+                  {showNotifications && (
+                      <div className="absolute right-0 mt-2 w-80 bg-white rounded-xl shadow-2xl border border-stone-100 z-50 overflow-hidden animate-fade-in">
+                          <div className="p-3 border-b border-stone-100 bg-stone-50 font-bold text-stone-700 text-sm flex justify-between items-center">
+                              <span>À traiter ({notifications.length})</span>
+                              <button onClick={()=>setShowNotifications(false)} className="text-xs text-stone-400 hover:text-stone-600">Fermer</button>
+                          </div>
+                          <div className="max-h-[300px] overflow-y-auto">
+                              {notifications.length === 0 ? (
+                                  <div className="p-6 text-center text-stone-400 text-xs italic">Aucune alerte. Tout est à jour ! 🎉</div>
+                              ) : (
+                                  notifications.map(notif => (
+                                      <div 
+                                        key={notif.id} 
+                                        onClick={() => { setSelectedProject(notif.project); setShowNotifications(false); }}
+                                        className="p-3 border-b border-stone-50 hover:bg-amber-50 cursor-pointer transition flex items-start gap-3"
+                                      >
+                                          <div className={`mt-1 p-1.5 rounded-full shrink-0 ${
+                                              notif.type === 'late' ? 'bg-red-100 text-red-600' : 
+                                              notif.type === 'message' ? 'bg-blue-100 text-blue-600' : 
+                                              'bg-orange-100 text-orange-600'
+                                          }`}>
+                                              {notif.type === 'late' && <AlertCircle className="w-3 h-3"/>}
+                                              {notif.type === 'message' && <MessageSquare className="w-3 h-3"/>}
+                                              {notif.type === 'start' && <Clock className="w-3 h-3"/>}
+                                          </div>
+                                          <div>
+                                              <div className="text-sm font-bold text-stone-800">{notif.text}</div>
+                                              <div className="text-xs text-stone-400 mt-0.5">
+                                                  {notif.type === 'message' ? 'Nouveau message' : new Date(notif.date).toLocaleDateString()}
+                                              </div>
+                                          </div>
+                                      </div>
+                                  ))
+                              )}
+                          </div>
+                      </div>
+                  )}
+              </div>
+
+              <button onClick={() => setIsAdding(true)} className="bg-stone-900 text-white px-6 py-3 rounded-xl font-bold flex items-center gap-2 hover:bg-black transition shadow-lg"><Plus className="w-5 h-5"/> Nouveau Dossier</button>
+          </div>
         </div>
 
+        {/* RESTE DU DASHBOARD (Barre recherche + Liste) */}
         <div className="bg-white p-4 rounded-2xl shadow-sm border border-stone-200 mb-6 flex flex-col md:flex-row gap-4">
           <div className="flex-1 relative">
             <Search className="absolute left-3 top-3.5 text-stone-400 w-5 h-5"/>
@@ -159,7 +274,6 @@ export default function AdminDashboard({
           </div>
         )}
 
-        {/* LISTE TICKETING */}
         <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
           {filteredProjects.map(project => {
             const { isDelivered, isLate, isUrgent } = getProjectStatus(project);

@@ -50,6 +50,14 @@ export const ALBUM_STATUSES = {
     'sent': 'Expédié'
 };
 
+// 👇 NOUVEAU : STATUTS CLEF USB
+export const USB_STATUSES = {
+    'none': 'Non requis',
+    'preparing': 'En préparation',
+    'sent': 'Expédiée',
+    'delivered': 'Livrée / Remise'
+};
+
 export const ALBUM_FORMATS = [
     "30x30", "40x30", "25x25", "20x30", "Coffret Luxe", "Livre Parents (20x20)"
 ];
@@ -88,7 +96,6 @@ export interface InternalMessage {
     date: string;
 }
 
-// 👇 NOUVELLE INTERFACE POUR CORRIGER L'ERREUR
 export interface TeamPayment {
     id: string;
     recipient: string;
@@ -147,13 +154,16 @@ export interface Project {
     isArchived: boolean;
     fastTrackActivationDate?: string;
     
+    // 👇 NOUVEAU : USB
+    usbAddress?: string;
+    usbStatus?: string;
+
     // Données complexes
     albums: Album[];
     messages: Message[];
     internalChat: InternalMessage[];
     history: HistoryLog[];
     
-    // 👇 AJOUTÉ POUR CORRIGER L'ERREUR STATS
     teamPayments?: TeamPayment[];
     
     // Meta
