@@ -17,10 +17,18 @@ export default function AdminDashboard({
 }) {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
-  const [selectedProject, setSelectedProject] = useState<Project | null>(null);
+  
+  // 👇 MODIFICATION MAJEURE ICI : On stocke l'ID, pas l'objet entier
+  const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
+  
+  // On retrouve le projet à jour depuis la liste 'projects' (qui est en temps réel)
+  const selectedProject = useMemo(() => 
+    projects.find(p => p.id === selectedProjectId) || null
+  , [projects, selectedProjectId]);
+
   const [isAdding, setIsAdding] = useState(false);
   const [isManagingTeam, setIsManagingTeam] = useState(false);
-  const [showNotifications, setShowNotifications] = useState(false); // État pour le panneau notifs
+  const [showNotifications, setShowNotifications] = useState(false);
   
   const [newStaffName, setNewStaffName] = useState('');
   const [newStaffEmail, setNewStaffEmail] = useState('');
@@ -34,7 +42,7 @@ export default function AdminDashboard({
 
   const isSuperAdmin = user?.email && (user.email.includes('irzzen') || user.email === 'admin@raventech.com');
 
-  // --- 1. SYSTÈME DE NOTIFICATIONS INTELLIGENT ---
+  // --- NOTIFICATIONS ---
   const notifications = useMemo(() => {
     const notifs: any[] = [];
     const now = Date.now();
@@ -42,8 +50,6 @@ export default function AdminDashboard({
     projects.forEach(p => {
         if (p.isArchived) return;
 
-        // A. MESSAGES NON LUS (Le dernier message vient du client)
-        // On vérifie s'il y a des messages et si le dernier n'est PAS du staff
         if (p.messages && p.messages.length > 0) {
             const lastMsg = p.messages[p.messages.length - 1];
             if (!lastMsg.isStaff) {
@@ -58,7 +64,6 @@ export default function AdminDashboard({
             }
         }
 
-        // B. RETARDS LIVRAISON
         if (p.estimatedDeliveryPhoto && new Date(p.estimatedDeliveryPhoto).getTime() < now && p.statusPhoto !== 'delivered' && p.statusPhoto !== 'none') {
             notifs.push({ id: `late-p-${p.id}`, type: 'late', level: 'critical', project: p, text: `Retard Photo : ${p.clientNames}`, date: p.estimatedDeliveryPhoto });
         }
@@ -66,7 +71,6 @@ export default function AdminDashboard({
             notifs.push({ id: `late-v-${p.id}`, type: 'late', level: 'critical', project: p, text: `Retard Vidéo : ${p.clientNames}`, date: p.estimatedDeliveryVideo });
         }
 
-        // C. DÉMARRAGE REQUIS (Mariage passé > 15j et statut toujours "Waiting")
         const weddingTime = new Date(p.weddingDate).getTime();
         const daysSinceWedding = (now - weddingTime) / (1000 * 60 * 60 * 24);
         if (daysSinceWedding > 15 && (p.statusPhoto === 'waiting' || p.statusVideo === 'waiting')) {
@@ -74,7 +78,6 @@ export default function AdminDashboard({
         }
     });
 
-    // Tri par urgence (Critical > High > Medium) puis par date
     return notifs.sort((a, b) => {
         const levels = { critical: 3, high: 2, medium: 1 };
         if ((levels[a.level as keyof typeof levels] || 0) !== (levels[b.level as keyof typeof levels] || 0)) {
@@ -129,7 +132,7 @@ export default function AdminDashboard({
     return (
       <div className="min-h-screen bg-stone-100">
         <div className="max-w-7xl mx-auto p-4">
-          <button onClick={() => setSelectedProject(null)} className="mb-4 text-sm font-bold text-stone-500 hover:text-stone-800 flex items-center gap-2">← Retour au tableau de bord</button>
+          <button onClick={() => setSelectedProjectId(null)} className="mb-4 text-sm font-bold text-stone-500 hover:text-stone-800 flex items-center gap-2">← Retour au tableau de bord</button>
           <ProjectEditor project={selectedProject} isSuperAdmin={!!isSuperAdmin} staffList={staffList} staffDirectory={staffDirectory} user={user} />
         </div>
       </div>
@@ -152,70 +155,34 @@ export default function AdminDashboard({
           </div>
           
           <div className="flex items-center gap-3">
-              {/* BOUTON NOTIFICATION AVEC BADGE */}
               <div className="relative">
-                  <button 
-                    onClick={() => setShowNotifications(!showNotifications)} 
-                    className={`p-3 rounded-xl transition shadow-sm ${showNotifications ? 'bg-stone-800 text-white' : 'bg-white text-stone-600 hover:bg-stone-50'}`}
-                  >
+                  <button onClick={() => setShowNotifications(!showNotifications)} className={`p-3 rounded-xl transition shadow-sm ${showNotifications ? 'bg-stone-800 text-white' : 'bg-white text-stone-600 hover:bg-stone-50'}`}>
                       <Bell className="w-5 h-5"/>
-                      {notifications.length > 0 && (
-                          <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white text-[10px] font-bold flex items-center justify-center rounded-full shadow-md animate-pulse">
-                              {notifications.length}
-                          </span>
-                      )}
+                      {notifications.length > 0 && (<span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white text-[10px] font-bold flex items-center justify-center rounded-full shadow-md animate-pulse">{notifications.length}</span>)}
                   </button>
-
-                  {/* PANNEAU DÉROULANT NOTIFICATIONS */}
                   {showNotifications && (
                       <div className="absolute right-0 mt-2 w-80 bg-white rounded-xl shadow-2xl border border-stone-100 z-50 overflow-hidden animate-fade-in">
-                          <div className="p-3 border-b border-stone-100 bg-stone-50 font-bold text-stone-700 text-sm flex justify-between items-center">
-                              <span>À traiter ({notifications.length})</span>
-                              <button onClick={()=>setShowNotifications(false)} className="text-xs text-stone-400 hover:text-stone-600">Fermer</button>
-                          </div>
+                          <div className="p-3 border-b border-stone-100 bg-stone-50 font-bold text-stone-700 text-sm flex justify-between items-center"><span>À traiter ({notifications.length})</span><button onClick={()=>setShowNotifications(false)} className="text-xs text-stone-400 hover:text-stone-600">Fermer</button></div>
                           <div className="max-h-[300px] overflow-y-auto">
-                              {notifications.length === 0 ? (
-                                  <div className="p-6 text-center text-stone-400 text-xs italic">Aucune alerte. Tout est à jour ! 🎉</div>
-                              ) : (
-                                  notifications.map(notif => (
-                                      <div 
-                                        key={notif.id} 
-                                        onClick={() => { setSelectedProject(notif.project); setShowNotifications(false); }}
-                                        className="p-3 border-b border-stone-50 hover:bg-amber-50 cursor-pointer transition flex items-start gap-3"
-                                      >
-                                          <div className={`mt-1 p-1.5 rounded-full shrink-0 ${
-                                              notif.type === 'late' ? 'bg-red-100 text-red-600' : 
-                                              notif.type === 'message' ? 'bg-blue-100 text-blue-600' : 
-                                              'bg-orange-100 text-orange-600'
-                                          }`}>
-                                              {notif.type === 'late' && <AlertCircle className="w-3 h-3"/>}
-                                              {notif.type === 'message' && <MessageSquare className="w-3 h-3"/>}
-                                              {notif.type === 'start' && <Clock className="w-3 h-3"/>}
-                                          </div>
-                                          <div>
-                                              <div className="text-sm font-bold text-stone-800">{notif.text}</div>
-                                              <div className="text-xs text-stone-400 mt-0.5">
-                                                  {notif.type === 'message' ? 'Nouveau message' : new Date(notif.date).toLocaleDateString()}
-                                              </div>
-                                          </div>
+                              {notifications.length === 0 ? <div className="p-6 text-center text-stone-400 text-xs italic">Aucune alerte. Tout est à jour ! 🎉</div> : notifications.map(notif => (
+                                  <div key={notif.id} onClick={() => { setSelectedProjectId(notif.project.id); setShowNotifications(false); }} className="p-3 border-b border-stone-50 hover:bg-amber-50 cursor-pointer transition flex items-start gap-3">
+                                      <div className={`mt-1 p-1.5 rounded-full shrink-0 ${notif.type === 'late' ? 'bg-red-100 text-red-600' : notif.type === 'message' ? 'bg-blue-100 text-blue-600' : 'bg-orange-100 text-orange-600'}`}>
+                                          {notif.type === 'late' && <AlertCircle className="w-3 h-3"/>}{notif.type === 'message' && <MessageSquare className="w-3 h-3"/>}{notif.type === 'start' && <Clock className="w-3 h-3"/>}
                                       </div>
-                                  ))
-                              )}
+                                      <div><div className="text-sm font-bold text-stone-800">{notif.text}</div><div className="text-xs text-stone-400 mt-0.5">{notif.type === 'message' ? 'Nouveau message' : new Date(notif.date).toLocaleDateString()}</div></div>
+                                  </div>
+                              ))}
                           </div>
                       </div>
                   )}
               </div>
-
               <button onClick={() => setIsAdding(true)} className="bg-stone-900 text-white px-6 py-3 rounded-xl font-bold flex items-center gap-2 hover:bg-black transition shadow-lg"><Plus className="w-5 h-5"/> Nouveau Dossier</button>
           </div>
         </div>
 
-        {/* RESTE DU DASHBOARD (Barre recherche + Liste) */}
+        {/* RESTE DU DASHBOARD (Listes et Modales identiques) */}
         <div className="bg-white p-4 rounded-2xl shadow-sm border border-stone-200 mb-6 flex flex-col md:flex-row gap-4">
-          <div className="flex-1 relative">
-            <Search className="absolute left-3 top-3.5 text-stone-400 w-5 h-5"/>
-            <input type="text" placeholder="Rechercher un client, un code..." className="w-full pl-10 p-3 bg-stone-50 rounded-xl border-none focus:ring-2 focus:ring-stone-200 outline-none" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
-          </div>
+          <div className="flex-1 relative"><Search className="absolute left-3 top-3.5 text-stone-400 w-5 h-5"/><input type="text" placeholder="Rechercher un client, un code..." className="w-full pl-10 p-3 bg-stone-50 rounded-xl border-none focus:ring-2 focus:ring-stone-200 outline-none" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} /></div>
           <div className="flex items-center gap-2 overflow-x-auto pb-2 md:pb-0">
             <button onClick={() => setStatusFilter('all')} className={`px-4 py-2 rounded-lg text-sm font-bold whitespace-nowrap ${statusFilter === 'all' ? 'bg-stone-900 text-white' : 'bg-stone-100 text-stone-500'}`}>Tous</button>
             <button onClick={() => setStatusFilter('active')} className={`px-4 py-2 rounded-lg text-sm font-bold whitespace-nowrap ${statusFilter === 'active' ? 'bg-stone-900 text-white' : 'bg-stone-100 text-stone-500'}`}>En cours</button>
@@ -223,7 +190,6 @@ export default function AdminDashboard({
           </div>
         </div>
 
-        {/* MODALE TEAM */}
         {isManagingTeam && (
           <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
             <div className="bg-white p-8 rounded-2xl shadow-2xl max-w-md w-full animate-fade-in">
@@ -246,7 +212,6 @@ export default function AdminDashboard({
           </div>
         )}
 
-        {/* MODALE AJOUT PROJET */}
         {isAdding && (
           <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
             <div className="bg-white p-8 rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto animate-fade-in">
@@ -301,7 +266,7 @@ export default function AdminDashboard({
             }
 
             return (
-                <div key={project.id} onClick={() => setSelectedProject(project)} className={`relative rounded-xl shadow-sm border border-stone-200 p-5 hover:shadow-md transition-all cursor-pointer group ${borderClass} ${bgClass}`}>
+                <div key={project.id} onClick={() => setSelectedProjectId(project.id)} className={`relative rounded-xl shadow-sm border border-stone-200 p-5 hover:shadow-md transition-all cursor-pointer group ${borderClass} ${bgClass}`}>
                     <div className="flex justify-between items-start mb-3">
                         <div>
                             <h3 className="font-bold text-lg text-stone-900 group-hover:text-stone-700">{project.clientNames}</h3>

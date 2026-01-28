@@ -1,6 +1,6 @@
 'use client';
 import React, { useState, useEffect, useRef } from 'react';
-import { Send, ShieldAlert, Loader2, Users, Check, UserCheck } from 'lucide-react';
+import { Send, ShieldAlert, Loader2, Users, Check } from 'lucide-react';
 import { doc, updateDoc, arrayUnion } from 'firebase/firestore';
 import { db, appId } from '../lib/firebase';
 import { MAKE_WEBHOOK_URL, COLLECTION_NAME, Project, InternalMessage } from '../lib/config';
@@ -11,7 +11,7 @@ export default function TeamChat({ project, user }: { project: Project, user: an
   const [localMessages, setLocalMessages] = useState<InternalMessage[]>(project.internalChat || []);
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  // État pour gérer les destinataires sélectionnés
+  // État pour gérer les destinataires sélectionnés (Tout coché par défaut)
   const [recipients, setRecipients] = useState({
     manager: true,
     photographer: true,
@@ -43,12 +43,6 @@ export default function TeamChat({ project, user }: { project: Project, user: an
     let role = 'Équipe';
     if (user.email?.includes('irzzen')) role = 'Admin';
 
-    // On prépare la liste des gens notifiés pour l'historique (visuel seulement)
-    const notifiedRoles = [];
-    if (recipients.manager && project.managerEmail) notifiedRoles.push('Manager');
-    if (recipients.photographer && project.photographerEmail) notifiedRoles.push('Photo');
-    if (recipients.videographer && project.videographerEmail) notifiedRoles.push('Vidéo');
-
     const msg: InternalMessage = {
         id: Date.now().toString(),
         author: userName,
@@ -66,27 +60,35 @@ export default function TeamChat({ project, user }: { project: Project, user: an
             internalChat: arrayUnion(msg)
         });
 
-        // LOGIQUE CIBLÉE : On envoie l'email SEULEMENT si la case est cochée
-        const payload = {
-            type: 'internal_chat',
-            projectCode: project.code,
-            clientNames: project.clientNames,
-            author: userName,
-            senderEmail: userEmail,
-            text: msgText,
-            // Si la case est cochée ET qu'il y a un email -> on l'envoie. Sinon null.
-            managerEmail: (recipients.manager && project.managerEmail) ? project.managerEmail : null,
-            photographerEmail: (recipients.photographer && project.photographerEmail) ? project.photographerEmail : null,
-            videographerEmail: (recipients.videographer && project.videographerEmail) ? project.videographerEmail : null
-        };
+        // --- INTELLIGENCE D'ENVOI ---
+        // 1. On crée une liste propre des emails (on retire les vides et les non-sélectionnés)
+        const activeEmails = [];
+        
+        if (recipients.manager && project.managerEmail) activeEmails.push(project.managerEmail);
+        if (recipients.photographer && project.photographerEmail) activeEmails.push(project.photographerEmail);
+        if (recipients.videographer && project.videographerEmail) activeEmails.push(project.videographerEmail);
 
-        // On n'appelle le webhook que s'il y a au moins un destinataire
-        if (payload.managerEmail || payload.photographerEmail || payload.videographerEmail) {
+        // 2. On transforme le tableau en une chaîne : "email1@test.com, email2@test.com"
+        const emailListString = activeEmails.join(', ');
+
+        // 3. SÉCURITÉ : On n'appelle le webhook que s'il y a au moins un destinataire valide
+        if (activeEmails.length > 0) {
             fetch(MAKE_WEBHOOK_URL, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload)
+                body: JSON.stringify({
+                    type: 'internal_chat',
+                    projectCode: project.code,
+                    clientNames: project.clientNames,
+                    author: userName,
+                    senderEmail: userEmail,
+                    text: msgText,
+                    // 👇 C'EST ICI LA MAGIE : On envoie une seule chaîne propre
+                    emailTarget: emailListString 
+                })
             }).catch(err => console.error("Erreur Webhook Chat", err));
+        } else {
+            console.log("Aucun destinataire email valide sélectionné, pas d'envoi Make.");
         }
 
     } catch (error) {
@@ -135,7 +137,7 @@ export default function TeamChat({ project, user }: { project: Project, user: an
         <div className="px-3 py-2 bg-amber-50 border-t border-amber-100 flex flex-wrap gap-2 text-xs">
             <span className="flex items-center gap-1 text-amber-800 font-bold mr-2"><Users className="w-3 h-3"/> Notifier :</span>
             
-            {project.managerEmail && (
+            {project.managerEmail ? (
                 <button 
                     type="button"
                     onClick={() => toggleRecipient('manager')}
@@ -143,9 +145,9 @@ export default function TeamChat({ project, user }: { project: Project, user: an
                 >
                     {recipients.manager && <Check className="w-3 h-3"/>} Manager
                 </button>
-            )}
+            ) : null}
             
-            {project.photographerEmail && (
+            {project.photographerEmail ? (
                 <button 
                     type="button"
                     onClick={() => toggleRecipient('photographer')}
@@ -153,9 +155,9 @@ export default function TeamChat({ project, user }: { project: Project, user: an
                 >
                     {recipients.photographer && <Check className="w-3 h-3"/>} Photo ({project.photographerName})
                 </button>
-            )}
+            ) : null}
 
-            {project.videographerEmail && (
+            {project.videographerEmail ? (
                 <button 
                     type="button"
                     onClick={() => toggleRecipient('videographer')}
@@ -163,6 +165,10 @@ export default function TeamChat({ project, user }: { project: Project, user: an
                 >
                     {recipients.videographer && <Check className="w-3 h-3"/>} Vidéo ({project.videographerName})
                 </button>
+            ) : null}
+            
+            {!project.managerEmail && !project.photographerEmail && !project.videographerEmail && (
+                <span className="text-amber-400 italic">Aucun membre assigné avec email.</span>
             )}
         </div>
 
