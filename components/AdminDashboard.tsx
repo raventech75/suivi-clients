@@ -3,7 +3,7 @@ import React, { useState, useMemo } from 'react';
 import { 
   Plus, Search, Calendar, MapPin, Users, LogOut, BarChart3, 
   Settings, Trash2, Save, AlertCircle, Clock, CheckCircle2, 
-  Rocket, Bell, MessageSquare, AlertTriangle 
+  Rocket, Bell, MessageSquare, AlertTriangle, ArrowUpDown, Filter
 } from 'lucide-react';
 import { collection, addDoc, serverTimestamp, setDoc, doc } from 'firebase/firestore'; 
 import { db, appId } from '../lib/firebase';
@@ -16,12 +16,11 @@ export default function AdminDashboard({
     projects: Project[], staffList: string[], staffDirectory: Record<string, string>, user: any, onLogout: () => void, onStats: () => void, setStaffList?: any 
 }) {
   const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState('all');
+  const [statusFilter, setStatusFilter] = useState('active'); // Par défaut on cache les archivés
+  const [sortMode, setSortMode] = useState<'priority' | 'date'>('priority'); // Nouveau state de tri
   
-  // 👇 MODIFICATION MAJEURE ICI : On stocke l'ID, pas l'objet entier
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
   
-  // On retrouve le projet à jour depuis la liste 'projects' (qui est en temps réel)
   const selectedProject = useMemo(() => 
     projects.find(p => p.id === selectedProjectId) || null
   , [projects, selectedProjectId]);
@@ -41,6 +40,76 @@ export default function AdminDashboard({
   });
 
   const isSuperAdmin = user?.email && (user.email.includes('irzzen') || user.email === 'admin@raventech.com');
+
+  // --- HELPER STATUS ---
+  const getProjectStatus = (p: Project) => {
+      const now = Date.now();
+      const wedDate = new Date(p.weddingDate).getTime();
+      // Un projet est considéré livré SI (Photo est livré OU pas de presta) ET (Vidéo est livrée OU pas de presta)
+      const photoDone = p.statusPhoto === 'delivered' || p.statusPhoto === 'none';
+      const videoDone = p.statusVideo === 'delivered' || p.statusVideo === 'none';
+      const isDelivered = photoDone && videoDone;
+
+      // Retard : Si date estimée passée OU si mariage + 60 jours sans livraison
+      const isLatePhoto = p.estimatedDeliveryPhoto && new Date(p.estimatedDeliveryPhoto).getTime() < now && !photoDone;
+      const isLateVideo = p.estimatedDeliveryVideo && new Date(p.estimatedDeliveryVideo).getTime() < now && !videoDone;
+      const isLateGeneral = !isDelivered && (now > wedDate + (60 * 24 * 3600 * 1000));
+      const isLate = isLatePhoto || isLateVideo || isLateGeneral;
+
+      const isUrgent = !isDelivered && !isLate && (now > wedDate + (30 * 24 * 3600 * 1000)); // Urgent après 30 jours
+      
+      return { isDelivered, isLate, isUrgent };
+  };
+
+  // --- TRI INTELLIGENT (LE CERVEAU 🧠) ---
+  const processedProjects = useMemo(() => {
+    // 1. D'abord on filtre (Recherche + Statut)
+    let filtered = projects.filter(p => {
+        const matchesSearch = p.clientNames.toLowerCase().includes(searchTerm.toLowerCase()) || p.code.toLowerCase().includes(searchTerm.toLowerCase());
+        
+        if (statusFilter === 'archived') return matchesSearch && p.isArchived;
+        if (statusFilter === 'active') return matchesSearch && !p.isArchived && !getProjectStatus(p).isDelivered; // Active = Non livré
+        if (statusFilter === 'delivered') return matchesSearch && !p.isArchived && getProjectStatus(p).isDelivered; // Livrés mais pas archivés
+        if (statusFilter === 'all') return matchesSearch && !p.isArchived; // Tout sauf archivés
+        
+        return matchesSearch;
+    });
+
+    // 2. Ensuite on trie
+    return filtered.sort((a, b) => {
+        if (sortMode === 'date') {
+            // Tri simple par date de mariage (Le plus récent en haut)
+            return new Date(b.weddingDate).getTime() - new Date(a.weddingDate).getTime();
+        } else {
+            // --- TRI PRIORITÉ STUDIO ---
+            const statusA = getProjectStatus(a);
+            const statusB = getProjectStatus(b);
+
+            // Calcul du Score de priorité (Plus le score est haut, plus c'est urgent)
+            const getScore = (p: Project, s: any) => {
+                let score = 0;
+                if (p.isPriority) score += 10000; // FAST TRACK = Priorité Maximale
+                if (s.isLate) score += 5000;      // RETARD = Priorité Critique
+                if (s.isUrgent) score += 1000;    // URGENT = Priorité Haute
+                // Bonus pour les messages non lus (optionnel, on garde simple pour l'instant)
+                return score;
+            };
+
+            const scoreA = getScore(a, statusA);
+            const scoreB = getScore(b, statusB);
+
+            if (scoreA !== scoreB) {
+                return scoreB - scoreA; // Le plus gros score en premier
+            }
+
+            // SI SCORES ÉGAUX (ex: deux dossiers normaux)
+            // On veut le mariage LE PLUS VIEUX en premier (FIFO - First In First Out)
+            // Car c'est celui qui attend depuis le plus longtemps
+            return new Date(a.weddingDate).getTime() - new Date(b.weddingDate).getTime();
+        }
+    });
+  }, [projects, searchTerm, statusFilter, sortMode]);
+
 
   // --- NOTIFICATIONS ---
   const notifications = useMemo(() => {
@@ -63,37 +132,16 @@ export default function AdminDashboard({
                 });
             }
         }
-
-        if (p.estimatedDeliveryPhoto && new Date(p.estimatedDeliveryPhoto).getTime() < now && p.statusPhoto !== 'delivered' && p.statusPhoto !== 'none') {
-            notifs.push({ id: `late-p-${p.id}`, type: 'late', level: 'critical', project: p, text: `Retard Photo : ${p.clientNames}`, date: p.estimatedDeliveryPhoto });
-        }
-        if (p.estimatedDeliveryVideo && new Date(p.estimatedDeliveryVideo).getTime() < now && p.statusVideo !== 'delivered' && p.statusVideo !== 'none') {
-            notifs.push({ id: `late-v-${p.id}`, type: 'late', level: 'critical', project: p, text: `Retard Vidéo : ${p.clientNames}`, date: p.estimatedDeliveryVideo });
-        }
-
-        const weddingTime = new Date(p.weddingDate).getTime();
-        const daysSinceWedding = (now - weddingTime) / (1000 * 60 * 60 * 24);
-        if (daysSinceWedding > 15 && (p.statusPhoto === 'waiting' || p.statusVideo === 'waiting')) {
-            notifs.push({ id: `start-${p.id}`, type: 'start', level: 'medium', project: p, text: `Dossier à démarrer : ${p.clientNames}`, date: new Date().toISOString() });
+        
+        const { isLate } = getProjectStatus(p);
+        if (isLate) {
+             notifs.push({ id: `late-${p.id}`, type: 'late', level: 'critical', project: p, text: `Retard : ${p.clientNames}`, date: new Date().toISOString() });
         }
     });
 
-    return notifs.sort((a, b) => {
-        const levels = { critical: 3, high: 2, medium: 1 };
-        if ((levels[a.level as keyof typeof levels] || 0) !== (levels[b.level as keyof typeof levels] || 0)) {
-            return (levels[b.level as keyof typeof levels] || 0) - (levels[a.level as keyof typeof levels] || 0);
-        }
-        return new Date(b.date).getTime() - new Date(a.date).getTime();
-    });
+    return notifs.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
   }, [projects]);
 
-  const filteredProjects = projects.filter(p => {
-    const matchesSearch = p.clientNames.toLowerCase().includes(searchTerm.toLowerCase()) || p.code.toLowerCase().includes(searchTerm.toLowerCase());
-    if (statusFilter === 'all') return matchesSearch;
-    if (statusFilter === 'archived') return matchesSearch && p.isArchived;
-    if (statusFilter === 'active') return matchesSearch && !p.isArchived;
-    return matchesSearch;
-  });
 
   const addStaffMember = async () => {
       if(!newStaffName || !newStaffEmail) return alert("Nom et Email requis");
@@ -119,15 +167,6 @@ export default function AdminDashboard({
       setNewProject({ clientNames: '', clientEmail: '', clientEmail2: '', clientPhone: '', clientPhone2: '', weddingDate: '', weddingVenue: '', weddingVenueZip: '', photographerName: '', videographerName: '', managerName: '', managerEmail: '', hasPhoto: true, hasVideo: true });
   };
 
-  const getProjectStatus = (p: Project) => {
-      const now = Date.now();
-      const wedDate = new Date(p.weddingDate).getTime();
-      const isDelivered = (p.statusPhoto === 'delivered' || p.statusPhoto === 'none') && (p.statusVideo === 'delivered' || p.statusVideo === 'none');
-      const isLate = !isDelivered && (now > wedDate + (60 * 24 * 3600 * 1000));
-      const isUrgent = !isDelivered && !isLate && (now > wedDate + (15 * 24 * 3600 * 1000));
-      return { isDelivered, isLate, isUrgent };
-  };
-
   if (selectedProject) {
     return (
       <div className="min-h-screen bg-stone-100">
@@ -145,16 +184,17 @@ export default function AdminDashboard({
         {/* HEADER */}
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
           <div>
-            <h1 className="text-3xl font-serif font-bold text-stone-800">Tableau de Bord</h1>
+            <h1 className="text-3xl font-serif font-bold text-stone-800">Studio Dashboard</h1>
             <div className="flex gap-4 items-center mt-2 text-sm text-stone-500">
-                <span className="bg-stone-200 px-2 py-0.5 rounded text-stone-600 font-bold">{projects.length} dossiers</span>
+                <span className="bg-stone-200 px-2 py-0.5 rounded text-stone-600 font-bold">{processedProjects.length} dossiers affichés</span>
                 <button onClick={onStats} className="flex items-center gap-1 hover:text-stone-900 transition"><BarChart3 className="w-4 h-4"/> Statistiques</button>
-                <button onClick={() => setIsManagingTeam(true)} className="flex items-center gap-1 hover:text-stone-900 transition text-amber-600 font-bold"><Settings className="w-4 h-4"/> Gérer l'équipe</button>
-                <button onClick={onLogout} className="flex items-center gap-1 text-red-400 hover:text-red-600 transition"><LogOut className="w-4 h-4"/> Déconnexion</button>
+                <button onClick={() => setIsManagingTeam(true)} className="flex items-center gap-1 hover:text-stone-900 transition text-amber-600 font-bold"><Settings className="w-4 h-4"/> Équipe</button>
+                <button onClick={onLogout} className="flex items-center gap-1 text-red-400 hover:text-red-600 transition"><LogOut className="w-4 h-4"/> Quitter</button>
             </div>
           </div>
           
           <div className="flex items-center gap-3">
+              {/* NOTIFICATIONS */}
               <div className="relative">
                   <button onClick={() => setShowNotifications(!showNotifications)} className={`p-3 rounded-xl transition shadow-sm ${showNotifications ? 'bg-stone-800 text-white' : 'bg-white text-stone-600 hover:bg-stone-50'}`}>
                       <Bell className="w-5 h-5"/>
@@ -166,10 +206,10 @@ export default function AdminDashboard({
                           <div className="max-h-[300px] overflow-y-auto">
                               {notifications.length === 0 ? <div className="p-6 text-center text-stone-400 text-xs italic">Aucune alerte. Tout est à jour ! 🎉</div> : notifications.map(notif => (
                                   <div key={notif.id} onClick={() => { setSelectedProjectId(notif.project.id); setShowNotifications(false); }} className="p-3 border-b border-stone-50 hover:bg-amber-50 cursor-pointer transition flex items-start gap-3">
-                                      <div className={`mt-1 p-1.5 rounded-full shrink-0 ${notif.type === 'late' ? 'bg-red-100 text-red-600' : notif.type === 'message' ? 'bg-blue-100 text-blue-600' : 'bg-orange-100 text-orange-600'}`}>
-                                          {notif.type === 'late' && <AlertCircle className="w-3 h-3"/>}{notif.type === 'message' && <MessageSquare className="w-3 h-3"/>}{notif.type === 'start' && <Clock className="w-3 h-3"/>}
+                                      <div className={`mt-1 p-1.5 rounded-full shrink-0 ${notif.type === 'late' ? 'bg-red-100 text-red-600' : 'bg-blue-100 text-blue-600'}`}>
+                                          {notif.type === 'late' ? <AlertCircle className="w-3 h-3"/> : <MessageSquare className="w-3 h-3"/>}
                                       </div>
-                                      <div><div className="text-sm font-bold text-stone-800">{notif.text}</div><div className="text-xs text-stone-400 mt-0.5">{notif.type === 'message' ? 'Nouveau message' : new Date(notif.date).toLocaleDateString()}</div></div>
+                                      <div><div className="text-sm font-bold text-stone-800">{notif.text}</div><div className="text-xs text-stone-400 mt-0.5">{new Date(notif.date).toLocaleDateString()}</div></div>
                                   </div>
                               ))}
                           </div>
@@ -180,16 +220,39 @@ export default function AdminDashboard({
           </div>
         </div>
 
-        {/* RESTE DU DASHBOARD (Listes et Modales identiques) */}
-        <div className="bg-white p-4 rounded-2xl shadow-sm border border-stone-200 mb-6 flex flex-col md:flex-row gap-4">
-          <div className="flex-1 relative"><Search className="absolute left-3 top-3.5 text-stone-400 w-5 h-5"/><input type="text" placeholder="Rechercher un client, un code..." className="w-full pl-10 p-3 bg-stone-50 rounded-xl border-none focus:ring-2 focus:ring-stone-200 outline-none" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} /></div>
-          <div className="flex items-center gap-2 overflow-x-auto pb-2 md:pb-0">
-            <button onClick={() => setStatusFilter('all')} className={`px-4 py-2 rounded-lg text-sm font-bold whitespace-nowrap ${statusFilter === 'all' ? 'bg-stone-900 text-white' : 'bg-stone-100 text-stone-500'}`}>Tous</button>
-            <button onClick={() => setStatusFilter('active')} className={`px-4 py-2 rounded-lg text-sm font-bold whitespace-nowrap ${statusFilter === 'active' ? 'bg-stone-900 text-white' : 'bg-stone-100 text-stone-500'}`}>En cours</button>
-            <button onClick={() => setStatusFilter('archived')} className={`px-4 py-2 rounded-lg text-sm font-bold whitespace-nowrap ${statusFilter === 'archived' ? 'bg-stone-900 text-white' : 'bg-stone-100 text-stone-500'}`}>Archivés</button>
+        {/* BARRE D'OUTILS DE TRI ET FILTRE */}
+        <div className="bg-white p-4 rounded-2xl shadow-sm border border-stone-200 mb-6 flex flex-col lg:flex-row gap-4 justify-between items-center">
+          
+          {/* Recherche */}
+          <div className="relative w-full lg:w-96">
+            <Search className="absolute left-3 top-3.5 text-stone-400 w-5 h-5"/>
+            <input type="text" placeholder="Rechercher client, code..." className="w-full pl-10 p-3 bg-stone-50 rounded-xl border-none focus:ring-2 focus:ring-stone-200 outline-none transition-all" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
+          </div>
+
+          <div className="flex flex-wrap items-center gap-3 w-full lg:w-auto justify-end">
+             {/* Switch de Tri */}
+             <div className="flex bg-stone-100 p-1 rounded-lg">
+                <button onClick={() => setSortMode('priority')} className={`flex items-center gap-2 px-4 py-2 rounded-md text-xs font-bold transition-all ${sortMode === 'priority' ? 'bg-white text-stone-900 shadow-sm' : 'text-stone-500 hover:text-stone-700'}`}>
+                    <Rocket className="w-3 h-3"/> Priorité Studio
+                </button>
+                <button onClick={() => setSortMode('date')} className={`flex items-center gap-2 px-4 py-2 rounded-md text-xs font-bold transition-all ${sortMode === 'date' ? 'bg-white text-stone-900 shadow-sm' : 'text-stone-500 hover:text-stone-700'}`}>
+                    <ArrowUpDown className="w-3 h-3"/> Par Date
+                </button>
+             </div>
+
+             <div className="h-6 w-px bg-stone-300 mx-2 hidden md:block"></div>
+
+             {/* Filtres Statut */}
+             <div className="flex gap-2 overflow-x-auto pb-1 md:pb-0">
+                <button onClick={() => setStatusFilter('active')} className={`px-4 py-2 rounded-lg text-xs font-bold whitespace-nowrap border transition-all ${statusFilter === 'active' ? 'bg-stone-800 text-white border-stone-800' : 'bg-white text-stone-500 border-stone-200 hover:bg-stone-50'}`}>En cours</button>
+                <button onClick={() => setStatusFilter('delivered')} className={`px-4 py-2 rounded-lg text-xs font-bold whitespace-nowrap border transition-all ${statusFilter === 'delivered' ? 'bg-stone-800 text-white border-stone-800' : 'bg-white text-stone-500 border-stone-200 hover:bg-stone-50'}`}>Livrés</button>
+                <button onClick={() => setStatusFilter('all')} className={`px-4 py-2 rounded-lg text-xs font-bold whitespace-nowrap border transition-all ${statusFilter === 'all' ? 'bg-stone-800 text-white border-stone-800' : 'bg-white text-stone-500 border-stone-200 hover:bg-stone-50'}`}>Tous</button>
+                <button onClick={() => setStatusFilter('archived')} className={`px-4 py-2 rounded-lg text-xs font-bold whitespace-nowrap border transition-all ${statusFilter === 'archived' ? 'bg-stone-800 text-white border-stone-800' : 'bg-white text-stone-500 border-stone-200 hover:bg-stone-50'}`}>Archivés</button>
+             </div>
           </div>
         </div>
 
+        {/* MODALES GESTION EQUIPE & AJOUT (Inchangées) */}
         {isManagingTeam && (
           <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
             <div className="bg-white p-8 rounded-2xl shadow-2xl max-w-md w-full animate-fade-in">
@@ -239,65 +302,78 @@ export default function AdminDashboard({
           </div>
         )}
 
-        <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {filteredProjects.map(project => {
-            const { isDelivered, isLate, isUrgent } = getProjectStatus(project);
-            let borderClass = 'border-l-4 border-l-blue-500';
-            let bgClass = 'bg-white';
-            let badge = null;
+        {/* GRILLE DES PROJETS TRIÉS */}
+        {processedProjects.length === 0 ? (
+            <div className="text-center py-20 bg-white rounded-2xl border border-stone-200 shadow-sm border-dashed">
+                <div className="text-stone-300 mb-4"><Search className="w-12 h-12 mx-auto"/></div>
+                <h3 className="text-xl font-bold text-stone-800 mb-2">Aucun dossier trouvé</h3>
+                <p className="text-stone-500">Essayez de changer les filtres ou la recherche.</p>
+            </div>
+        ) : (
+            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {processedProjects.map(project => {
+                const { isDelivered, isLate, isUrgent } = getProjectStatus(project);
+                let borderClass = 'border-l-4 border-l-blue-500';
+                let bgClass = 'bg-white';
+                let badge = null;
 
-            if (project.isArchived) {
-                borderClass = 'border-l-4 border-l-stone-300';
-                bgClass = 'bg-stone-50 opacity-70 grayscale';
-            } else if (isDelivered) {
-                borderClass = 'border-l-4 border-l-emerald-500';
-                badge = <span className="bg-emerald-100 text-emerald-700 text-[10px] font-bold px-2 py-0.5 rounded flex items-center gap-1"><CheckCircle2 className="w-3 h-3"/> LIVRÉ</span>;
-            } else if (isLate) {
-                borderClass = 'border-l-4 border-l-red-500';
-                bgClass = 'bg-red-50/50';
-                badge = <span className="bg-red-100 text-red-700 text-[10px] font-bold px-2 py-0.5 rounded flex items-center gap-1"><AlertCircle className="w-3 h-3"/> RETARD</span>;
-            } else if (isUrgent || project.isPriority) {
-                borderClass = 'border-l-4 border-l-orange-500';
-                bgClass = 'bg-orange-50/50';
-                badge = <span className="bg-orange-100 text-orange-700 text-[10px] font-bold px-2 py-0.5 rounded flex items-center gap-1"><Clock className="w-3 h-3"/> URGENT</span>;
-            } else {
-                const daysDiff = Math.ceil((new Date(project.weddingDate).getTime() - Date.now()) / (1000 * 3600 * 24));
-                if (daysDiff > 0) badge = <span className="bg-blue-100 text-blue-700 text-[10px] font-bold px-2 py-0.5 rounded">J-{daysDiff}</span>;
-            }
+                if (project.isArchived) {
+                    borderClass = 'border-l-4 border-l-stone-300';
+                    bgClass = 'bg-stone-50 opacity-70 grayscale';
+                } else if (isDelivered) {
+                    borderClass = 'border-l-4 border-l-emerald-500';
+                    badge = <span className="bg-emerald-100 text-emerald-700 text-[10px] font-bold px-2 py-0.5 rounded flex items-center gap-1"><CheckCircle2 className="w-3 h-3"/> LIVRÉ</span>;
+                } else if (project.isPriority) {
+                    // FAST TRACK EN PREMIER
+                    borderClass = 'border-l-4 border-l-orange-500 ring-2 ring-orange-200';
+                    bgClass = 'bg-orange-50';
+                    badge = <span className="bg-orange-500 text-white text-[10px] font-bold px-2 py-0.5 rounded flex items-center gap-1"><Rocket className="w-3 h-3"/> FAST TRACK</span>;
+                } else if (isLate) {
+                    borderClass = 'border-l-4 border-l-red-500';
+                    bgClass = 'bg-red-50/50';
+                    badge = <span className="bg-red-100 text-red-700 text-[10px] font-bold px-2 py-0.5 rounded flex items-center gap-1"><AlertCircle className="w-3 h-3"/> RETARD</span>;
+                } else if (isUrgent) {
+                    borderClass = 'border-l-4 border-l-amber-400';
+                    bgClass = 'bg-amber-50/30';
+                    badge = <span className="bg-amber-100 text-amber-700 text-[10px] font-bold px-2 py-0.5 rounded flex items-center gap-1"><Clock className="w-3 h-3"/> URGENT</span>;
+                } else {
+                    const daysDiff = Math.ceil((new Date(project.weddingDate).getTime() - Date.now()) / (1000 * 3600 * 24));
+                    if (daysDiff > 0) badge = <span className="bg-blue-100 text-blue-700 text-[10px] font-bold px-2 py-0.5 rounded">J-{daysDiff}</span>;
+                }
 
-            return (
-                <div key={project.id} onClick={() => setSelectedProjectId(project.id)} className={`relative rounded-xl shadow-sm border border-stone-200 p-5 hover:shadow-md transition-all cursor-pointer group ${borderClass} ${bgClass}`}>
-                    <div className="flex justify-between items-start mb-3">
-                        <div>
-                            <h3 className="font-bold text-lg text-stone-900 group-hover:text-stone-700">{project.clientNames}</h3>
-                            <span className="text-[10px] font-mono text-stone-400">{project.code}</span>
+                return (
+                    <div key={project.id} onClick={() => setSelectedProjectId(project.id)} className={`relative rounded-xl shadow-sm border border-stone-200 p-5 hover:shadow-md transition-all cursor-pointer group ${borderClass} ${bgClass}`}>
+                        <div className="flex justify-between items-start mb-3">
+                            <div>
+                                <h3 className="font-bold text-lg text-stone-900 group-hover:text-stone-700">{project.clientNames}</h3>
+                                <span className="text-[10px] font-mono text-stone-400">{project.code}</span>
+                            </div>
+                            {badge}
                         </div>
-                        {badge}
-                        {project.isPriority && !isDelivered && !project.isArchived && <span className="absolute top-2 right-2 flex h-3 w-3"><span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-orange-400 opacity-75"></span><span className="relative inline-flex rounded-full h-3 w-3 bg-orange-500"></span></span>}
+                        <div className="flex flex-col gap-1 mb-4 text-xs text-stone-600">
+                            <div className="flex items-center gap-2"><Calendar className="w-3 h-3 text-stone-400"/> {new Date(project.weddingDate).toLocaleDateString()}</div>
+                            <div className="flex items-center gap-2"><MapPin className="w-3 h-3 text-stone-400"/> <span className="truncate max-w-[200px]">{project.weddingVenue || 'Lieu non défini'}</span></div>
+                            <div className="flex items-center gap-2"><Users className="w-3 h-3 text-stone-400"/> <span className="truncate max-w-[200px]">{project.photographerName || project.videographerName || 'Staff non assigné'}</span></div>
+                        </div>
+                        <div className="flex gap-2 pt-3 border-t border-stone-200/50">
+                            {project.statusPhoto !== 'none' && (
+                                <div className="flex-1">
+                                    <div className="flex justify-between text-[10px] mb-1 font-bold text-stone-500"><span>Photo</span><span>{project.progressPhoto}%</span></div>
+                                    <div className="h-1.5 bg-stone-200 rounded-full overflow-hidden"><div className={`h-full ${project.statusPhoto === 'delivered' ? 'bg-emerald-500' : 'bg-stone-500'}`} style={{width: `${project.progressPhoto}%`}}></div></div>
+                                </div>
+                            )}
+                            {project.statusVideo !== 'none' && (
+                                <div className="flex-1">
+                                    <div className="flex justify-between text-[10px] mb-1 font-bold text-stone-500"><span>Vidéo</span><span>{project.progressVideo}%</span></div>
+                                    <div className="h-1.5 bg-stone-200 rounded-full overflow-hidden"><div className={`h-full ${project.statusVideo === 'delivered' ? 'bg-emerald-500' : 'bg-blue-500'}`} style={{width: `${project.progressVideo}%`}}></div></div>
+                                </div>
+                            )}
+                        </div>
                     </div>
-                    <div className="flex flex-col gap-1 mb-4 text-xs text-stone-600">
-                        <div className="flex items-center gap-2"><Calendar className="w-3 h-3 text-stone-400"/> {new Date(project.weddingDate).toLocaleDateString()}</div>
-                        <div className="flex items-center gap-2"><MapPin className="w-3 h-3 text-stone-400"/> <span className="truncate max-w-[200px]">{project.weddingVenue || 'Lieu non défini'}</span></div>
-                        <div className="flex items-center gap-2"><Users className="w-3 h-3 text-stone-400"/> <span className="truncate max-w-[200px]">{project.photographerName || project.videographerName || 'Staff non assigné'}</span></div>
-                    </div>
-                    <div className="flex gap-2 pt-3 border-t border-stone-200/50">
-                        {project.statusPhoto !== 'none' && (
-                            <div className="flex-1">
-                                <div className="flex justify-between text-[10px] mb-1 font-bold text-stone-500"><span>Photo</span><span>{project.progressPhoto}%</span></div>
-                                <div className="h-1.5 bg-stone-200 rounded-full overflow-hidden"><div className={`h-full ${project.statusPhoto === 'delivered' ? 'bg-emerald-500' : 'bg-stone-500'}`} style={{width: `${project.progressPhoto}%`}}></div></div>
-                            </div>
-                        )}
-                        {project.statusVideo !== 'none' && (
-                            <div className="flex-1">
-                                <div className="flex justify-between text-[10px] mb-1 font-bold text-stone-500"><span>Vidéo</span><span>{project.progressVideo}%</span></div>
-                                <div className="h-1.5 bg-stone-200 rounded-full overflow-hidden"><div className={`h-full ${project.statusVideo === 'delivered' ? 'bg-emerald-500' : 'bg-blue-500'}`} style={{width: `${project.progressVideo}%`}}></div></div>
-                            </div>
-                        )}
-                    </div>
-                </div>
-            );
-          })}
-        </div>
+                );
+            })}
+            </div>
+        )}
       </div>
     </div>
   );
