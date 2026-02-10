@@ -135,14 +135,46 @@ export default function AdminDashboard({
       await setDoc(doc(db, "settings", "general"), { staffDirectory: updatedDirectory }, { merge: true });
   };
 
+  // 👇 FONCTION MODIFIÉE POUR REDIRECTION AUTOMATIQUE
   const createProject = async (e: any) => {
       e.preventDefault();
       if (!newProject.clientEmail || !newProject.clientEmail.includes('@')) return alert("⛔️ Email client obligatoire.");
+      
       const code = (newProject.clientNames.split(' ')[0] + '-' + Math.floor(Math.random()*1000)).toUpperCase();
       const colPath = typeof appId !== 'undefined' ? `artifacts/${appId}/public/data/${COLLECTION_NAME}` : COLLECTION_NAME;
-      await addDoc(collection(db, colPath), { ...newProject, code, statusPhoto: newProject.hasPhoto ? 'waiting' : 'none', statusVideo: newProject.hasVideo ? 'waiting' : 'none', progressPhoto: 0, progressVideo: 0, messages: [], albums: [], internalChat: [], inviteCount: 0, createdAt: serverTimestamp() });
-      setIsAdding(false);
-      setNewProject({ clientNames: '', clientEmail: '', clientEmail2: '', clientPhone: '', clientPhone2: '', weddingDate: '', weddingVenue: '', weddingVenueZip: '', photographerName: '', videographerName: '', managerName: '', managerEmail: '', hasPhoto: true, hasVideo: true });
+      
+      try {
+          // On attend la réponse de Firebase qui contient la référence du document créé
+          const docRef = await addDoc(collection(db, colPath), { 
+              ...newProject, 
+              code, 
+              statusPhoto: newProject.hasPhoto ? 'waiting' : 'none', 
+              statusVideo: newProject.hasVideo ? 'waiting' : 'none', 
+              progressPhoto: 0, 
+              progressVideo: 0, 
+              messages: [], 
+              albums: [], 
+              internalChat: [], 
+              inviteCount: 0, 
+              createdAt: serverTimestamp() 
+          });
+
+          // Réinitialisation
+          setIsAdding(false);
+          setNewProject({ 
+              clientNames: '', clientEmail: '', clientEmail2: '', clientPhone: '', clientPhone2: '', 
+              weddingDate: '', weddingVenue: '', weddingVenueZip: '', 
+              photographerName: '', videographerName: '', managerName: '', managerEmail: '', 
+              hasPhoto: true, hasVideo: true 
+          });
+
+          // 🚀 REDIRECTION IMMÉDIATE VERS L'ÉDITEUR DU NOUVEAU PROJET
+          setSelectedProjectId(docRef.id);
+
+      } catch (error) {
+          console.error("Erreur création:", error);
+          alert("Erreur lors de la création du dossier.");
+      }
   };
 
   if (selectedProject) {
@@ -220,7 +252,7 @@ export default function AdminDashboard({
           </div>
         </div>
 
-        {/* MODALES ET LISTES (Inchangées) */}
+        {/* MODALES (Inchangées) */}
         {isManagingTeam && ( <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"> <div className="bg-white p-8 rounded-2xl shadow-2xl max-w-md w-full animate-fade-in"> <h3 className="text-xl font-bold mb-4 flex items-center gap-2"><Users className="w-5 h-5"/> Gestion de l'équipe</h3> <div className="space-y-2 mb-6 max-h-[200px] overflow-y-auto bg-stone-50 p-2 rounded-lg"> {Object.entries(staffDirectory).map(([name, email]) => ( <div key={name} className="flex justify-between items-center bg-white p-2 rounded border border-stone-100 shadow-sm text-sm"> <div><div className="font-bold">{name}</div><div className="text-xs text-stone-400">{email}</div></div> <button onClick={() => removeStaffMember(name)} className="text-red-400 hover:text-red-600"><Trash2 className="w-4 h-4"/></button> </div> ))} </div> <div className="space-y-3 pt-4 border-t border-stone-100"> <input className="w-full p-2 border rounded text-sm" placeholder="Prénom" value={newStaffName} onChange={e => setNewStaffName(e.target.value)} /> <input className="w-full p-2 border rounded text-sm" placeholder="Email" value={newStaffEmail} onChange={e => setNewStaffEmail(e.target.value)} /> <button onClick={addStaffMember} className="w-full bg-stone-900 text-white py-2 rounded-lg font-bold text-sm hover:bg-black flex justify-center gap-2"><Save className="w-4 h-4"/> Enregistrer</button> </div> <button onClick={() => setIsManagingTeam(false)} className="w-full mt-4 text-stone-400 text-sm hover:text-stone-600">Fermer</button> </div> </div> )}
         {isAdding && ( <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"> <div className="bg-white p-8 rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto animate-fade-in"> <h2 className="text-2xl font-bold mb-6">Nouveau Dossier Mariage</h2> <form onSubmit={createProject} className="space-y-4"> <div className="grid md:grid-cols-2 gap-4"> <div><label className="text-xs font-bold text-stone-500">Noms des Mariés</label><input required className="w-full p-3 bg-stone-50 rounded-lg border border-stone-200" placeholder="Julie & Thomas" value={newProject.clientNames} onChange={e => setNewProject({...newProject, clientNames: e.target.value})} /></div> <div><label className="text-xs font-bold text-stone-500">Date du Mariage</label><input type="date" required className="w-full p-3 bg-stone-50 rounded-lg border border-stone-200" value={newProject.weddingDate} onChange={e => setNewProject({...newProject, weddingDate: e.target.value})} /></div> </div> <div><label className="text-xs font-bold text-stone-500">Email Client (Obligatoire)</label><input type="email" required className="w-full p-3 bg-stone-50 rounded-lg border border-stone-200" placeholder="client@email.com" value={newProject.clientEmail} onChange={e => setNewProject({...newProject, clientEmail: e.target.value})} /></div> <div className="grid md:grid-cols-2 gap-4"> <div><label className="text-xs font-bold text-stone-500">Lieu</label><input className="w-full p-3 bg-stone-50 rounded-lg border border-stone-200" placeholder="Domaine de..." value={newProject.weddingVenue} onChange={e => setNewProject({...newProject, weddingVenue: e.target.value})} /></div> <div><label className="text-xs font-bold text-stone-500">Téléphone</label><input className="w-full p-3 bg-stone-50 rounded-lg border border-stone-200" placeholder="06..." value={newProject.clientPhone} onChange={e => setNewProject({...newProject, clientPhone: e.target.value})} /></div> </div> <div className="flex gap-4 pt-2"> <label className="flex items-center gap-2 bg-stone-100 px-4 py-2 rounded-lg cursor-pointer"><input type="checkbox" checked={newProject.hasPhoto} onChange={e => setNewProject({...newProject, hasPhoto: e.target.checked})} /> <span className="font-bold">Prestation Photo</span></label> <label className="flex items-center gap-2 bg-stone-100 px-4 py-2 rounded-lg cursor-pointer"><input type="checkbox" checked={newProject.hasVideo} onChange={e => setNewProject({...newProject, hasVideo: e.target.checked})} /> <span className="font-bold">Prestation Vidéo</span></label> </div> <div className="flex gap-3 pt-6"> <button type="button" onClick={() => setIsAdding(false)} className="flex-1 py-3 text-stone-500 font-bold hover:bg-stone-100 rounded-xl">Annuler</button> <button type="submit" className="flex-1 py-3 bg-stone-900 text-white font-bold rounded-xl hover:bg-black">Créer le dossier</button> </div> </form> </div> </div> )}
 
@@ -228,7 +260,9 @@ export default function AdminDashboard({
             <div className="text-center py-20 bg-white rounded-2xl border border-stone-200 shadow-sm border-dashed">
                 <div className="text-stone-300 mb-4"><Search className="w-12 h-12 mx-auto"/></div>
                 <h3 className="text-xl font-bold text-stone-800 mb-2">Aucun dossier trouvé</h3>
-                <p className="text-stone-500">{statusFilter === 'mine' ? "Aucun dossier ne vous est assigné." : "Essayez de changer les filtres ou la recherche."}</p>
+                <p className="text-stone-500">
+                    {statusFilter === 'mine' ? "Aucun dossier ne vous est assigné." : "Essayez de changer les filtres ou la recherche."}
+                </p>
             </div>
         ) : (
             <div className="flex flex-col gap-4 pb-10">
@@ -276,7 +310,7 @@ export default function AdminDashboard({
                             </div>
                             <div className="flex flex-wrap gap-3 text-xs text-stone-600 mt-2">
                                 <div className="flex items-center gap-1 bg-white/50 px-2 py-1 rounded-md border border-stone-100"><Calendar className="w-3 h-3 text-stone-400"/> {new Date(project.weddingDate).toLocaleDateString()}</div>
-                                {/* 👇 DATE BUTOIR D'AFFICHEE ICI */}
+                                {/* DATE BUTOIR */}
                                 {deadline && !isDelivered && <div className={`flex items-center gap-1 px-2 py-1 rounded-md border font-bold ${new Date(deadline).getTime() < Date.now() ? 'bg-red-100 text-red-600 border-red-200' : 'bg-white/50 border-stone-100 text-stone-500'}`}><Clock className="w-3 h-3"/> Fin : {new Date(deadline).toLocaleDateString()}</div>}
                                 <div className="flex items-center gap-1 bg-white/50 px-2 py-1 rounded-md border border-stone-100"><Users className="w-3 h-3 text-stone-400"/> <span className="truncate max-w-[150px]">{project.photographerName || project.videographerName || 'Staff non assigné'}</span></div>
                             </div>
