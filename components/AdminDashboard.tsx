@@ -3,7 +3,7 @@ import React, { useState, useMemo } from 'react';
 import { 
   Plus, Search, Calendar, MapPin, Users, LogOut, BarChart3, 
   Settings, Trash2, Save, AlertCircle, Clock, CheckCircle2, 
-  Rocket, Bell, MessageSquare, AlertTriangle, ArrowUpDown, Filter
+  Rocket, Bell, MessageSquare, AlertTriangle, ArrowUpDown, UserCheck
 } from 'lucide-react';
 import { collection, addDoc, serverTimestamp, setDoc, doc } from 'firebase/firestore'; 
 import { db, appId } from '../lib/firebase';
@@ -16,8 +16,10 @@ export default function AdminDashboard({
     projects: Project[], staffList: string[], staffDirectory: Record<string, string>, user: any, onLogout: () => void, onStats: () => void, setStaffList?: any 
 }) {
   const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState('active'); // Par défaut on cache les archivés
-  const [sortMode, setSortMode] = useState<'priority' | 'date'>('priority'); // Nouveau state de tri
+  
+  // 'mine' est le nouveau filtre pour "Mes Dossiers"
+  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'delivered' | 'archived' | 'mine'>('active'); 
+  const [sortMode, setSortMode] = useState<'priority' | 'date'>('priority'); 
   
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
   
@@ -45,103 +47,85 @@ export default function AdminDashboard({
   const getProjectStatus = (p: Project) => {
       const now = Date.now();
       const wedDate = new Date(p.weddingDate).getTime();
-      // Un projet est considéré livré SI (Photo est livré OU pas de presta) ET (Vidéo est livrée OU pas de presta)
       const photoDone = p.statusPhoto === 'delivered' || p.statusPhoto === 'none';
       const videoDone = p.statusVideo === 'delivered' || p.statusVideo === 'none';
       const isDelivered = photoDone && videoDone;
 
-      // Retard : Si date estimée passée OU si mariage + 60 jours sans livraison
       const isLatePhoto = p.estimatedDeliveryPhoto && new Date(p.estimatedDeliveryPhoto).getTime() < now && !photoDone;
       const isLateVideo = p.estimatedDeliveryVideo && new Date(p.estimatedDeliveryVideo).getTime() < now && !videoDone;
       const isLateGeneral = !isDelivered && (now > wedDate + (60 * 24 * 3600 * 1000));
       const isLate = isLatePhoto || isLateVideo || isLateGeneral;
 
-      const isUrgent = !isDelivered && !isLate && (now > wedDate + (30 * 24 * 3600 * 1000)); // Urgent après 30 jours
+      const isUrgent = !isDelivered && !isLate && (now > wedDate + (30 * 24 * 3600 * 1000)); 
       
       return { isDelivered, isLate, isUrgent };
   };
 
-  // --- TRI INTELLIGENT (LE CERVEAU 🧠) ---
+  // --- TRI ET FILTRAGE INTELLIGENT ---
   const processedProjects = useMemo(() => {
-    // 1. D'abord on filtre (Recherche + Statut)
     let filtered = projects.filter(p => {
         const matchesSearch = p.clientNames.toLowerCase().includes(searchTerm.toLowerCase()) || p.code.toLowerCase().includes(searchTerm.toLowerCase());
         
+        // 1. FILTRE "MES DOSSIERS"
+        if (statusFilter === 'mine') {
+            const myEmail = user?.email?.toLowerCase() || '';
+            // On vérifie si l'utilisateur est Manager, Photo ou Vidéo sur ce projet
+            const isAssigned = (p.managerEmail?.toLowerCase() === myEmail) || 
+                               (p.photographerEmail?.toLowerCase() === myEmail) || 
+                               (p.videographerEmail?.toLowerCase() === myEmail);
+            return matchesSearch && !p.isArchived && isAssigned;
+        }
+
         if (statusFilter === 'archived') return matchesSearch && p.isArchived;
-        if (statusFilter === 'active') return matchesSearch && !p.isArchived && !getProjectStatus(p).isDelivered; // Active = Non livré
-        if (statusFilter === 'delivered') return matchesSearch && !p.isArchived && getProjectStatus(p).isDelivered; // Livrés mais pas archivés
-        if (statusFilter === 'all') return matchesSearch && !p.isArchived; // Tout sauf archivés
+        if (statusFilter === 'active') return matchesSearch && !p.isArchived && !getProjectStatus(p).isDelivered;
+        if (statusFilter === 'delivered') return matchesSearch && !p.isArchived && getProjectStatus(p).isDelivered;
+        if (statusFilter === 'all') return matchesSearch && !p.isArchived;
         
         return matchesSearch;
     });
 
-    // 2. Ensuite on trie
     return filtered.sort((a, b) => {
         if (sortMode === 'date') {
-            // Tri simple par date de mariage (Le plus récent en haut)
             return new Date(b.weddingDate).getTime() - new Date(a.weddingDate).getTime();
         } else {
-            // --- TRI PRIORITÉ STUDIO ---
             const statusA = getProjectStatus(a);
             const statusB = getProjectStatus(b);
-
-            // Calcul du Score de priorité (Plus le score est haut, plus c'est urgent)
             const getScore = (p: Project, s: any) => {
                 let score = 0;
-                if (p.isPriority) score += 10000; // FAST TRACK = Priorité Maximale
-                if (s.isLate) score += 5000;      // RETARD = Priorité Critique
-                if (s.isUrgent) score += 1000;    // URGENT = Priorité Haute
-                // Bonus pour les messages non lus (optionnel, on garde simple pour l'instant)
+                if (p.isPriority) score += 10000;
+                if (s.isLate) score += 5000;
+                if (s.isUrgent) score += 1000;
+                // Bonus si message non lu du client
+                if (p.messages && p.messages.length > 0 && !p.messages[p.messages.length - 1].isStaff) {
+                    score += 2000;
+                }
                 return score;
             };
-
             const scoreA = getScore(a, statusA);
             const scoreB = getScore(b, statusB);
 
-            if (scoreA !== scoreB) {
-                return scoreB - scoreA; // Le plus gros score en premier
-            }
-
-            // SI SCORES ÉGAUX (ex: deux dossiers normaux)
-            // On veut le mariage LE PLUS VIEUX en premier (FIFO - First In First Out)
-            // Car c'est celui qui attend depuis le plus longtemps
+            if (scoreA !== scoreB) return scoreB - scoreA;
             return new Date(a.weddingDate).getTime() - new Date(b.weddingDate).getTime();
         }
     });
-  }, [projects, searchTerm, statusFilter, sortMode]);
-
+  }, [projects, searchTerm, statusFilter, sortMode, user]);
 
   // --- NOTIFICATIONS ---
   const notifications = useMemo(() => {
     const notifs: any[] = [];
-    const now = Date.now();
-
     projects.forEach(p => {
         if (p.isArchived) return;
-
         if (p.messages && p.messages.length > 0) {
             const lastMsg = p.messages[p.messages.length - 1];
             if (!lastMsg.isStaff) {
-                notifs.push({
-                    id: `msg-${p.id}`,
-                    type: 'message',
-                    level: 'high',
-                    project: p,
-                    text: `Réponse de ${p.clientNames}`,
-                    date: lastMsg.date
-                });
+                notifs.push({ id: `msg-${p.id}`, type: 'message', level: 'high', project: p, text: `Réponse de ${p.clientNames}`, date: lastMsg.date });
             }
         }
-        
         const { isLate } = getProjectStatus(p);
-        if (isLate) {
-             notifs.push({ id: `late-${p.id}`, type: 'late', level: 'critical', project: p, text: `Retard : ${p.clientNames}`, date: new Date().toISOString() });
-        }
+        if (isLate) notifs.push({ id: `late-${p.id}`, type: 'late', level: 'critical', project: p, text: `Retard : ${p.clientNames}`, date: new Date().toISOString() });
     });
-
     return notifs.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
   }, [projects]);
-
 
   const addStaffMember = async () => {
       if(!newStaffName || !newStaffEmail) return alert("Nom et Email requis");
@@ -180,13 +164,14 @@ export default function AdminDashboard({
 
   return (
     <div className="min-h-screen bg-stone-100 p-4 md:p-8">
-      <div className="max-w-7xl mx-auto">
+      <div className="max-w-4xl mx-auto">
+        
         {/* HEADER */}
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
           <div>
             <h1 className="text-3xl font-serif font-bold text-stone-800">Studio Dashboard</h1>
             <div className="flex gap-4 items-center mt-2 text-sm text-stone-500">
-                <span className="bg-stone-200 px-2 py-0.5 rounded text-stone-600 font-bold">{processedProjects.length} dossiers affichés</span>
+                <span className="bg-stone-200 px-2 py-0.5 rounded text-stone-600 font-bold">{processedProjects.length} dossiers</span>
                 <button onClick={onStats} className="flex items-center gap-1 hover:text-stone-900 transition"><BarChart3 className="w-4 h-4"/> Statistiques</button>
                 <button onClick={() => setIsManagingTeam(true)} className="flex items-center gap-1 hover:text-stone-900 transition text-amber-600 font-bold"><Settings className="w-4 h-4"/> Équipe</button>
                 <button onClick={onLogout} className="flex items-center gap-1 text-red-400 hover:text-red-600 transition"><LogOut className="w-4 h-4"/> Quitter</button>
@@ -221,26 +206,29 @@ export default function AdminDashboard({
         </div>
 
         {/* BARRE D'OUTILS DE TRI ET FILTRE */}
-        <div className="bg-white p-4 rounded-2xl shadow-sm border border-stone-200 mb-6 flex flex-col lg:flex-row gap-4 justify-between items-center">
+        <div className="bg-white p-4 rounded-2xl shadow-sm border border-stone-200 mb-6 flex flex-col lg:flex-row gap-4 justify-between items-center sticky top-4 z-10">
           
-          {/* Recherche */}
           <div className="relative w-full lg:w-96">
             <Search className="absolute left-3 top-3.5 text-stone-400 w-5 h-5"/>
             <input type="text" placeholder="Rechercher client, code..." className="w-full pl-10 p-3 bg-stone-50 rounded-xl border-none focus:ring-2 focus:ring-stone-200 outline-none transition-all" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
           </div>
 
           <div className="flex flex-wrap items-center gap-3 w-full lg:w-auto justify-end">
-             {/* Switch de Tri */}
-             <div className="flex bg-stone-100 p-1 rounded-lg">
-                <button onClick={() => setSortMode('priority')} className={`flex items-center gap-2 px-4 py-2 rounded-md text-xs font-bold transition-all ${sortMode === 'priority' ? 'bg-white text-stone-900 shadow-sm' : 'text-stone-500 hover:text-stone-700'}`}>
-                    <Rocket className="w-3 h-3"/> Priorité Studio
-                </button>
-                <button onClick={() => setSortMode('date')} className={`flex items-center gap-2 px-4 py-2 rounded-md text-xs font-bold transition-all ${sortMode === 'date' ? 'bg-white text-stone-900 shadow-sm' : 'text-stone-500 hover:text-stone-700'}`}>
-                    <ArrowUpDown className="w-3 h-3"/> Par Date
-                </button>
-             </div>
+             {/* 1. BOUTON MES DOSSIERS (NOUVEAU) */}
+             <button 
+                onClick={() => setStatusFilter('mine')} 
+                className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all border ${statusFilter === 'mine' ? 'bg-purple-600 text-white border-purple-600 shadow-md transform scale-105' : 'bg-purple-50 text-purple-700 border-purple-100 hover:bg-purple-100'}`}
+             >
+                <UserCheck className="w-4 h-4"/> Mes Dossiers
+             </button>
 
              <div className="h-6 w-px bg-stone-300 mx-2 hidden md:block"></div>
+
+             {/* Switch de Tri */}
+             <div className="flex bg-stone-100 p-1 rounded-lg">
+                <button onClick={() => setSortMode('priority')} className={`flex items-center gap-2 px-3 py-2 rounded-md text-xs font-bold transition-all ${sortMode === 'priority' ? 'bg-white text-stone-900 shadow-sm' : 'text-stone-500 hover:text-stone-700'}`}><Rocket className="w-3 h-3"/> Priorité</button>
+                <button onClick={() => setSortMode('date')} className={`flex items-center gap-2 px-3 py-2 rounded-md text-xs font-bold transition-all ${sortMode === 'date' ? 'bg-white text-stone-900 shadow-sm' : 'text-stone-500 hover:text-stone-700'}`}><ArrowUpDown className="w-3 h-3"/> Date</button>
+             </div>
 
              {/* Filtres Statut */}
              <div className="flex gap-2 overflow-x-auto pb-1 md:pb-0">
@@ -252,67 +240,26 @@ export default function AdminDashboard({
           </div>
         </div>
 
-        {/* MODALES GESTION EQUIPE & AJOUT (Inchangées) */}
-        {isManagingTeam && (
-          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white p-8 rounded-2xl shadow-2xl max-w-md w-full animate-fade-in">
-                <h3 className="text-xl font-bold mb-4 flex items-center gap-2"><Users className="w-5 h-5"/> Gestion de l'équipe</h3>
-                <div className="space-y-2 mb-6 max-h-[200px] overflow-y-auto bg-stone-50 p-2 rounded-lg">
-                    {Object.entries(staffDirectory).map(([name, email]) => (
-                        <div key={name} className="flex justify-between items-center bg-white p-2 rounded border border-stone-100 shadow-sm text-sm">
-                            <div><div className="font-bold">{name}</div><div className="text-xs text-stone-400">{email}</div></div>
-                            <button onClick={() => removeStaffMember(name)} className="text-red-400 hover:text-red-600"><Trash2 className="w-4 h-4"/></button>
-                        </div>
-                    ))}
-                </div>
-                <div className="space-y-3 pt-4 border-t border-stone-100">
-                    <input className="w-full p-2 border rounded text-sm" placeholder="Prénom" value={newStaffName} onChange={e => setNewStaffName(e.target.value)} />
-                    <input className="w-full p-2 border rounded text-sm" placeholder="Email" value={newStaffEmail} onChange={e => setNewStaffEmail(e.target.value)} />
-                    <button onClick={addStaffMember} className="w-full bg-stone-900 text-white py-2 rounded-lg font-bold text-sm hover:bg-black flex justify-center gap-2"><Save className="w-4 h-4"/> Enregistrer</button>
-                </div>
-                <button onClick={() => setIsManagingTeam(false)} className="w-full mt-4 text-stone-400 text-sm hover:text-stone-600">Fermer</button>
-            </div>
-          </div>
-        )}
+        {/* MODALES (Inchangées) */}
+        {isManagingTeam && ( <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"> <div className="bg-white p-8 rounded-2xl shadow-2xl max-w-md w-full animate-fade-in"> <h3 className="text-xl font-bold mb-4 flex items-center gap-2"><Users className="w-5 h-5"/> Gestion de l'équipe</h3> <div className="space-y-2 mb-6 max-h-[200px] overflow-y-auto bg-stone-50 p-2 rounded-lg"> {Object.entries(staffDirectory).map(([name, email]) => ( <div key={name} className="flex justify-between items-center bg-white p-2 rounded border border-stone-100 shadow-sm text-sm"> <div><div className="font-bold">{name}</div><div className="text-xs text-stone-400">{email}</div></div> <button onClick={() => removeStaffMember(name)} className="text-red-400 hover:text-red-600"><Trash2 className="w-4 h-4"/></button> </div> ))} </div> <div className="space-y-3 pt-4 border-t border-stone-100"> <input className="w-full p-2 border rounded text-sm" placeholder="Prénom" value={newStaffName} onChange={e => setNewStaffName(e.target.value)} /> <input className="w-full p-2 border rounded text-sm" placeholder="Email" value={newStaffEmail} onChange={e => setNewStaffEmail(e.target.value)} /> <button onClick={addStaffMember} className="w-full bg-stone-900 text-white py-2 rounded-lg font-bold text-sm hover:bg-black flex justify-center gap-2"><Save className="w-4 h-4"/> Enregistrer</button> </div> <button onClick={() => setIsManagingTeam(false)} className="w-full mt-4 text-stone-400 text-sm hover:text-stone-600">Fermer</button> </div> </div> )}
+        {isAdding && ( <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"> <div className="bg-white p-8 rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto animate-fade-in"> <h2 className="text-2xl font-bold mb-6">Nouveau Dossier Mariage</h2> <form onSubmit={createProject} className="space-y-4"> <div className="grid md:grid-cols-2 gap-4"> <div><label className="text-xs font-bold text-stone-500">Noms des Mariés</label><input required className="w-full p-3 bg-stone-50 rounded-lg border border-stone-200" placeholder="Julie & Thomas" value={newProject.clientNames} onChange={e => setNewProject({...newProject, clientNames: e.target.value})} /></div> <div><label className="text-xs font-bold text-stone-500">Date du Mariage</label><input type="date" required className="w-full p-3 bg-stone-50 rounded-lg border border-stone-200" value={newProject.weddingDate} onChange={e => setNewProject({...newProject, weddingDate: e.target.value})} /></div> </div> <div><label className="text-xs font-bold text-stone-500">Email Client (Obligatoire)</label><input type="email" required className="w-full p-3 bg-stone-50 rounded-lg border border-stone-200" placeholder="client@email.com" value={newProject.clientEmail} onChange={e => setNewProject({...newProject, clientEmail: e.target.value})} /></div> <div className="grid md:grid-cols-2 gap-4"> <div><label className="text-xs font-bold text-stone-500">Lieu</label><input className="w-full p-3 bg-stone-50 rounded-lg border border-stone-200" placeholder="Domaine de..." value={newProject.weddingVenue} onChange={e => setNewProject({...newProject, weddingVenue: e.target.value})} /></div> <div><label className="text-xs font-bold text-stone-500">Téléphone</label><input className="w-full p-3 bg-stone-50 rounded-lg border border-stone-200" placeholder="06..." value={newProject.clientPhone} onChange={e => setNewProject({...newProject, clientPhone: e.target.value})} /></div> </div> <div className="flex gap-4 pt-2"> <label className="flex items-center gap-2 bg-stone-100 px-4 py-2 rounded-lg cursor-pointer"><input type="checkbox" checked={newProject.hasPhoto} onChange={e => setNewProject({...newProject, hasPhoto: e.target.checked})} /> <span className="font-bold">Prestation Photo</span></label> <label className="flex items-center gap-2 bg-stone-100 px-4 py-2 rounded-lg cursor-pointer"><input type="checkbox" checked={newProject.hasVideo} onChange={e => setNewProject({...newProject, hasVideo: e.target.checked})} /> <span className="font-bold">Prestation Vidéo</span></label> </div> <div className="flex gap-3 pt-6"> <button type="button" onClick={() => setIsAdding(false)} className="flex-1 py-3 text-stone-500 font-bold hover:bg-stone-100 rounded-xl">Annuler</button> <button type="submit" className="flex-1 py-3 bg-stone-900 text-white font-bold rounded-xl hover:bg-black">Créer le dossier</button> </div> </form> </div> </div> )}
 
-        {isAdding && (
-          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white p-8 rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto animate-fade-in">
-              <h2 className="text-2xl font-bold mb-6">Nouveau Dossier Mariage</h2>
-              <form onSubmit={createProject} className="space-y-4">
-                <div className="grid md:grid-cols-2 gap-4">
-                  <div><label className="text-xs font-bold text-stone-500">Noms des Mariés</label><input required className="w-full p-3 bg-stone-50 rounded-lg border border-stone-200" placeholder="Julie & Thomas" value={newProject.clientNames} onChange={e => setNewProject({...newProject, clientNames: e.target.value})} /></div>
-                  <div><label className="text-xs font-bold text-stone-500">Date du Mariage</label><input type="date" required className="w-full p-3 bg-stone-50 rounded-lg border border-stone-200" value={newProject.weddingDate} onChange={e => setNewProject({...newProject, weddingDate: e.target.value})} /></div>
-                </div>
-                <div><label className="text-xs font-bold text-stone-500">Email Client (Obligatoire)</label><input type="email" required className="w-full p-3 bg-stone-50 rounded-lg border border-stone-200" placeholder="client@email.com" value={newProject.clientEmail} onChange={e => setNewProject({...newProject, clientEmail: e.target.value})} /></div>
-                <div className="grid md:grid-cols-2 gap-4">
-                    <div><label className="text-xs font-bold text-stone-500">Lieu</label><input className="w-full p-3 bg-stone-50 rounded-lg border border-stone-200" placeholder="Domaine de..." value={newProject.weddingVenue} onChange={e => setNewProject({...newProject, weddingVenue: e.target.value})} /></div>
-                    <div><label className="text-xs font-bold text-stone-500">Téléphone</label><input className="w-full p-3 bg-stone-50 rounded-lg border border-stone-200" placeholder="06..." value={newProject.clientPhone} onChange={e => setNewProject({...newProject, clientPhone: e.target.value})} /></div>
-                </div>
-                <div className="flex gap-4 pt-2">
-                  <label className="flex items-center gap-2 bg-stone-100 px-4 py-2 rounded-lg cursor-pointer"><input type="checkbox" checked={newProject.hasPhoto} onChange={e => setNewProject({...newProject, hasPhoto: e.target.checked})} /> <span className="font-bold">Prestation Photo</span></label>
-                  <label className="flex items-center gap-2 bg-stone-100 px-4 py-2 rounded-lg cursor-pointer"><input type="checkbox" checked={newProject.hasVideo} onChange={e => setNewProject({...newProject, hasVideo: e.target.checked})} /> <span className="font-bold">Prestation Vidéo</span></label>
-                </div>
-                <div className="flex gap-3 pt-6">
-                  <button type="button" onClick={() => setIsAdding(false)} className="flex-1 py-3 text-stone-500 font-bold hover:bg-stone-100 rounded-xl">Annuler</button>
-                  <button type="submit" className="flex-1 py-3 bg-stone-900 text-white font-bold rounded-xl hover:bg-black">Créer le dossier</button>
-                </div>
-              </form>
-            </div>
-          </div>
-        )}
-
-        {/* GRILLE DES PROJETS TRIÉS */}
+        {/* LISTE DES PROJETS (TUILES VERTICALES) */}
         {processedProjects.length === 0 ? (
             <div className="text-center py-20 bg-white rounded-2xl border border-stone-200 shadow-sm border-dashed">
                 <div className="text-stone-300 mb-4"><Search className="w-12 h-12 mx-auto"/></div>
                 <h3 className="text-xl font-bold text-stone-800 mb-2">Aucun dossier trouvé</h3>
-                <p className="text-stone-500">Essayez de changer les filtres ou la recherche.</p>
+                <p className="text-stone-500">
+                    {statusFilter === 'mine' ? "Aucun dossier ne vous est assigné." : "Essayez de changer les filtres ou la recherche."}
+                </p>
             </div>
         ) : (
-            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+            <div className="flex flex-col gap-4 pb-10">
             {processedProjects.map(project => {
                 const { isDelivered, isLate, isUrgent } = getProjectStatus(project);
+                // On vérifie s'il y a un message client NON LU
+                const hasUnreadMessage = project.messages && project.messages.length > 0 && !project.messages[project.messages.length - 1].isStaff;
+                
                 let borderClass = 'border-l-4 border-l-blue-500';
                 let bgClass = 'bg-white';
                 let badge = null;
@@ -324,50 +271,63 @@ export default function AdminDashboard({
                     borderClass = 'border-l-4 border-l-emerald-500';
                     badge = <span className="bg-emerald-100 text-emerald-700 text-[10px] font-bold px-2 py-0.5 rounded flex items-center gap-1"><CheckCircle2 className="w-3 h-3"/> LIVRÉ</span>;
                 } else if (project.isPriority) {
-                    // FAST TRACK EN PREMIER
-                    borderClass = 'border-l-4 border-l-orange-500 ring-2 ring-orange-200';
-                    bgClass = 'bg-orange-50';
-                    badge = <span className="bg-orange-500 text-white text-[10px] font-bold px-2 py-0.5 rounded flex items-center gap-1"><Rocket className="w-3 h-3"/> FAST TRACK</span>;
+                    borderClass = 'border-l-8 border-l-orange-500 ring-2 ring-orange-200';
+                    bgClass = 'bg-orange-50/50';
+                    badge = <span className="bg-orange-500 text-white text-[10px] font-bold px-2 py-0.5 rounded flex items-center gap-1 shadow-sm animate-pulse"><Rocket className="w-3 h-3"/> FAST TRACK</span>;
                 } else if (isLate) {
-                    borderClass = 'border-l-4 border-l-red-500';
-                    bgClass = 'bg-red-50/50';
-                    badge = <span className="bg-red-100 text-red-700 text-[10px] font-bold px-2 py-0.5 rounded flex items-center gap-1"><AlertCircle className="w-3 h-3"/> RETARD</span>;
+                    borderClass = 'border-l-8 border-l-red-500';
+                    bgClass = 'bg-red-50/40';
+                    badge = <span className="bg-red-600 text-white text-[10px] font-bold px-2 py-0.5 rounded flex items-center gap-1 shadow-sm"><AlertCircle className="w-3 h-3"/> RETARD CRITIQUE</span>;
                 } else if (isUrgent) {
-                    borderClass = 'border-l-4 border-l-amber-400';
+                    borderClass = 'border-l-4 border-l-amber-500';
                     bgClass = 'bg-amber-50/30';
                     badge = <span className="bg-amber-100 text-amber-700 text-[10px] font-bold px-2 py-0.5 rounded flex items-center gap-1"><Clock className="w-3 h-3"/> URGENT</span>;
                 } else {
                     const daysDiff = Math.ceil((new Date(project.weddingDate).getTime() - Date.now()) / (1000 * 3600 * 24));
-                    if (daysDiff > 0) badge = <span className="bg-blue-100 text-blue-700 text-[10px] font-bold px-2 py-0.5 rounded">J-{daysDiff}</span>;
+                    if (daysDiff > 0) badge = <span className="bg-blue-50 text-blue-700 text-[10px] font-bold px-2 py-0.5 rounded border border-blue-100">J-{daysDiff}</span>;
+                    else badge = <span className="bg-stone-100 text-stone-600 text-[10px] font-bold px-2 py-0.5 rounded">En attente</span>;
                 }
 
                 return (
-                    <div key={project.id} onClick={() => setSelectedProjectId(project.id)} className={`relative rounded-xl shadow-sm border border-stone-200 p-5 hover:shadow-md transition-all cursor-pointer group ${borderClass} ${bgClass}`}>
-                        <div className="flex justify-between items-start mb-3">
-                            <div>
-                                <h3 className="font-bold text-lg text-stone-900 group-hover:text-stone-700">{project.clientNames}</h3>
-                                <span className="text-[10px] font-mono text-stone-400">{project.code}</span>
+                    <div key={project.id} onClick={() => setSelectedProjectId(project.id)} className={`relative rounded-xl shadow-sm border border-stone-200 p-4 hover:shadow-md transition-all cursor-pointer group ${borderClass} ${bgClass} flex flex-col md:flex-row gap-4 justify-between items-center`}>
+                        
+                        {/* 2. PASTILLE DE NOTIFICATION MESSAGE */}
+                        {hasUnreadMessage && (
+                            <div className="absolute -top-2 -right-2 md:top-auto md:bottom-auto md:right-4 bg-blue-600 text-white text-[10px] font-bold px-3 py-1 rounded-full shadow-lg animate-bounce flex items-center gap-1 z-20 border-2 border-white">
+                                <MessageSquare className="w-3 h-3 fill-current"/> Message Client
                             </div>
-                            {badge}
+                        )}
+
+                        {/* INFO PRINCIPALE */}
+                        <div className="flex-1 w-full md:w-auto">
+                            <div className="flex justify-between items-start mb-2 md:mb-0">
+                                <div>
+                                    <h3 className="font-bold text-lg text-stone-900 group-hover:text-stone-700 flex items-center gap-2">{project.clientNames} <span className="text-[10px] font-mono text-stone-400 bg-stone-100 px-1.5 rounded">{project.code}</span></h3>
+                                </div>
+                                <div className="md:hidden">{badge}</div>
+                            </div>
+                            <div className="flex flex-wrap gap-3 text-xs text-stone-600 mt-2">
+                                <div className="flex items-center gap-1 bg-white/50 px-2 py-1 rounded-md border border-stone-100"><Calendar className="w-3 h-3 text-stone-400"/> {new Date(project.weddingDate).toLocaleDateString()}</div>
+                                <div className="flex items-center gap-1 bg-white/50 px-2 py-1 rounded-md border border-stone-100"><MapPin className="w-3 h-3 text-stone-400"/> <span className="truncate max-w-[150px]">{project.weddingVenue || 'Lieu non défini'}</span></div>
+                                <div className="flex items-center gap-1 bg-white/50 px-2 py-1 rounded-md border border-stone-100"><Users className="w-3 h-3 text-stone-400"/> <span className="truncate max-w-[150px]">{project.photographerName || project.videographerName || 'Staff non assigné'}</span></div>
+                            </div>
                         </div>
-                        <div className="flex flex-col gap-1 mb-4 text-xs text-stone-600">
-                            <div className="flex items-center gap-2"><Calendar className="w-3 h-3 text-stone-400"/> {new Date(project.weddingDate).toLocaleDateString()}</div>
-                            <div className="flex items-center gap-2"><MapPin className="w-3 h-3 text-stone-400"/> <span className="truncate max-w-[200px]">{project.weddingVenue || 'Lieu non défini'}</span></div>
-                            <div className="flex items-center gap-2"><Users className="w-3 h-3 text-stone-400"/> <span className="truncate max-w-[200px]">{project.photographerName || project.videographerName || 'Staff non assigné'}</span></div>
-                        </div>
-                        <div className="flex gap-2 pt-3 border-t border-stone-200/50">
-                            {project.statusPhoto !== 'none' && (
-                                <div className="flex-1">
+
+                        {/* BARRES DE PROGRESSION */}
+                        <div className="flex gap-4 w-full md:w-96 items-center">
+                             {project.statusPhoto !== 'none' && (
+                                <div className="flex-1 bg-white/80 p-2 rounded-lg border border-stone-100">
                                     <div className="flex justify-between text-[10px] mb-1 font-bold text-stone-500"><span>Photo</span><span>{project.progressPhoto}%</span></div>
-                                    <div className="h-1.5 bg-stone-200 rounded-full overflow-hidden"><div className={`h-full ${project.statusPhoto === 'delivered' ? 'bg-emerald-500' : 'bg-stone-500'}`} style={{width: `${project.progressPhoto}%`}}></div></div>
+                                    <div className="h-2.5 bg-stone-200 rounded-full overflow-hidden"><div className={`h-full transition-all duration-500 ${project.statusPhoto === 'delivered' ? 'bg-emerald-500' : project.progressPhoto > 80 ? 'bg-blue-600' : 'bg-blue-500'}`} style={{width: `${project.progressPhoto}%`}}></div></div>
                                 </div>
                             )}
                             {project.statusVideo !== 'none' && (
-                                <div className="flex-1">
+                                <div className="flex-1 bg-white/80 p-2 rounded-lg border border-stone-100">
                                     <div className="flex justify-between text-[10px] mb-1 font-bold text-stone-500"><span>Vidéo</span><span>{project.progressVideo}%</span></div>
-                                    <div className="h-1.5 bg-stone-200 rounded-full overflow-hidden"><div className={`h-full ${project.statusVideo === 'delivered' ? 'bg-emerald-500' : 'bg-blue-500'}`} style={{width: `${project.progressVideo}%`}}></div></div>
+                                    <div className="h-2.5 bg-stone-200 rounded-full overflow-hidden"><div className={`h-full transition-all duration-500 ${project.statusVideo === 'delivered' ? 'bg-emerald-500' : project.progressVideo > 80 ? 'bg-purple-600' : 'bg-purple-500'}`} style={{width: `${project.progressVideo}%`}}></div></div>
                                 </div>
                             )}
+                            <div className="hidden md:block pl-4 border-l">{badge}</div>
                         </div>
                     </div>
                 );
