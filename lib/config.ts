@@ -5,13 +5,13 @@
 export const COLLECTION_NAME = "wedding_projects";
 export const SETTINGS_COLLECTION = "settings";
 
-// 👇 METTEZ VOS URLS ICI
+// 👇 VOS URLS
 export const MAKE_WEBHOOK_URL = "https://hook.eu2.make.com/xnuln15n6zggpfk18p78o7olikrd8a99"; 
 export const STRIPE_PRIORITY_LINK = "https://buy.stripe.com/fZu4gz07eaPzcRt54Y5gc0c";
 export const STRIPE_RAW_LINK = "https://buy.stripe.com/cNi5kD5rye1L2cP2WQ5gc0d";
 export const STRIPE_ARCHIVE_RESTORE_LINK = "https://buy.stripe.com/fZu00j3jq4rb5p140U5gc0e";
 
-/// Annuaire de l'équipe (Nom -> Email)
+/// Annuaire
 export const STAFF_DIRECTORY: Record<string, string> = {
     'Yunus': 'yunus34@hotmail.fr',
     'Serife': 'serifevideography@gmail.com',
@@ -19,25 +19,40 @@ export const STAFF_DIRECTORY: Record<string, string> = {
     'Feridun': 'feridun.kizgin@gmail.com',
 };
 
-// Étapes Photo
+// 👇 NOUVEAU : DÉFINITION DES TASKS (CHECKLISTS)
+export const CHECKLIST_PHOTO = [
+    { id: 'backup', label: 'Sauvegarde Cartes', weight: 10 },
+    { id: 'culling', label: 'Tri & Sélection', weight: 20 },
+    { id: 'editing', label: 'Colorimétrie (Lr)', weight: 30 },
+    { id: 'retouch', label: 'Retouches (Ps)', weight: 20 },
+    { id: 'export', label: 'Export JPG', weight: 10 },
+    { id: 'gallery', label: 'Mise en ligne Galerie', weight: 10 }
+];
+
+export const CHECKLIST_VIDEO = [
+    { id: 'backup', label: 'Sauvegarde Rushes', weight: 10 },
+    { id: 'music', label: 'Choix Musiques', weight: 10 },
+    { id: 'derush', label: 'Dérushage', weight: 20 },
+    { id: 'cutting', label: 'Montage (Ours)', weight: 30 },
+    { id: 'grading', label: 'Étalonnage & Mix', weight: 20 },
+    { id: 'export', label: 'Export 4K & Upload', weight: 10 }
+];
+
+// On garde ça pour l'affichage client simplifié
 export const PHOTO_STEPS = {
     'none': { label: 'En attente', percent: 0 },
     'waiting': { label: 'En attente des fichiers', percent: 10 },
     'culling': { label: 'Tri & Sélection', percent: 30 },
-    'editing': { label: 'Développement (Lr)', percent: 60 },
-    'retouching': { label: 'Retouches (Ps)', percent: 80 },
-    'export': { label: 'Export Final', percent: 90 },
+    'editing': { label: 'Développement', percent: 60 },
+    'retouching': { label: 'Finitions', percent: 80 },
     'delivered': { label: 'Livraison Finale', percent: 100 }
 };
 
-// Étapes Vidéo
 export const VIDEO_STEPS = {
     'none': { label: 'En attente', percent: 0 },
     'waiting': { label: 'En attente des fichiers', percent: 10 },
-    'rushes': { label: 'Dérushage', percent: 25 },
-    'cutting': { label: 'Montage en cours', percent: 50 },
-    'grading': { label: 'Etalonnage & Mixage', percent: 75 },
-    'partial': { label: 'Livraison Partielle (Clip)', percent: 85 },
+    'cutting': { label: 'Montage en cours', percent: 40 },
+    'grading': { label: 'Etalonnage', percent: 70 },
     'rendering': { label: 'Export Final', percent: 90 },
     'delivered': { label: 'Livraison Finale', percent: 100 }
 };
@@ -50,7 +65,6 @@ export const ALBUM_STATUSES = {
     'sent': 'Expédié'
 };
 
-// 👇 NOUVEAU : STATUTS CLEF USB
 export const USB_STATUSES = {
     'none': 'Non requis',
     'preparing': 'En préparation',
@@ -58,11 +72,7 @@ export const USB_STATUSES = {
     'delivered': 'Livrée / Remise'
 };
 
-export const ALBUM_FORMATS = [
-    "30x30", "40x30", "25x25", "20x30", "Coffret Luxe", "Livre Parents (20x20)"
-];
-
-// --- INTERFACES TYPESCRIPT ---
+// --- INTERFACES ---
 
 export interface HistoryLog {
     date: string;
@@ -96,14 +106,6 @@ export interface InternalMessage {
     date: string;
 }
 
-export interface TeamPayment {
-    id: string;
-    recipient: string;
-    amount: number;
-    date: string;
-    note?: string;
-}
-
 export interface Project {
     id: string;
     code: string;
@@ -133,6 +135,10 @@ export interface Project {
     progressPhoto: number;
     progressVideo: number;
     
+    // 👇 NOUVEAU : Checklists détaillées
+    checkListPhoto?: Record<string, boolean>;
+    checkListVideo?: Record<string, boolean>;
+
     // Dates & Livraisons
     estimatedDeliveryPhoto?: string;
     estimatedDeliveryVideo?: string;
@@ -153,8 +159,6 @@ export interface Project {
     isPriority: boolean;
     isArchived: boolean;
     fastTrackActivationDate?: string;
-    
-    // 👇 NOUVEAU : USB
     usbAddress?: string;
     usbStatus?: string;
 
@@ -164,10 +168,9 @@ export interface Project {
     internalChat: InternalMessage[];
     history: HistoryLog[];
     
-    teamPayments?: TeamPayment[];
-    
     // Meta
     inviteCount?: number;
+    lastAdminRead?: string; // Ajouté précédemment
     createdAt?: any;
     lastUpdated?: any;
     

@@ -16,8 +16,6 @@ export default function AdminDashboard({
     projects: Project[], staffList: string[], staffDirectory: Record<string, string>, user: any, onLogout: () => void, onStats: () => void, setStaffList?: any 
 }) {
   const [searchTerm, setSearchTerm] = useState('');
-  
-  // 'mine' est le nouveau filtre pour "Mes Dossiers"
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'delivered' | 'archived' | 'mine'>('active'); 
   const [sortMode, setSortMode] = useState<'priority' | 'date'>('priority'); 
   
@@ -66,10 +64,8 @@ export default function AdminDashboard({
     let filtered = projects.filter(p => {
         const matchesSearch = p.clientNames.toLowerCase().includes(searchTerm.toLowerCase()) || p.code.toLowerCase().includes(searchTerm.toLowerCase());
         
-        // 1. FILTRE "MES DOSSIERS"
         if (statusFilter === 'mine') {
             const myEmail = user?.email?.toLowerCase() || '';
-            // On vérifie si l'utilisateur est Manager, Photo ou Vidéo sur ce projet
             const isAssigned = (p.managerEmail?.toLowerCase() === myEmail) || 
                                (p.photographerEmail?.toLowerCase() === myEmail) || 
                                (p.videographerEmail?.toLowerCase() === myEmail);
@@ -95,7 +91,6 @@ export default function AdminDashboard({
                 if (p.isPriority) score += 10000;
                 if (s.isLate) score += 5000;
                 if (s.isUrgent) score += 1000;
-                // Bonus si message non lu du client
                 if (p.messages && p.messages.length > 0 && !p.messages[p.messages.length - 1].isStaff) {
                     score += 2000;
                 }
@@ -110,7 +105,6 @@ export default function AdminDashboard({
     });
   }, [projects, searchTerm, statusFilter, sortMode, user]);
 
-  // --- NOTIFICATIONS ---
   const notifications = useMemo(() => {
     const notifs: any[] = [];
     projects.forEach(p => {
@@ -179,7 +173,6 @@ export default function AdminDashboard({
           </div>
           
           <div className="flex items-center gap-3">
-              {/* NOTIFICATIONS */}
               <div className="relative">
                   <button onClick={() => setShowNotifications(!showNotifications)} className={`p-3 rounded-xl transition shadow-sm ${showNotifications ? 'bg-stone-800 text-white' : 'bg-white text-stone-600 hover:bg-stone-50'}`}>
                       <Bell className="w-5 h-5"/>
@@ -205,32 +198,19 @@ export default function AdminDashboard({
           </div>
         </div>
 
-        {/* BARRE D'OUTILS DE TRI ET FILTRE */}
+        {/* BARRE D'OUTILS */}
         <div className="bg-white p-4 rounded-2xl shadow-sm border border-stone-200 mb-6 flex flex-col lg:flex-row gap-4 justify-between items-center sticky top-4 z-10">
-          
           <div className="relative w-full lg:w-96">
             <Search className="absolute left-3 top-3.5 text-stone-400 w-5 h-5"/>
             <input type="text" placeholder="Rechercher client, code..." className="w-full pl-10 p-3 bg-stone-50 rounded-xl border-none focus:ring-2 focus:ring-stone-200 outline-none transition-all" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
           </div>
-
           <div className="flex flex-wrap items-center gap-3 w-full lg:w-auto justify-end">
-             {/* 1. BOUTON MES DOSSIERS (NOUVEAU) */}
-             <button 
-                onClick={() => setStatusFilter('mine')} 
-                className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all border ${statusFilter === 'mine' ? 'bg-purple-600 text-white border-purple-600 shadow-md transform scale-105' : 'bg-purple-50 text-purple-700 border-purple-100 hover:bg-purple-100'}`}
-             >
-                <UserCheck className="w-4 h-4"/> Mes Dossiers
-             </button>
-
+             <button onClick={() => setStatusFilter('mine')} className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all border ${statusFilter === 'mine' ? 'bg-purple-600 text-white border-purple-600 shadow-md transform scale-105' : 'bg-purple-50 text-purple-700 border-purple-100 hover:bg-purple-100'}`}><UserCheck className="w-4 h-4"/> Mes Dossiers</button>
              <div className="h-6 w-px bg-stone-300 mx-2 hidden md:block"></div>
-
-             {/* Switch de Tri */}
              <div className="flex bg-stone-100 p-1 rounded-lg">
                 <button onClick={() => setSortMode('priority')} className={`flex items-center gap-2 px-3 py-2 rounded-md text-xs font-bold transition-all ${sortMode === 'priority' ? 'bg-white text-stone-900 shadow-sm' : 'text-stone-500 hover:text-stone-700'}`}><Rocket className="w-3 h-3"/> Priorité</button>
                 <button onClick={() => setSortMode('date')} className={`flex items-center gap-2 px-3 py-2 rounded-md text-xs font-bold transition-all ${sortMode === 'date' ? 'bg-white text-stone-900 shadow-sm' : 'text-stone-500 hover:text-stone-700'}`}><ArrowUpDown className="w-3 h-3"/> Date</button>
              </div>
-
-             {/* Filtres Statut */}
              <div className="flex gap-2 overflow-x-auto pb-1 md:pb-0">
                 <button onClick={() => setStatusFilter('active')} className={`px-4 py-2 rounded-lg text-xs font-bold whitespace-nowrap border transition-all ${statusFilter === 'active' ? 'bg-stone-800 text-white border-stone-800' : 'bg-white text-stone-500 border-stone-200 hover:bg-stone-50'}`}>En cours</button>
                 <button onClick={() => setStatusFilter('delivered')} className={`px-4 py-2 rounded-lg text-xs font-bold whitespace-nowrap border transition-all ${statusFilter === 'delivered' ? 'bg-stone-800 text-white border-stone-800' : 'bg-white text-stone-500 border-stone-200 hover:bg-stone-50'}`}>Livrés</button>
@@ -240,25 +220,22 @@ export default function AdminDashboard({
           </div>
         </div>
 
-        {/* MODALES (Inchangées) */}
+        {/* MODALES ET LISTES (Inchangées) */}
         {isManagingTeam && ( <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"> <div className="bg-white p-8 rounded-2xl shadow-2xl max-w-md w-full animate-fade-in"> <h3 className="text-xl font-bold mb-4 flex items-center gap-2"><Users className="w-5 h-5"/> Gestion de l'équipe</h3> <div className="space-y-2 mb-6 max-h-[200px] overflow-y-auto bg-stone-50 p-2 rounded-lg"> {Object.entries(staffDirectory).map(([name, email]) => ( <div key={name} className="flex justify-between items-center bg-white p-2 rounded border border-stone-100 shadow-sm text-sm"> <div><div className="font-bold">{name}</div><div className="text-xs text-stone-400">{email}</div></div> <button onClick={() => removeStaffMember(name)} className="text-red-400 hover:text-red-600"><Trash2 className="w-4 h-4"/></button> </div> ))} </div> <div className="space-y-3 pt-4 border-t border-stone-100"> <input className="w-full p-2 border rounded text-sm" placeholder="Prénom" value={newStaffName} onChange={e => setNewStaffName(e.target.value)} /> <input className="w-full p-2 border rounded text-sm" placeholder="Email" value={newStaffEmail} onChange={e => setNewStaffEmail(e.target.value)} /> <button onClick={addStaffMember} className="w-full bg-stone-900 text-white py-2 rounded-lg font-bold text-sm hover:bg-black flex justify-center gap-2"><Save className="w-4 h-4"/> Enregistrer</button> </div> <button onClick={() => setIsManagingTeam(false)} className="w-full mt-4 text-stone-400 text-sm hover:text-stone-600">Fermer</button> </div> </div> )}
         {isAdding && ( <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"> <div className="bg-white p-8 rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto animate-fade-in"> <h2 className="text-2xl font-bold mb-6">Nouveau Dossier Mariage</h2> <form onSubmit={createProject} className="space-y-4"> <div className="grid md:grid-cols-2 gap-4"> <div><label className="text-xs font-bold text-stone-500">Noms des Mariés</label><input required className="w-full p-3 bg-stone-50 rounded-lg border border-stone-200" placeholder="Julie & Thomas" value={newProject.clientNames} onChange={e => setNewProject({...newProject, clientNames: e.target.value})} /></div> <div><label className="text-xs font-bold text-stone-500">Date du Mariage</label><input type="date" required className="w-full p-3 bg-stone-50 rounded-lg border border-stone-200" value={newProject.weddingDate} onChange={e => setNewProject({...newProject, weddingDate: e.target.value})} /></div> </div> <div><label className="text-xs font-bold text-stone-500">Email Client (Obligatoire)</label><input type="email" required className="w-full p-3 bg-stone-50 rounded-lg border border-stone-200" placeholder="client@email.com" value={newProject.clientEmail} onChange={e => setNewProject({...newProject, clientEmail: e.target.value})} /></div> <div className="grid md:grid-cols-2 gap-4"> <div><label className="text-xs font-bold text-stone-500">Lieu</label><input className="w-full p-3 bg-stone-50 rounded-lg border border-stone-200" placeholder="Domaine de..." value={newProject.weddingVenue} onChange={e => setNewProject({...newProject, weddingVenue: e.target.value})} /></div> <div><label className="text-xs font-bold text-stone-500">Téléphone</label><input className="w-full p-3 bg-stone-50 rounded-lg border border-stone-200" placeholder="06..." value={newProject.clientPhone} onChange={e => setNewProject({...newProject, clientPhone: e.target.value})} /></div> </div> <div className="flex gap-4 pt-2"> <label className="flex items-center gap-2 bg-stone-100 px-4 py-2 rounded-lg cursor-pointer"><input type="checkbox" checked={newProject.hasPhoto} onChange={e => setNewProject({...newProject, hasPhoto: e.target.checked})} /> <span className="font-bold">Prestation Photo</span></label> <label className="flex items-center gap-2 bg-stone-100 px-4 py-2 rounded-lg cursor-pointer"><input type="checkbox" checked={newProject.hasVideo} onChange={e => setNewProject({...newProject, hasVideo: e.target.checked})} /> <span className="font-bold">Prestation Vidéo</span></label> </div> <div className="flex gap-3 pt-6"> <button type="button" onClick={() => setIsAdding(false)} className="flex-1 py-3 text-stone-500 font-bold hover:bg-stone-100 rounded-xl">Annuler</button> <button type="submit" className="flex-1 py-3 bg-stone-900 text-white font-bold rounded-xl hover:bg-black">Créer le dossier</button> </div> </form> </div> </div> )}
 
-        {/* LISTE DES PROJETS (TUILES VERTICALES) */}
         {processedProjects.length === 0 ? (
             <div className="text-center py-20 bg-white rounded-2xl border border-stone-200 shadow-sm border-dashed">
                 <div className="text-stone-300 mb-4"><Search className="w-12 h-12 mx-auto"/></div>
                 <h3 className="text-xl font-bold text-stone-800 mb-2">Aucun dossier trouvé</h3>
-                <p className="text-stone-500">
-                    {statusFilter === 'mine' ? "Aucun dossier ne vous est assigné." : "Essayez de changer les filtres ou la recherche."}
-                </p>
+                <p className="text-stone-500">{statusFilter === 'mine' ? "Aucun dossier ne vous est assigné." : "Essayez de changer les filtres ou la recherche."}</p>
             </div>
         ) : (
             <div className="flex flex-col gap-4 pb-10">
             {processedProjects.map(project => {
                 const { isDelivered, isLate, isUrgent } = getProjectStatus(project);
-                // On vérifie s'il y a un message client NON LU
                 const hasUnreadMessage = project.messages && project.messages.length > 0 && !project.messages[project.messages.length - 1].isStaff;
+                const deadline = project.estimatedDeliveryPhoto || project.estimatedDeliveryVideo; // 👇 DATE BUTOIR
                 
                 let borderClass = 'border-l-4 border-l-blue-500';
                 let bgClass = 'bg-white';
@@ -290,30 +267,21 @@ export default function AdminDashboard({
 
                 return (
                     <div key={project.id} onClick={() => setSelectedProjectId(project.id)} className={`relative rounded-xl shadow-sm border border-stone-200 p-4 hover:shadow-md transition-all cursor-pointer group ${borderClass} ${bgClass} flex flex-col md:flex-row gap-4 justify-between items-center`}>
+                        {hasUnreadMessage && <div className="absolute -top-2 -right-2 md:top-auto md:bottom-auto md:right-4 bg-blue-600 text-white text-[10px] font-bold px-3 py-1 rounded-full shadow-lg animate-bounce flex items-center gap-1 z-20 border-2 border-white"><MessageSquare className="w-3 h-3 fill-current"/> Message Client</div>}
                         
-                        {/* 2. PASTILLE DE NOTIFICATION MESSAGE */}
-                        {hasUnreadMessage && (
-                            <div className="absolute -top-2 -right-2 md:top-auto md:bottom-auto md:right-4 bg-blue-600 text-white text-[10px] font-bold px-3 py-1 rounded-full shadow-lg animate-bounce flex items-center gap-1 z-20 border-2 border-white">
-                                <MessageSquare className="w-3 h-3 fill-current"/> Message Client
-                            </div>
-                        )}
-
-                        {/* INFO PRINCIPALE */}
                         <div className="flex-1 w-full md:w-auto">
                             <div className="flex justify-between items-start mb-2 md:mb-0">
-                                <div>
-                                    <h3 className="font-bold text-lg text-stone-900 group-hover:text-stone-700 flex items-center gap-2">{project.clientNames} <span className="text-[10px] font-mono text-stone-400 bg-stone-100 px-1.5 rounded">{project.code}</span></h3>
-                                </div>
+                                <div><h3 className="font-bold text-lg text-stone-900 group-hover:text-stone-700 flex items-center gap-2">{project.clientNames} <span className="text-[10px] font-mono text-stone-400 bg-stone-100 px-1.5 rounded">{project.code}</span></h3></div>
                                 <div className="md:hidden">{badge}</div>
                             </div>
                             <div className="flex flex-wrap gap-3 text-xs text-stone-600 mt-2">
                                 <div className="flex items-center gap-1 bg-white/50 px-2 py-1 rounded-md border border-stone-100"><Calendar className="w-3 h-3 text-stone-400"/> {new Date(project.weddingDate).toLocaleDateString()}</div>
-                                <div className="flex items-center gap-1 bg-white/50 px-2 py-1 rounded-md border border-stone-100"><MapPin className="w-3 h-3 text-stone-400"/> <span className="truncate max-w-[150px]">{project.weddingVenue || 'Lieu non défini'}</span></div>
+                                {/* 👇 DATE BUTOIR D'AFFICHEE ICI */}
+                                {deadline && !isDelivered && <div className={`flex items-center gap-1 px-2 py-1 rounded-md border font-bold ${new Date(deadline).getTime() < Date.now() ? 'bg-red-100 text-red-600 border-red-200' : 'bg-white/50 border-stone-100 text-stone-500'}`}><Clock className="w-3 h-3"/> Fin : {new Date(deadline).toLocaleDateString()}</div>}
                                 <div className="flex items-center gap-1 bg-white/50 px-2 py-1 rounded-md border border-stone-100"><Users className="w-3 h-3 text-stone-400"/> <span className="truncate max-w-[150px]">{project.photographerName || project.videographerName || 'Staff non assigné'}</span></div>
                             </div>
                         </div>
 
-                        {/* BARRES DE PROGRESSION */}
                         <div className="flex gap-4 w-full md:w-96 items-center">
                              {project.statusPhoto !== 'none' && (
                                 <div className="flex-1 bg-white/80 p-2 rounded-lg border border-stone-100">
