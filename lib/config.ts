@@ -6,7 +6,7 @@ export const COLLECTION_NAME = "wedding_projects";
 export const SETTINGS_COLLECTION = "settings";
 
 // 👇 METTEZ VOS URLS ICI
-export const MAKE_WEBHOOK_URL = "https://hook.eu2.make.com/iwf8nbt3tywmywp6u89xgn7e2nar0bbs"; 
+export const MAKE_WEBHOOK_URL = "https://hook.eu2.make.com/xnuln15n6zggpfk18p78o7olikrd8a99"; 
 export const STRIPE_PRIORITY_LINK = "https://buy.stripe.com/fZu4gz07eaPzcRt54Y5gc0c";
 export const STRIPE_RAW_LINK = "https://buy.stripe.com/cNi5kD5rye1L2cP2WQ5gc0d";
 export const STRIPE_ARCHIVE_RESTORE_LINK = "https://buy.stripe.com/fZu00j3jq4rb5p140U5gc0e";
