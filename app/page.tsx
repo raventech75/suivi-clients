@@ -2,11 +2,11 @@
 import React, { useState, useEffect } from 'react';
 import { onAuthStateChanged, signOut } from 'firebase/auth'; 
 import { collection, query, onSnapshot, doc } from 'firebase/firestore'; 
-import { HeartHandshake, ChevronRight, Lock, Sparkles, ShieldCheck, Clock, ChevronDown } from 'lucide-react';
+import { HeartHandshake, ChevronRight, Lock, Sparkles, ShieldCheck, Clock, ChevronDown, AlertTriangle } from 'lucide-react';
 
 import { auth, db } from '../lib/firebase';
 import { COLLECTION_NAME, Project, STAFF_DIRECTORY } from '../lib/config';
-import AdminDashboard from '../components/AdminDashboard'; // Il va chercher le dashboard ici
+import AdminDashboard from '../components/AdminDashboard';
 import ClientPortal from '../components/ClientPortal';
 import StatsDashboard from '../components/StatsDashboard';
 import AdminLogin from '../components/AdminLogin';
@@ -16,20 +16,44 @@ export default function Home() {
   const [view, setView] = useState<'landing' | 'client' | 'admin' | 'login' | 'stats'>('landing');
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
+  const [accessDenied, setAccessDenied] = useState(false); // Nouvel état pour gérer les intrus
   
   const [dynamicStaff, setDynamicStaff] = useState<Record<string, string>>({});
   
-  // 1. Auth avec Redirection Intelligente
+  // 1. Auth avec SÉCURITÉ RENFORCÉE (Le Vigile 👮‍♂️)
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       setUser(currentUser);
-      if (currentUser) {
-          setView('admin'); // Redirection auto si connecté
+      
+      if (currentUser && currentUser.email) {
+          // 👇 LISTE DES EMAILS AUTORISÉS (Admins + Staff)
+          // On combine les emails du fichier config + l'admin principal
+          const allowedEmails = [
+              'irzzenproductions@gmail.com', 
+              'admin@raventech.com',
+              ...Object.values(STAFF_DIRECTORY),
+              ...Object.values(dynamicStaff) // Si le staff dynamique est chargé
+          ];
+
+          // On vérifie si l'email qui se connecte est dans la liste ou contient "irzzen"
+          const isAuthorized = allowedEmails.includes(currentUser.email) || currentUser.email.includes('irzzen');
+
+          if (isAuthorized) {
+              setView('admin');
+              setAccessDenied(false);
+          } else {
+              // ⛔️ INTRUS DÉTECTÉ : On le déconnecte et on affiche une erreur
+              console.warn("Tentative d'accès non autorisé par :", currentUser.email);
+              await signOut(auth);
+              setUser(null);
+              setAccessDenied(true);
+              setView('landing');
+          }
       }
       setLoading(false);
     });
     return () => unsubscribe();
-  }, []);
+  }, [dynamicStaff]); // On re-vérifie si le staff change
 
   // 2. Chargement des Projets
   useEffect(() => {
@@ -77,6 +101,15 @@ export default function Home() {
   return (
     <div className="min-h-screen font-sans text-stone-800 bg-stone-50 overflow-x-hidden">
       
+      {/* ALERTE SÉCURITÉ SI UN CLIENT ESSAIE DE SE CONNECTER EN ADMIN */}
+      {accessDenied && (
+          <div className="fixed top-0 left-0 right-0 bg-red-600 text-white p-4 text-center z-50 animate-bounce font-bold flex items-center justify-center gap-2 shadow-xl">
+              <AlertTriangle className="w-5 h-5"/>
+              ACCÈS REFUSÉ : Votre compte n'est pas autorisé à accéder au Backoffice Studio.
+              <button onClick={() => setAccessDenied(false)} className="ml-4 underline text-xs">Fermer</button>
+          </div>
+      )}
+
       {view === 'landing' && (
         <div className="flex flex-col">
            {/* HERO SECTION */}
