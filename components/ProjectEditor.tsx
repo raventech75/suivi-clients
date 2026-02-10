@@ -1,17 +1,16 @@
 'use client';
 import React, { useState, useEffect, useRef } from 'react';
 import { 
-  Camera, Video, Ban, ChevronRight, Rocket, Mail, 
+  Camera, Video, ChevronRight, Rocket, 
   BookOpen, Trash2, Image as ImageIcon, CheckSquare, 
-  Upload, Loader2, MapPin, FileText, Users, Calendar, Eye, Timer, Music, Briefcase, History, Archive, RefreshCw, UserCheck, Send, Palette, ExternalLink, HardDrive
+  Upload, Loader2, MapPin, Users, History, Archive, RefreshCw, UserCheck, Send, Palette, ExternalLink, HardDrive
 } from 'lucide-react';
 import { doc, updateDoc, deleteDoc, serverTimestamp } from 'firebase/firestore'; 
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { db, storage, appId } from '../lib/firebase';
+import { db, storage } from '../lib/firebase'; // 👈 Suppression de appId qui causait le bug
 import { 
   COLLECTION_NAME, MAKE_WEBHOOK_URL, PHOTO_STEPS, 
-  VIDEO_STEPS, ALBUM_STATUSES, USB_STATUSES, Project, 
-  STAFF_DIRECTORY 
+  VIDEO_STEPS, ALBUM_STATUSES, USB_STATUSES, Project 
 } from '../lib/config';
 import ChatBox from './ChatSystem';
 import TeamChat from './TeamChat';
@@ -27,7 +26,6 @@ const formatDateTimeFR = (dateString: string) => {
 };
 
 export default function ProjectEditor({ project, isSuperAdmin, staffList, staffDirectory, user }: { project: Project, isSuperAdmin: boolean, staffList: string[], staffDirectory: Record<string, string>, user: any }) {
-  // Par défaut ouvert pour éviter un clic
   const [isExpanded, setIsExpanded] = useState(true);
   const [localData, setLocalData] = useState<Project>(project);
   const [hasChanges, setHasChanges] = useState(false);
@@ -75,10 +73,8 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, staffD
 
   const handleStaffChange = (roleNameKey: 'photographerName' | 'videographerName' | 'managerName', roleEmailKey: 'photographerEmail' | 'videographerEmail' | 'managerEmail', name: string) => {
       let newData = { ...localData, [roleNameKey]: name };
-      const fixedEmail = STAFF_DIRECTORY[name];
-      const learnedEmail = staffDirectory ? staffDirectory[name] : null;
-      const emailToUse = fixedEmail || learnedEmail;
-      if (emailToUse) newData = { ...newData, [roleEmailKey]: emailToUse };
+      const fixedEmail = staffDirectory ? staffDirectory[name] : null;
+      if (fixedEmail) newData = { ...newData, [roleEmailKey]: fixedEmail };
       setLocalData(newData);
       setHasChanges(true);
   };
@@ -104,8 +100,9 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, staffD
       }, ...(localData.history || [])];
       
       setLocalData(prev => ({ ...prev, isArchived: newStatus, history: newHistory }));
-      const colPath = typeof appId !== 'undefined' ? `artifacts/${appId}/public/data/${COLLECTION_NAME}` : COLLECTION_NAME;
-      await updateDoc(doc(db, colPath, project.id), {
+      
+      // 👇 CORRECTION : Utilisation directe de COLLECTION_NAME
+      await updateDoc(doc(db, COLLECTION_NAME, project.id), {
           isArchived: newStatus, history: newHistory, lastUpdated: serverTimestamp()
       });
   };
@@ -139,8 +136,9 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, staffD
       await uploadBytes(storageRef, file);
       const url = await getDownloadURL(storageRef);
       setLocalData(prev => ({ ...prev, coverImage: url }));
-      const colPath = typeof appId !== 'undefined' ? `artifacts/${appId}/public/data/${COLLECTION_NAME}` : COLLECTION_NAME;
-      await updateDoc(doc(db, colPath, project.id), { coverImage: url, lastUpdated: serverTimestamp() });
+      
+      // 👇 CORRECTION
+      await updateDoc(doc(db, COLLECTION_NAME, project.id), { coverImage: url, lastUpdated: serverTimestamp() });
     } catch (error: any) { alert(`Erreur upload: ${error.message}`); } finally { setUploading(false); setIsDragging(false); }
   };
 
@@ -187,12 +185,16 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, staffD
       setLocalData(finalLocalState); 
       originalDataRef.current = JSON.parse(JSON.stringify(finalLocalState));
 
-      const colPath = typeof appId !== 'undefined' ? `artifacts/${appId}/public/data/${COLLECTION_NAME}` : COLLECTION_NAME;
       try { 
-          await updateDoc(doc(db, colPath, project.id), finalDbState); 
+          // 👇 CORRECTION : On pointe directement sur COLLECTION_NAME
+          await updateDoc(doc(db, COLLECTION_NAME, project.id), finalDbState); 
           alert("✅ Sauvegarde effectuée !");
       } 
-      catch (error) { console.error("Erreur Sauvegarde:", error); return; }
+      catch (error: any) { 
+          console.error("Erreur Sauvegarde:", error); 
+          alert(`Erreur Sauvegarde : ${error.message}`); // Message plus précis
+          return; 
+      }
 
       setHasChanges(false); 
 
@@ -220,6 +222,7 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, staffD
       }
   };
 
+  // --- 📧 LE FIX PRINCIPAL EST ICI ---
   const invite = async () => {
       if (!localData.clientEmail) { alert("Email client manquant"); return; }
       setSendingInvite(true);
@@ -232,16 +235,22 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, staffD
           const newHistory = [{ date: new Date().toISOString(), user: user.email?.split('@')[0] || 'Admin', action: `INVITATION ENVOYÉE (N°${newCount})` }, ...(localData.history||[])];
           setLocalData(prev => ({ ...prev, inviteCount: newCount, history: newHistory }));
           originalDataRef.current = { ...originalDataRef.current, inviteCount: newCount, history: newHistory };
-          const colPath = typeof appId !== 'undefined' ? `artifacts/${appId}/public/data/${COLLECTION_NAME}` : COLLECTION_NAME;
-          await updateDoc(doc(db, colPath, project.id), { inviteCount: newCount, history: newHistory, lastUpdated: serverTimestamp() });
+          
+          // 👇 CORRECTION : Utilisation directe de COLLECTION_NAME
+          await updateDoc(doc(db, COLLECTION_NAME, project.id), { inviteCount: newCount, history: newHistory, lastUpdated: serverTimestamp() });
+          
           alert(`✅ Invitation envoyée (N°${newCount})`);
-      } catch (err) { alert("Erreur envoi"); } finally { setSendingInvite(false); }
+      } catch (err: any) { 
+          // 👇 MODIFICATION : On affiche la VRAIE erreur
+          alert(`Erreur technique : ${err.message}`); 
+          console.error(err);
+      } finally { setSendingInvite(false); }
   };
 
   const handleDelete = async () => {
     if(!confirm('Supprimer ?')) return;
-    const colPath = typeof appId !== 'undefined' ? `artifacts/${appId}/public/data/${COLLECTION_NAME}` : COLLECTION_NAME;
-    await deleteDoc(doc(db, colPath, project.id));
+    // 👇 CORRECTION
+    await deleteDoc(doc(db, COLLECTION_NAME, project.id));
   };
 
   return (
@@ -338,7 +347,7 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, staffD
                             </div>
                         </div>
 
-                        {/* 👇 NOUVEAU : SECTION CLEF USB */}
+                        {/* SECTION CLEF USB */}
                         <div className="bg-white p-6 rounded-xl border border-stone-200 shadow-sm">
                             <h4 className="font-bold text-stone-800 mb-4 flex items-center gap-2"><HardDrive className="w-5 h-5 text-stone-400"/> Coffret USB</h4>
                             <div className="space-y-4">
