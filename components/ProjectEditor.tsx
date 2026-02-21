@@ -5,7 +5,7 @@ import {
   BookOpen, Trash2, Image as ImageIcon, CheckSquare, 
   Upload, Loader2, MapPin, FileText, Users, Calendar, Eye, Timer, Music, Briefcase, History, Archive, RefreshCw, UserCheck, Send, Palette, ExternalLink, HardDrive, Link, Printer, CheckCircle2, ImagePlus, Copy, Wallet, DollarSign, ClipboardList, Clock, Phone, FileSignature, AlertTriangle, ListChecks
 } from 'lucide-react';
-import { doc, updateDoc, deleteDoc, serverTimestamp } from 'firebase/firestore'; 
+import { doc, updateDoc, deleteDoc, serverTimestamp, getDoc } from 'firebase/firestore'; 
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { db, storage, appId } from '../lib/firebase';
 import { 
@@ -43,6 +43,25 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, staffD
   
   const fileInputRef = useRef<HTMLInputElement>(null);
   const galleryInputRef = useRef<HTMLInputElement>(null); 
+
+  // 👇 NOUVEAU : Chargement des paramètres du Studio depuis Firebase
+  const [studioSettings, setStudioSettings] = useState({ formulas: FORMULAS, options: FORMULA_OPTIONS });
+
+  useEffect(() => {
+      const fetchSettings = async () => {
+          try {
+              const snap = await getDoc(doc(db, "settings", "studio_config"));
+              if (snap.exists()) {
+                  const data = snap.data();
+                  setStudioSettings({
+                      formulas: data.formulas || FORMULAS,
+                      options: data.options || FORMULA_OPTIONS
+                  });
+              }
+          } catch(e) { console.error(e); }
+      };
+      fetchSettings();
+  }, []);
 
   const canEdit = !!user; 
   const now = Date.now();
@@ -111,16 +130,15 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, staffD
       updateField('selectedOptions', currentOptions);
   };
 
-  // 👇 NOUVEAU : Calcul avec Alerte Avenant
   const calculateTotalPrice = () => {
       let total = 0;
       if (localData.selectedFormula) {
-          const formula = FORMULAS.find(f => f.id === localData.selectedFormula);
+          const formula = studioSettings.formulas.find((f:any) => f.id === localData.selectedFormula);
           if (formula) total += formula.price;
       }
       if (localData.selectedOptions) {
           localData.selectedOptions.forEach(optId => {
-              const option = FORMULA_OPTIONS.find(o => o.id === optId);
+              const option = studioSettings.options.find((o:any) => o.id === optId);
               if (option) total += option.price;
           });
       }
@@ -132,7 +150,6 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, staffD
       updateField('totalPrice', total);
   };
 
-  // 👇 NOUVEAU : Réinitialisation et Sauvegarde Automatique de l'Avenant
   const resetContract = async () => {
       if(!confirm("Créer un avenant ?\n\nCela effacera la signature actuelle et sauvegardera vos nouvelles modifications (Options/Prix). Le client devra re-signer le contrat.\n\nContinuer ?")) return;
       
@@ -341,7 +358,7 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, staffD
       const win = window.open('', '', 'width=900,height=1000');
       if(!win) return;
       
-      const formulasHtml = FORMULAS.map(f => {
+      const formulasHtml = studioSettings.formulas.map((f:any) => {
           const isSelected = localData.selectedFormula === f.id;
           const box = isSelected ? '☑' : '☐';
           return `
@@ -352,7 +369,7 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, staffD
           `;
       }).join('');
 
-      const optionsHtml = FORMULA_OPTIONS.map(o => {
+      const optionsHtml = studioSettings.options.map((o:any) => {
           const isSelected = (localData.selectedOptions || []).includes(o.id);
           const box = isSelected ? '☑' : '☐';
           return `<div style="font-size: 14px; margin-bottom: 5px;">${box} ${o.name} (+${o.price} €)</div>`;
@@ -548,7 +565,6 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, staffD
                             </div>
                         </div>
 
-                        {/* CRÉATION DU DEVIS / CONTRAT DANS LES FINANCES */}
                         {isSuperAdmin && (
                             <div className="bg-white p-6 rounded-xl border border-stone-200 shadow-sm">
                                 <h4 className="font-bold text-stone-800 mb-4 flex items-center justify-between">
@@ -572,14 +588,14 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, staffD
                                             onChange={e => updateField('selectedFormula', e.target.value)}
                                         >
                                             <option value="">-- Sélectionner une formule --</option>
-                                            {FORMULAS.map(f => <option key={f.id} value={f.id}>{f.name} ({f.price}€)</option>)}
+                                            {studioSettings.formulas.map((f:any) => <option key={f.id} value={f.id}>{f.name} ({f.price}€)</option>)}
                                         </select>
                                     </div>
 
                                     <div className="mb-4">
                                         <label className="text-[10px] uppercase font-bold text-green-800 block mb-1">Options supplémentaires</label>
                                         <div className="grid grid-cols-2 gap-2">
-                                            {FORMULA_OPTIONS.map(opt => (
+                                            {studioSettings.options.map((opt:any) => (
                                                 <label key={opt.id} className="flex items-center gap-2 text-xs text-stone-700 bg-white p-2 rounded border border-green-100 cursor-pointer hover:bg-green-50">
                                                     <input 
                                                         type="checkbox" 
@@ -614,7 +630,6 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, staffD
                                         </div>
                                     ) : null}
 
-                                    {/* STATUT DU CONTRAT ET BOUTON AVENANT */}
                                     {localData.totalPrice && localData.totalPrice > 0 ? (
                                         localData.contractSigned ? (
                                             <div className="pt-3 border-t border-green-200/50 flex flex-col gap-2">

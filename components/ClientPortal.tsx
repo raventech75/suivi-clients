@@ -5,7 +5,7 @@ import {
   Music, Rocket, CheckCircle, CheckSquare, BookOpen, 
   Copy, ClipboardCheck, X, Users, Camera, Video, UserCheck, HardDrive, Download, Lock, ShoppingBag, Palette, PlayCircle, Heart, ZoomIn, MapPin, Clock, Phone, ClipboardList, CheckCircle2, PenTool, Eraser, FileText
 } from 'lucide-react';
-import { doc, updateDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, updateDoc, serverTimestamp, getDoc } from 'firebase/firestore';
 import { db, appId } from '../lib/firebase';
 import { 
   COLLECTION_NAME, STRIPE_PRIORITY_LINK, STRIPE_RAW_LINK, STRIPE_ARCHIVE_RESTORE_LINK,
@@ -48,6 +48,35 @@ export default function ClientPortal({ projects, onBack }: { projects: Project[]
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [isDrawing, setIsDrawing] = useState(false);
   const [savingSignature, setSavingSignature] = useState(false);
+
+  // 👇 NOUVEAU : Chargement des paramètres du Studio
+  const [studioSettings, setStudioSettings] = useState({ 
+      formulas: FORMULAS, 
+      options: FORMULA_OPTIONS,
+      stripePriority: STRIPE_PRIORITY_LINK,
+      stripeRaw: STRIPE_RAW_LINK,
+      stripeArchive: STRIPE_ARCHIVE_RESTORE_LINK
+  });
+
+  useEffect(() => {
+      const fetchSettings = async () => {
+          try {
+              const snap = await getDoc(doc(db, "settings", "studio_config"));
+              if (snap.exists()) {
+                  const data = snap.data();
+                  setStudioSettings(prev => ({
+                      ...prev,
+                      formulas: data.formulas || prev.formulas,
+                      options: data.options || prev.options,
+                      stripePriority: data.stripePriority || prev.stripePriority,
+                      stripeRaw: data.stripeRaw || prev.stripeRaw,
+                      stripeArchive: data.stripeArchive || prev.stripeArchive
+                  }));
+              }
+          } catch(e) { console.error(e); }
+      };
+      fetchSettings();
+  }, []);
 
   useEffect(() => {
     if (projects.length === 1 && projects[0].id) {
@@ -161,7 +190,7 @@ export default function ClientPortal({ projects, onBack }: { projects: Project[]
       const win = window.open('', '', 'width=900,height=1000');
       if(!win) return;
       
-      const formulasHtml = FORMULAS.map(f => {
+      const formulasHtml = studioSettings.formulas.map((f:any) => {
           const isSelected = foundProject.selectedFormula === f.id;
           const box = isSelected ? '☑' : '☐';
           return `
@@ -172,7 +201,7 @@ export default function ClientPortal({ projects, onBack }: { projects: Project[]
           `;
       }).join('');
 
-      const optionsHtml = FORMULA_OPTIONS.map(o => {
+      const optionsHtml = studioSettings.options.map((o:any) => {
           const isSelected = (foundProject.selectedOptions || []).includes(o.id);
           const box = isSelected ? '☑' : '☐';
           return `<div style="font-size: 14px; margin-bottom: 5px;">${box} ${o.name} (+${o.price} €)</div>`;
@@ -349,9 +378,9 @@ export default function ClientPortal({ projects, onBack }: { projects: Project[]
     const hasDelivery = foundProject.statusPhoto === 'delivered' || foundProject.statusVideo === 'delivered';
     const allConfirmed = foundProject.deliveryConfirmedPhoto && foundProject.deliveryConfirmedVideo;
 
-    const fastTrackLink = `${STRIPE_PRIORITY_LINK}?client_reference_id=${foundProject.id}`;
-    const rawLink = `${STRIPE_RAW_LINK}?client_reference_id=${foundProject.id}`;
-    const archiveLink = `${STRIPE_ARCHIVE_RESTORE_LINK}?client_reference_id=${foundProject.id}`;
+    const fastTrackLink = `${studioSettings.stripePriority}?client_reference_id=${foundProject.id}`;
+    const rawLink = `${studioSettings.stripeRaw}?client_reference_id=${foundProject.id}`;
+    const archiveLink = `${studioSettings.stripeArchive}?client_reference_id=${foundProject.id}`;
 
     const bgImage = (foundProject.coverImage && foundProject.coverImage.length > 10) 
         ? foundProject.coverImage 
@@ -405,10 +434,10 @@ export default function ClientPortal({ projects, onBack }: { projects: Project[]
                           <p className="font-bold text-stone-900 mb-2 text-lg">Résumé de votre devis :</p>
                           <ul className="list-disc pl-5 space-y-2 mb-4">
                               {foundProject.selectedFormula && (
-                                  <li>Formule choisie : <strong>{FORMULAS.find(f => f.id === foundProject.selectedFormula)?.name}</strong></li>
+                                  <li>Formule choisie : <strong>{studioSettings.formulas.find((f:any) => f.id === foundProject.selectedFormula)?.name}</strong></li>
                               )}
                               {foundProject.selectedOptions && foundProject.selectedOptions.length > 0 && (
-                                  <li>Options : <strong>{foundProject.selectedOptions.map(id => FORMULA_OPTIONS.find(o => o.id === id)?.name).filter(Boolean).join(', ')}</strong></li>
+                                  <li>Options : <strong>{foundProject.selectedOptions.map(id => studioSettings.options.find((o:any) => o.id === id)?.name).filter(Boolean).join(', ')}</strong></li>
                               )}
                               <li>Prix Total : <strong>{foundProject.totalPrice} €</strong></li>
                               <li>Acompte versé : <strong>{foundProject.depositAmount || 0} €</strong></li>
