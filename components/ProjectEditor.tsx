@@ -221,9 +221,25 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, staffD
       if (!localData.clientEmail) { alert("Email manquant."); return; }
       const cleanData = { ...localData, lastUpdated: serverTimestamp() };
       
+      const changes: string[] = [];
+      const old = originalDataRef.current;
+      const cur = localData;
+
+      if (old) {
+          if (old.statusPhoto !== cur.statusPhoto) changes.push(`Statut Photo : ${old.statusPhoto} ➔ ${cur.statusPhoto}`);
+          if (old.statusVideo !== cur.statusVideo) changes.push(`Statut Vidéo : ${old.statusVideo} ➔ ${cur.statusVideo}`);
+          if (old.usbStatus !== cur.usbStatus) changes.push(`Statut USB : ${old.usbStatus || 'aucun'} ➔ ${cur.usbStatus}`);
+          if (old.linkPhoto !== cur.linkPhoto) changes.push(`Lien Galerie ${cur.linkPhoto ? 'MAJ' : 'Supprimé'}`);
+          if (old.linkVideo !== cur.linkVideo) changes.push(`Lien Vidéo ${cur.linkVideo ? 'MAJ' : 'Supprimé'}`);
+          // Traces si l'équipe modifie la zique
+          if (old.musicInstructions !== cur.musicInstructions || old.musicLinks !== cur.musicLinks) changes.push(`Préférences musicales mises à jour`);
+          if (old.moodboardLink !== cur.moodboardLink) changes.push(`Moodboard mis à jour`);
+      }
+
       let updatedHistory = [...(localData.history || [])];
-      // Simple log
-      updatedHistory.unshift({ date: new Date().toISOString(), user: user.email ? user.email.split('@')[0] : 'Admin', action: 'Mise à jour dossier' });
+      if (changes.length > 0) {
+          updatedHistory.unshift({ date: new Date().toISOString(), user: user.email ? user.email.split('@')[0] : 'Admin', action: changes.join(' | ') });
+      }
       cleanData.history = updatedHistory;
 
       const colPath = typeof appId !== 'undefined' ? `artifacts/${appId}/public/data/${COLLECTION_NAME}` : COLLECTION_NAME;
@@ -233,6 +249,7 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, staffD
       } catch (e: any) { alert(e.message); return; }
       
       setHasChanges(false); 
+      originalDataRef.current = JSON.parse(JSON.stringify(cleanData));
 
       // Webhook Trigger
       const hasPhotoChanged = localData.statusPhoto !== project.statusPhoto;
@@ -379,10 +396,24 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, staffD
                         <div className="bg-white p-6 rounded-xl border border-stone-200 shadow-sm">
                             <h4 className="font-bold text-stone-800 mb-4 flex items-center gap-2"><Camera className="w-5 h-5 text-stone-400"/> Suivi Production</h4>
                             
-                            {/* MOODBOARD */}
-                            <div className="mb-6 p-3 bg-pink-50 rounded-lg border border-pink-100 flex items-center justify-between">
-                                <div className="flex items-center gap-2 text-pink-800"><Palette className="w-4 h-4"/><span className="text-xs font-bold uppercase">Moodboard Client</span></div>
-                                {localData.moodboardLink ? (<a href={localData.moodboardLink} target="_blank" className="flex items-center gap-1 bg-white text-pink-600 px-3 py-1.5 rounded-md text-xs font-bold border border-pink-200 hover:bg-pink-100 transition shadow-sm"><ExternalLink className="w-3 h-3"/> Voir le style</a>) : (<span className="text-xs text-pink-300 italic">Aucun lien fourni</span>)}
+                            {/* 👇 NOUVEAU : PREFERENCES CLIENTS (Moodboard & Musique) */}
+                            <div className="grid md:grid-cols-2 gap-4 mb-6">
+                                <div className="p-4 bg-pink-50 rounded-xl border border-pink-100 flex flex-col gap-3">
+                                    <div className="flex items-center justify-between text-pink-800">
+                                        <div className="flex items-center gap-2"><Palette className="w-4 h-4"/><span className="text-xs font-bold uppercase">Moodboard</span></div>
+                                        {localData.moodboardLink && <a href={localData.moodboardLink} target="_blank" rel="noopener noreferrer" className="bg-white p-1.5 rounded shadow-sm text-pink-600 hover:bg-pink-100"><ExternalLink className="w-3 h-3"/></a>}
+                                    </div>
+                                    <input disabled={!canEdit} className="w-full p-2 border border-pink-200 rounded text-xs bg-white focus:ring-1 outline-none placeholder-pink-300" placeholder="Lien d'inspiration..." value={localData.moodboardLink || ''} onChange={e=>updateField('moodboardLink', e.target.value)} />
+                                </div>
+                                
+                                <div className="p-4 bg-purple-50 rounded-xl border border-purple-100 flex flex-col gap-3">
+                                    <div className="flex items-center justify-between text-purple-800">
+                                        <div className="flex items-center gap-2"><Music className="w-4 h-4"/><span className="text-xs font-bold uppercase">Musique & Notes</span></div>
+                                        {localData.musicLinks && <a href={localData.musicLinks} target="_blank" rel="noopener noreferrer" className="bg-white p-1.5 rounded shadow-sm text-purple-600 hover:bg-purple-100"><ExternalLink className="w-3 h-3"/></a>}
+                                    </div>
+                                    <textarea disabled={!canEdit} className="w-full p-2 border border-purple-200 rounded text-xs bg-white min-h-[60px] focus:ring-1 outline-none placeholder-purple-300" placeholder="Instructions de montage du client..." value={localData.musicInstructions || ''} onChange={e=>updateField('musicInstructions', e.target.value)} />
+                                    <input disabled={!canEdit} className="w-full p-2 border border-purple-200 rounded text-xs bg-white focus:ring-1 outline-none placeholder-purple-300" placeholder="Lien Spotify/Youtube..." value={localData.musicLinks || ''} onChange={e=>updateField('musicLinks', e.target.value)} />
+                                </div>
                             </div>
 
                             {/* CHECKLIST PHOTO */}
