@@ -341,6 +341,7 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, staffD
               .signature-box { margin-top: 50px; border-top: 1px solid #ccc; padding-top: 20px; display: flex; justify-content: space-between; }
               .signature-img { max-width: 250px; max-height: 100px; border-bottom: 1px solid #000; padding-bottom: 5px; margin-bottom: 10px; }
               .terms { font-size: 11px; color: #444; text-align: justify; column-count: 2; column-gap: 30px;}
+              .terms p { margin-bottom: 12px; }
             </style>
           </head>
           <body>
@@ -379,15 +380,15 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, staffD
             <h1>CONDITIONS GÉNÉRALES DE VENTE</h1>
             
             <div class="terms">
-                <p><strong>ACOMPTE POUR RÉSERVATION :</strong> Le premier paiement est un acompte qui correspond à environ 30% de la somme totale. L'acompte n'est pas récupérable. Le paiement est à effectuer lors de la signature du présent contrat. Ainsi la date du mariage sera réservée.</p>
+                <p><strong>ACOMPTE ET PAIEMENT :</strong> Le premier versement est un acompte ferme et définitif valant engagement irrévocable. Cet acompte n'est remboursable sous aucun prétexte (y compris en cas de force majeure, maladie, séparation ou pandémie). La date du mariage est bloquée dès réception de cet acompte. Le solde total de la prestation devra être intégralement réglé au plus tard le jour de l'événement. Aucune livraison de fichiers ne sera effectuée avant le paiement complet.</p>
                 
-                <p><strong>GÉNÉRALITÉS :</strong> Les futurs Mariés déclarent être majeurs et poser librement. La prestation du Photographe se déroule d'un seul tenant. Son temps de présence ne peut être fractionné sauf accord préalable. Les Mariés peuvent choisir de passer à une collection supérieure, mais l'inverse n'est pas autorisé.</p>
+                <p><strong>ANNULATION PAR LES CLIENTS :</strong> En cas d'annulation ou de report de la prestation par les Mariés, et ce, quelle qu'en soit la cause ou le délai, l'acompte sera purement et simplement conservé par le Studio. De plus, à titre d'indemnité compensatrice pour la date bloquée et le manque à gagner, les Mariés s'engagent à régler la totalité du solde de la prestation initiale prévue au présent contrat.</p>
                 
-                <p><strong>DROIT À L'IMAGE ET PROPRIÉTÉ INTELLECTUELLE :</strong> Toute réalisation photographique confère au Photographe, son auteur, des droits de propriété artistique, patrimoniaux et moraux, tels que définis par le Code de la Propriété Intellectuelle. Les Mariés autorisent le Photographe à prendre en photo l'ensemble des invités.</p>
+                <p><strong>PERTE DE DONNÉES ET LIMITE DE RESPONSABILITÉ :</strong> Le Studio s'engage à mettre en œuvre tous les moyens techniques nécessaires pour la sauvegarde et la sécurité des images et vidéos (sauvegardes multiples). Toutefois, en cas de perte totale ou partielle des données due à un dysfonctionnement technique imprévisible, un crash matériel (carte SD, disque dur), un accident ou un vol, la responsabilité du Studio est strictement limitée. Dans ce cas de force majeure technique, le dédommagement maximum exigible par les clients ne pourra en aucun cas excéder la somme forfaitaire de 500 euros (cinq cents euros), indépendamment du préjudice matériel ou moral subi, et sans qu'aucun autre dommage et intérêt ne puisse être réclamé.</p>
                 
-                <p><strong>ANNULATION :</strong> Aucune annulation ne pourra intervenir du fait du Photographe, excepté les cas de force majeure dûment justifiés. Tout changement de date de la prestation fait office d'annulation. Dans l'éventualité où ce contrat serait rompu par les clients, le Photographe serait libéré d'honorer le présent contrat et garderait les sommes versées jusqu'alors.</p>
+                <p><strong>DROIT À L'IMAGE ET PROPRIÉTÉ INTELLECTUELLE :</strong> Toute réalisation photographique ou vidéographique confère au Studio des droits de propriété artistique exclusifs (Code de la Propriété Intellectuelle). Les Mariés autorisent expressément le Studio à utiliser les images/vidéos (les représentant ainsi que leurs invités) à des fins de promotion (site web, réseaux sociaux, salons, expositions, books), sauf demande écrite explicite et par courrier recommandé avant le jour du mariage.</p>
                 
-                <p><strong>APRÈS LE MARIAGE :</strong> Le coffret final avec la clé USB et les tirages sera livré dans les trois mois suivant le choix des Mariés sur les images à tirer. Le Photographe s'engage à conserver les fichiers numériques HD pendant une durée de 12 mois à compter de la date du mariage.</p>
+                <p><strong>FORCE MAJEURE DU STUDIO :</strong> Si le Photographe/Vidéaste attitré ne peut assurer la prestation pour cause de force majeure dūment justifiée (maladie grave, accident corporel), le Studio s'engage à faire son maximum pour proposer un remplaçant de même niveau. En cas d'impossibilité totale de trouver une alternative, les sommes versées par les clients leur seront remboursées. Les clients acceptent que ce remboursement clôture toute réclamation et renoncent à demander des dommages et intérêts supplémentaires.</p>
             </div>
 
             <div class="signature-box">
@@ -472,6 +473,7 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, staffD
                             </div>
                         </div>
 
+                        {/* FEUILLE DE ROUTE CÔTÉ ADMIN */}
                         <div className="bg-white p-6 rounded-xl border border-stone-200 shadow-sm relative">
                             <h4 className="font-bold text-stone-800 mb-4 flex items-center gap-2"><ClipboardList className="w-5 h-5 text-indigo-500"/> Feuille de Route (Jour J)</h4>
                             
@@ -516,6 +518,7 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, staffD
                             </div>
                         </div>
 
+                        {/* CRÉATION DU DEVIS / CONTRAT DANS LES FINANCES */}
                         {isSuperAdmin && (
                             <div className="bg-white p-6 rounded-xl border border-stone-200 shadow-sm">
                                 <h4 className="font-bold text-stone-800 mb-4 flex items-center justify-between">
@@ -631,6 +634,7 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, staffD
 
                     <div className="space-y-6">
                         
+                        {/* EQUIPE */}
                         <div className="bg-white p-6 rounded-xl border border-stone-200 shadow-sm">
                             <h4 className="font-bold text-stone-800 mb-4 flex items-center gap-2"><Briefcase className="w-5 h-5 text-stone-400"/> Équipe & Contact</h4>
                             <div className="space-y-4">
@@ -640,6 +644,7 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, staffD
                             </div>
                         </div>
 
+                        {/* PRODUCTION & CHECKLISTS */}
                         <div className="bg-white p-6 rounded-xl border border-stone-200 shadow-sm">
                             <h4 className="font-bold text-stone-800 mb-4 flex items-center gap-2"><Camera className="w-5 h-5 text-stone-400"/> Suivi Production</h4>
                             
@@ -709,6 +714,7 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, staffD
                             </div>
                         </div>
 
+                        {/* ALBUMS & GALERIE */}
                         <div className="bg-white p-6 rounded-xl border border-stone-200 shadow-sm">
                             <div className="flex justify-between items-center mb-4">
                                 <h4 className="font-bold text-stone-800 flex items-center gap-2"><BookOpen className="w-5 h-5 text-stone-400"/> Albums & Sélection</h4>
@@ -803,6 +809,7 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, staffD
                             )}
                         </div>
 
+                        {/* COFFRET USB */}
                         <div className="bg-white p-6 rounded-xl border border-stone-200 shadow-sm">
                             <h4 className="font-bold text-stone-800 mb-4 flex items-center gap-2"><HardDrive className="w-5 h-5 text-stone-400"/> Coffret USB</h4>
                             <div className="space-y-4">

@@ -192,6 +192,7 @@ export default function ClientPortal({ projects, onBack }: { projects: Project[]
               .signature-box { margin-top: 50px; border-top: 1px solid #ccc; padding-top: 20px; display: flex; justify-content: space-between; }
               .signature-img { max-width: 250px; max-height: 100px; border-bottom: 1px solid #000; padding-bottom: 5px; margin-bottom: 10px; }
               .terms { font-size: 11px; color: #444; text-align: justify; column-count: 2; column-gap: 30px;}
+              .terms p { margin-bottom: 12px; }
             </style>
           </head>
           <body>
@@ -230,15 +231,15 @@ export default function ClientPortal({ projects, onBack }: { projects: Project[]
             <h1>CONDITIONS GÉNÉRALES DE VENTE</h1>
             
             <div class="terms">
-                <p><strong>ACOMPTE POUR RÉSERVATION :</strong> Le premier paiement est un acompte qui correspond à environ 30% de la somme totale. L'acompte n'est pas récupérable. Le paiement est à effectuer lors de la signature du présent contrat. Ainsi la date du mariage sera réservée.</p>
+                <p><strong>ACOMPTE ET PAIEMENT :</strong> Le premier versement est un acompte ferme et définitif valant engagement irrévocable. Cet acompte n'est remboursable sous aucun prétexte (y compris en cas de force majeure, maladie, séparation ou pandémie). La date du mariage est bloquée dès réception de cet acompte. Le solde total de la prestation devra être intégralement réglé au plus tard le jour de l'événement. Aucune livraison de fichiers ne sera effectuée avant le paiement complet.</p>
                 
-                <p><strong>GÉNÉRALITÉS :</strong> Les futurs Mariés déclarent être majeurs et poser librement. La prestation du Photographe se déroule d'un seul tenant. Son temps de présence ne peut être fractionné sauf accord préalable. Les Mariés peuvent choisir de passer à une collection supérieure, mais l'inverse n'est pas autorisé.</p>
+                <p><strong>ANNULATION PAR LES CLIENTS :</strong> En cas d'annulation ou de report de la prestation par les Mariés, et ce, quelle qu'en soit la cause ou le délai, l'acompte sera purement et simplement conservé par le Studio. De plus, à titre d'indemnité compensatrice pour la date bloquée et le manque à gagner, les Mariés s'engagent à régler la totalité du solde de la prestation initiale prévue au présent contrat.</p>
                 
-                <p><strong>DROIT À L'IMAGE ET PROPRIÉTÉ INTELLECTUELLE :</strong> Toute réalisation photographique confère au Photographe, son auteur, des droits de propriété artistique, patrimoniaux et moraux, tels que définis par le Code de la Propriété Intellectuelle. Les Mariés autorisent le Photographe à prendre en photo l'ensemble des invités.</p>
+                <p><strong>PERTE DE DONNÉES ET LIMITE DE RESPONSABILITÉ :</strong> Le Studio s'engage à mettre en œuvre tous les moyens techniques nécessaires pour la sauvegarde et la sécurité des images et vidéos (sauvegardes multiples). Toutefois, en cas de perte totale ou partielle des données due à un dysfonctionnement technique imprévisible, un crash matériel (carte SD, disque dur), un accident ou un vol, la responsabilité du Studio est strictement limitée. Dans ce cas de force majeure technique, le dédommagement maximum exigible par les clients ne pourra en aucun cas excéder la somme forfaitaire de 500 euros (cinq cents euros), indépendamment du préjudice matériel ou moral subi, et sans qu'aucun autre dommage et intérêt ne puisse être réclamé.</p>
                 
-                <p><strong>ANNULATION :</strong> Aucune annulation ne pourra intervenir du fait du Photographe, excepté les cas de force majeure dûment justifiés. Tout changement de date de la prestation fait office d'annulation. Dans l'éventualité où ce contrat serait rompu par les clients, le Photographe serait libéré d'honorer le présent contrat et garderait les sommes versées jusqu'alors.</p>
+                <p><strong>DROIT À L'IMAGE ET PROPRIÉTÉ INTELLECTUELLE :</strong> Toute réalisation photographique ou vidéographique confère au Studio des droits de propriété artistique exclusifs (Code de la Propriété Intellectuelle). Les Mariés autorisent expressément le Studio à utiliser les images/vidéos (les représentant ainsi que leurs invités) à des fins de promotion (site web, réseaux sociaux, salons, expositions, books), sauf demande écrite explicite et par courrier recommandé avant le jour du mariage.</p>
                 
-                <p><strong>APRÈS LE MARIAGE :</strong> Le coffret final avec la clé USB et les tirages sera livré dans les trois mois suivant le choix des Mariés sur les images à tirer. Le Photographe s'engage à conserver les fichiers numériques HD pendant une durée de 12 mois à compter de la date du mariage.</p>
+                <p><strong>FORCE MAJEURE DU STUDIO :</strong> Si le Photographe/Vidéaste attitré ne peut assurer la prestation pour cause de force majeure dūment justifiée (maladie grave, accident corporel), le Studio s'engage à faire son maximum pour proposer un remplaçant de même niveau. En cas d'impossibilité totale de trouver une alternative, les sommes versées par les clients leur seront remboursées. Les clients acceptent que ce remboursement clôture toute réclamation et renoncent à demander des dommages et intérêts supplémentaires.</p>
             </div>
 
             <div class="signature-box">
@@ -390,7 +391,7 @@ export default function ClientPortal({ projects, onBack }: { projects: Project[]
         
         <div className="max-w-4xl mx-auto px-4 -mt-16 space-y-8 relative z-10">
 
-          {/* 👇 GESTION DU CONTRAT CÔTÉ CLIENT */}
+          {/* 👇 GESTION DU CONTRAT CÔTÉ CLIENT AVEC CONDITIONS STRICTES */}
           {foundProject.totalPrice && foundProject.totalPrice > 0 ? (
               !foundProject.contractSigned ? (
                   <div className="bg-white p-6 rounded-2xl border-2 border-stone-800 shadow-xl relative overflow-hidden animate-fade-in">
@@ -413,7 +414,9 @@ export default function ClientPortal({ projects, onBack }: { projects: Project[]
                               <li>Acompte versé : <strong>{foundProject.depositAmount || 0} €</strong></li>
                               <li className="text-red-600 font-bold">Reste à régler le jour de l'événement : {foundProject.totalPrice - (foundProject.depositAmount || 0)} €</li>
                           </ul>
-                          <p className="text-xs italic mt-4 border-t pt-2 border-stone-200">En signant ci-dessous, j'accepte les conditions générales de vente du Studio RavenTech (droits d'image, politique d'annulation, délais de livraison).</p>
+                          <p className="text-[11px] italic mt-4 border-t pt-3 border-stone-200 font-bold text-stone-700">
+                              En signant ci-dessous, j'accepte sans réserve les conditions générales de vente du Studio RavenTech, incluant notamment : le non-remboursement strict de l'acompte, l'exigibilité de la totalité du solde en cas d'annulation de mon fait, et la limitation de responsabilité à 500€ en cas de perte accidentelle de données.
+                          </p>
                       </div>
 
                       <div className="mb-4">
