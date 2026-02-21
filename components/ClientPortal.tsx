@@ -49,7 +49,6 @@ export default function ClientPortal({ projects, onBack }: { projects: Project[]
   const [isDrawing, setIsDrawing] = useState(false);
   const [savingSignature, setSavingSignature] = useState(false);
 
-  // 👇 NOUVEAU : Chargement des paramètres du Studio
   const [studioSettings, setStudioSettings] = useState({ 
       formulas: FORMULAS, 
       options: FORMULA_OPTIONS,
@@ -185,6 +184,7 @@ export default function ClientPortal({ projects, onBack }: { projects: Project[]
       setSavingSignature(false);
   };
 
+  // 👇 PDF OFFICIEL REPRENANT EXACTEMENT VOS TERMES
   const printContract = () => {
       if(!foundProject) return;
       const win = window.open('', '', 'width=900,height=1000');
@@ -218,10 +218,11 @@ export default function ClientPortal({ projects, onBack }: { projects: Project[]
               .box { border: 1px solid #ccc; padding: 20px; margin-bottom: 30px; background: #fafafa; border-radius: 8px;}
               .row { display: flex; justify-content: space-between; margin-bottom: 10px; font-family: sans-serif; font-size: 14px;}
               .title { font-weight: bold; font-size: 18px; margin-top: 30px; border-bottom: 1px solid #111; padding-bottom: 5px; margin-bottom: 15px; text-transform: uppercase; letter-spacing: 1px;}
-              .signature-box { margin-top: 50px; border-top: 1px solid #ccc; padding-top: 20px; display: flex; justify-content: space-between; }
+              .signature-box { margin-top: 50px; border-top: 1px solid #ccc; padding-top: 20px; display: flex; justify-content: space-between; page-break-inside: avoid; }
               .signature-img { max-width: 250px; max-height: 100px; border-bottom: 1px solid #000; padding-bottom: 5px; margin-bottom: 10px; }
-              .terms { font-size: 11px; color: #444; text-align: justify; column-count: 2; column-gap: 30px;}
-              .terms p { margin-bottom: 12px; }
+              .terms { font-size: 10px; color: #333; text-align: justify; column-count: 2; column-gap: 30px;}
+              .terms h3 { font-size: 11px; text-transform: uppercase; border-bottom: 1px solid #ccc; padding-bottom: 3px; margin-top: 15px; margin-bottom: 5px; }
+              .terms p { margin-bottom: 10px; margin-top: 0; }
             </style>
           </head>
           <body>
@@ -260,15 +261,29 @@ export default function ClientPortal({ projects, onBack }: { projects: Project[]
             <h1>CONDITIONS GÉNÉRALES DE VENTE</h1>
             
             <div class="terms">
-                <p><strong>ACOMPTE ET PAIEMENT :</strong> Le premier versement est un acompte ferme et définitif valant engagement irrévocable. Cet acompte n'est remboursable sous aucun prétexte (y compris en cas de force majeure, maladie, séparation ou pandémie). La date du mariage est bloquée dès réception de cet acompte. Le solde total de la prestation devra être intégralement réglé au plus tard le jour de l'événement. Aucune livraison de fichiers ne sera effectuée avant le paiement complet.</p>
-                
-                <p><strong>ANNULATION PAR LES CLIENTS :</strong> En cas d'annulation ou de report de la prestation par les Mariés, et ce, quelle qu'en soit la cause ou le délai, l'acompte sera purement et simplement conservé par le Studio. De plus, à titre d'indemnité compensatrice pour la date bloquée et le manque à gagner, les Mariés s'engagent à régler la totalité du solde de la prestation initiale prévue au présent contrat.</p>
-                
-                <p><strong>PERTE DE DONNÉES ET LIMITE DE RESPONSABILITÉ :</strong> Le Studio s'engage à mettre en œuvre tous les moyens techniques nécessaires pour la sauvegarde et la sécurité des images et vidéos (sauvegardes multiples). Toutefois, en cas de perte totale ou partielle des données due à un dysfonctionnement technique imprévisible, un crash matériel (carte SD, disque dur), un accident ou un vol, la responsabilité du Studio est strictement limitée. Dans ce cas de force majeure technique, le dédommagement maximum exigible par les clients ne pourra en aucun cas excéder la somme forfaitaire de 500 euros (cinq cents euros), indépendamment du préjudice matériel ou moral subi, et sans qu'aucun autre dommage et intérêt ne puisse être réclamé.</p>
-                
-                <p><strong>DROIT À L'IMAGE ET PROPRIÉTÉ INTELLECTUELLE :</strong> Toute réalisation photographique ou vidéographique confère au Studio des droits de propriété artistique exclusifs (Code de la Propriété Intellectuelle). Les Mariés autorisent expressément le Studio à utiliser les images/vidéos (les représentant ainsi que leurs invités) à des fins de promotion (site web, réseaux sociaux, salons, expositions, books), sauf demande écrite explicite et par courrier recommandé avant le jour du mariage.</p>
-                
-                <p><strong>FORCE MAJEURE DU STUDIO :</strong> Si le Photographe/Vidéaste attitré ne peut assurer la prestation pour cause de force majeure dūment justifiée (maladie grave, accident corporel), le Studio s'engage à faire son maximum pour proposer un remplaçant de même niveau. En cas d'impossibilité totale de trouver une alternative, les sommes versées par les clients leur seront remboursées. Les clients acceptent que ce remboursement clôture toute réclamation et renoncent à demander des dommages et intérêts supplémentaires.</p>
+                <h3>ACOMPTE POUR RÉSERVATION</h3>
+                <p>Le premier paiement est un acompte qui correspond à 30% de la somme totale. L'acompte n'est pas récupérable. Le paiement est à effectuer lors de la signature du présent contrat. Ainsi la date du mariage sera réservée.</p>
+
+                <h3>GÉNÉRALITÉS</h3>
+                <p>Les futurs Mariés déclarent être majeurs et poser librement. Si l'un des futurs époux est mineur, les signatures des parents ou des représentants légaux sont obligatoires. Pour que le Photographe puisse photographier le mariage dans de bonnes conditions, il requiert une consultation finale par téléphone au moins une semaine avant le mariage. Tout ceci dans un soucis de voir ensemble le déroulé de la journée et les derniers détails.</p>
+                <p>Le Photographe s'efforcera d'obtenir des clichés de tous les invités mais ne sera pas tenu pour responsable si certaines personnes n'ont pas été photographiées. La prestation du Photographe se déroule d'un seul tenant. Son temps de présence ne peut être fractionné sauf accord préalable. Les Mariés peuvent choisir de passer à une collection supérieure, mais l'inverse n'est pas autorisé. Ce choix doit être fait maximum un mois avant la date du mariage par la signature d'un avenant au contrat.</p>
+                <p>Le Photographe s'engage à se munir de matériel en suffisance, en bon état. Il apportera le soin nécessaire à la sauvegarde progressive des cartes mémoires. Il ne sera toutefois pas responsable d'une panne inopinée d'une partie de son matériel, ce cas devant alors être considéré comme force majeure. Lorsque le contrat n'a pas été conclu dans les bureaux, la loi autorise les Mariés à se rétracter pendant 14 jours (Art. L121-29 du Code de la Consommation). En cas de rétractation dans le délai légal, l'acompte sera intégralement restitué. Dans l'éventualité où ce contrat serait rompu par les clients, le Photographe serait libéré d'honorer le présent contrat et garderait les sommes versées jusqu'alors.</p>
+
+                <h3>DROIT À L'IMAGE ET PROPRIÉTÉ INTELLECTUELLE</h3>
+                <p>Toute réalisation photographique confère au Photographe, son auteur, des droits de propriété artistique, patrimoniaux et moraux, tels que définis par le Code de la Propriété Intellectuelle. En conséquence, le Photographe et les Mariés devront se consulter mutuellement en cas de besoin d'exploitation des photos. Si les Mariés donnent leur accord, cela inclut la publication ou utilisation des photos à des fins de promotion de l'auteur, ouvrage, expositions, sites web et réseaux sociaux du Photographe. Les Mariés s'engagent à être solidaire du Photographe en cas de préjudice causé, par une utilisation abusive ou détournée des images, par un tiers à son insu.</p>
+
+                <h3>AUTORISATION DE PRISE DE VUE</h3>
+                <p>Les Mariés autorisent le Photographe à prendre en photo l'ensemble des invités et personnes présentes. Ils feront leur affaire personnelle d'une éventuelle contestation. Le Photographe s'engage à ne pas faire usage à des fins promotionnelles des photos représentant des invités reconnaissables sans obtenir préalablement l'accord de ces derniers.</p>
+
+                <h3>CHANGEMENT DE DATE ET ANNULATION</h3>
+                <p>Aucune annulation ne pourra intervenir du fait du Photographe, excepté les cas de force majeure dûment justifiés. En cas de force majeure, le Photographe s'engage à prendre contact avec un autre Photographe partenaire pour réaliser la prestation. En cas d'impossibilité de trouver une alternative, aucune indemnisation ne pourra être réclamée au Photographe. Ce dernier proposera une nouvelle séance ou procédera au remboursement total. Tout changement de date fait office d'annulation. Si l'annulation est due à un cas de force majeure dûment démontré par les Mariés, l'acompte sera restitué. En cas de météo défavorable affectant les prises de vue, la responsabilité du Photographe ne pourra être engagée.</p>
+
+                <h3>DÉPLACEMENT / LOGEMENT / REPAS / FRAIS</h3>
+                <p>Le Photographe (et son équipe) requiert au moins un plat chaud quelle que soit la collection. Selon le lieu, l'hébergement peut être nécessaire. Les Mariés supporteront la charge des dépenses supplémentaires (accès, parking payant). Dans le cas où le Photographe doit rester au delà de ce qui est prévu, chaque heure supplémentaire sera facturée 400 EUROS. Chaque heure commencée est due.</p>
+                <p>Les frais de déplacement sont pris en charge par les Mariés. En voiture, le coût kilométrique s'élève à 0,80 cts/km + les frais de péage.</p>
+
+                <h3>STYLE PHOTOGRAPHIQUE ET LIVRAISON</h3>
+                <p>En signant ce contrat, les Mariés reconnaissent connaître le style du Photographe. Aucun remboursement ne pourra être effectué sur le style. Le traitement implique un travail de recadrage et de colorimétrie. Toute demande de traitement plus poussée pourra être facturée. Toute réclamation devra être effectuée par LRAR dans les 5 jours de la prestation. Les photos seront traitées dans un délai de trois mois. Le coffret final sera livré dans les trois mois suivant le choix des Mariés. Le Photographe conserve les fichiers HD 12 mois, et la galerie en ligne 6 mois. Une fois livrées, les clients sont responsables de la sauvegarde de leurs images. (TVA non applicable, art 293.B du CGI).</p>
             </div>
 
             <div class="signature-box">
