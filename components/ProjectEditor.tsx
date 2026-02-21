@@ -3,7 +3,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { 
   Camera, Video, Ban, ChevronRight, Rocket, Mail, 
   BookOpen, Trash2, Image as ImageIcon, CheckSquare, 
-  Upload, Loader2, MapPin, FileText, Users, Calendar, Eye, Timer, Music, Briefcase, History, Archive, RefreshCw, UserCheck, Send, Palette, ExternalLink, HardDrive, Link, Printer, CheckCircle2, ImagePlus, Copy
+  Upload, Loader2, MapPin, FileText, Users, Calendar, Eye, Timer, Music, Briefcase, History, Archive, RefreshCw, UserCheck, Send, Palette, ExternalLink, HardDrive, Link, Printer, CheckCircle2, ImagePlus, Copy, Wallet, DollarSign
 } from 'lucide-react';
 import { doc, updateDoc, deleteDoc, serverTimestamp } from 'firebase/firestore'; 
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
@@ -11,7 +11,7 @@ import { db, storage, appId } from '../lib/firebase';
 import { 
   COLLECTION_NAME, MAKE_WEBHOOK_URL, PHOTO_STEPS, 
   VIDEO_STEPS, ALBUM_STATUSES, USB_STATUSES, Project, 
-  STAFF_DIRECTORY, CHECKLIST_PHOTO, CHECKLIST_VIDEO
+  STAFF_DIRECTORY, CHECKLIST_PHOTO, CHECKLIST_VIDEO, TeamPayment
 } from '../lib/config';
 import ChatBox from './ChatSystem';
 import TeamChat from './TeamChat';
@@ -32,8 +32,9 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, staffD
   const originalDataRef = useRef<Project>(JSON.parse(JSON.stringify(project)));
 
   const [newAlbum, setNewAlbum] = useState({ name: '', format: '', price: 0 });
+  const [newPayment, setNewPayment] = useState({ recipient: '', amount: 0, note: '' });
+
   const [uploading, setUploading] = useState(false);
-  // 👇 NOUVEAU : Suivi de la progression
   const [uploadProgress, setUploadProgress] = useState({ current: 0, total: 0 }); 
   const [sendingInvite, setSendingInvite] = useState(false);
   
@@ -154,62 +155,35 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, staffD
   const handleDrag = (e: React.DragEvent) => { e.preventDefault(); setIsDragging(e.type === "dragenter" || e.type === "dragover"); };
   const handleDrop = (e: React.DragEvent) => { e.preventDefault(); setIsDragging(false); if (e.dataTransfer.files[0]) processFile(e.dataTransfer.files[0]); };
 
-  // 👇 NOUVEAU : UPLOAD PARALLÈLE ULTRA-RAPIDE AVEC BARRE DE PROGRESSION
   const processGalleryFiles = async (files: File[]) => {
       if (!canEdit || files.length === 0) return;
-      
       setUploading(true);
       setUploadProgress({ current: 0, total: files.length });
       setIsGalleryDragging(false);
-      
       try {
-          // Création de toutes les requêtes en même temps (Promise.all)
           const uploadPromises = files.map(async (file) => {
               const fileRef = ref(storage, `galleries/${project.id}/${file.name}`);
               await uploadBytes(fileRef, file);
               const url = await getDownloadURL(fileRef);
-              
-              // Mise à jour du compteur pour l'interface visuelle
               setUploadProgress(prev => ({ ...prev, current: prev.current + 1 }));
-              
               return { url, filename: file.name };
           });
-
-          // Le site lance toutes les requêtes d'un coup et attend qu'elles soient toutes finies
           const newImages = await Promise.all(uploadPromises);
-
-          // Sauvegarde finale
           const currentGallery = localData.galleryImages || [];
           const finalGallery = [...currentGallery, ...newImages];
-          
           setLocalData(prev => ({ ...prev, galleryImages: finalGallery }));
           const colPath = typeof appId !== 'undefined' ? `artifacts/${appId}/public/data/${COLLECTION_NAME}` : COLLECTION_NAME;
           await updateDoc(doc(db, colPath, project.id), { galleryImages: finalGallery });
-          
-          // Petit délai visuel pour que l'utilisateur voit le 100%
           setTimeout(() => { alert(`${newImages.length} photos ajoutées à la sélection client !`); }, 500);
-
-      } catch(err: any) {
-          alert(`Erreur d'upload: ${err.message}`);
-      } finally {
-          setUploading(false);
-          setUploadProgress({ current: 0, total: 0 });
+      } catch(err: any) { alert(`Erreur d'upload: ${err.message}`); } finally {
+          setUploading(false); setUploadProgress({ current: 0, total: 0 });
           if (galleryInputRef.current) galleryInputRef.current.value = '';
       }
   };
   
-  const handleGalleryUploadClick = (e: React.ChangeEvent<HTMLInputElement>) => {
-      if (e.target.files) processGalleryFiles(Array.from(e.target.files));
-  };
-  const handleGalleryDrag = (e: React.DragEvent) => { 
-      e.preventDefault(); 
-      setIsGalleryDragging(e.type === "dragenter" || e.type === "dragover"); 
-  };
-  const handleGalleryDrop = (e: React.DragEvent) => { 
-      e.preventDefault(); 
-      setIsGalleryDragging(false); 
-      if (e.dataTransfer.files) processGalleryFiles(Array.from(e.dataTransfer.files)); 
-  };
+  const handleGalleryUploadClick = (e: React.ChangeEvent<HTMLInputElement>) => { if (e.target.files) processGalleryFiles(Array.from(e.target.files)); };
+  const handleGalleryDrag = (e: React.DragEvent) => { e.preventDefault(); setIsGalleryDragging(e.type === "dragenter" || e.type === "dragover"); };
+  const handleGalleryDrop = (e: React.DragEvent) => { e.preventDefault(); setIsGalleryDragging(false); if (e.dataTransfer.files) processGalleryFiles(Array.from(e.dataTransfer.files)); };
 
   const copyLightroomString = () => {
       if (!localData.selectedImages || localData.selectedImages.length === 0) return alert("Aucune photo sélectionnée.");
@@ -245,11 +219,23 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, staffD
       updateField('albums', [...albums, { id: Date.now().toString(), name: newAlbum.name, format: newAlbum.format || "Standard", price: newAlbum.price, status: 'pending', paid: false }]);
       setNewAlbum({ name: '', format: '', price: 0 });
   };
-
   const updateAlbum = (idx: number, field: string, val: any) => {
       const albums = [...(localData.albums || [])];
       albums[idx] = { ...albums[idx], [field]: val };
       updateField('albums', albums);
+  };
+
+  const addTeamPayment = () => {
+      if(!newPayment.recipient || newPayment.amount <= 0) return alert("Nom et montant requis");
+      const payments = localData.teamPayments || [];
+      updateField('teamPayments', [...payments, { id: Date.now().toString(), recipient: newPayment.recipient, amount: newPayment.amount, note: newPayment.note, date: new Date().toISOString() }]);
+      setNewPayment({ recipient: '', amount: 0, note: '' });
+  };
+  const removeTeamPayment = (idx: number) => {
+      if(!confirm("Supprimer ce paiement ?")) return;
+      const payments = [...(localData.teamPayments || [])];
+      payments.splice(idx, 1);
+      updateField('teamPayments', payments);
   };
 
   const save = async () => {
@@ -266,9 +252,7 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, staffD
           if (old.usbStatus !== cur.usbStatus) changes.push(`Statut USB : ${old.usbStatus || 'aucun'} ➔ ${cur.usbStatus}`);
           if (old.linkPhoto !== cur.linkPhoto) changes.push(`Lien Galerie ${cur.linkPhoto ? 'MAJ' : 'Supprimé'}`);
           if (old.linkVideo !== cur.linkVideo) changes.push(`Lien Vidéo ${cur.linkVideo ? 'MAJ' : 'Supprimé'}`);
-          if (old.musicInstructions !== cur.musicInstructions || old.musicLinks !== cur.musicLinks) changes.push(`Préférences musicales mises à jour`);
-          if (old.moodboardLink !== cur.moodboardLink) changes.push(`Moodboard mis à jour`);
-          if (old.maxSelection !== cur.maxSelection) changes.push(`Limite sélection album fixée à ${cur.maxSelection}`);
+          if (old.depositAmount !== cur.depositAmount || old.totalPrice !== cur.totalPrice) changes.push(`Finances mises à jour`);
       }
 
       let updatedHistory = [...(localData.history || [])];
@@ -344,6 +328,8 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, staffD
 
                 <div className="grid lg:grid-cols-2 gap-8">
                     <div className="space-y-6">
+                        
+                        {/* FICHE MARIÉS */}
                         <div className="bg-white p-6 rounded-xl border border-stone-200 shadow-sm">
                             <h4 className="font-bold text-stone-800 mb-4 flex items-center gap-2"><Users className="w-5 h-5 text-stone-400"/> Fiche Mariés</h4>
                             <div className="space-y-4">
@@ -353,10 +339,78 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, staffD
                                 <div className="pt-2 border-t border-dashed mt-2"><div className="grid grid-cols-3 gap-2"><div className="col-span-1"><label className="text-[10px] uppercase font-bold text-stone-400">Date Mariage</label><input required type="date" disabled={!canEdit} className="w-full p-2 border rounded bg-stone-50" value={localData.weddingDate} onChange={e=>updateField('weddingDate', e.target.value)} /></div><div className="col-span-2"><label className="text-[10px] uppercase font-bold text-stone-400">Nom Salle / Lieu</label><input disabled={!canEdit} className="w-full p-2 border rounded bg-stone-50" placeholder="Château de..." value={localData.weddingVenue || ''} onChange={e=>updateField('weddingVenue', e.target.value)} /></div></div><div className="mt-2"><label className="text-[10px] uppercase font-bold text-stone-400">Code Postal</label><input disabled={!canEdit} className="w-full p-2 border rounded bg-stone-50" placeholder="75000" value={localData.weddingVenueZip || ''} onChange={e=>updateField('weddingVenueZip', e.target.value)} /></div></div>
                             </div>
                         </div>
+
+                        {/* 👇 NOUVEAU : MODULE FINANCES & RÉMUNÉRATION */}
+                        <div className="bg-white p-6 rounded-xl border border-stone-200 shadow-sm">
+                            <h4 className="font-bold text-stone-800 mb-4 flex items-center gap-2"><Wallet className="w-5 h-5 text-green-600"/> Finances & Rémunération</h4>
+                            
+                            {/* Partie Client (Acompte / Solde Jour J) */}
+                            <div className="mb-6 p-4 bg-green-50 rounded-xl border border-green-100">
+                                <h5 className="font-bold text-sm text-green-900 mb-3 flex items-center gap-2"><DollarSign className="w-4 h-4"/> Paiement Client</h5>
+                                <div className="grid grid-cols-2 gap-4 mb-4">
+                                    <div>
+                                        <label className="text-[10px] uppercase font-bold text-green-800">Prix Total Contrat (€)</label>
+                                        <input type="number" disabled={!canEdit} className="w-full p-2 border border-green-200 rounded text-sm outline-none bg-white font-bold" value={localData.totalPrice || 0} onChange={e => updateField('totalPrice', Number(e.target.value))} />
+                                    </div>
+                                    <div>
+                                        <label className="text-[10px] uppercase font-bold text-green-800">Acompte Versé (€)</label>
+                                        <input type="number" disabled={!canEdit} className="w-full p-2 border border-green-200 rounded text-sm outline-none bg-white" value={localData.depositAmount || 0} onChange={e => updateField('depositAmount', Number(e.target.value))} title="Ce montant bloque la date." />
+                                    </div>
+                                </div>
+                                
+                                {/* Calcul automatique du reste à payer le Jour J */}
+                                {((localData.totalPrice || 0) - (localData.depositAmount || 0)) > 0 ? (
+                                    <div className="flex items-center justify-between bg-white p-3 rounded-lg border border-red-200 shadow-sm">
+                                        <span className="text-sm font-bold text-red-600">Solde Jour J : {(localData.totalPrice || 0) - (localData.depositAmount || 0)} €</span>
+                                        {canEdit && (
+                                            <button onClick={() => updateField('depositAmount', localData.totalPrice)} className="text-xs bg-green-600 hover:bg-green-700 text-white px-3 py-1.5 rounded-lg font-bold transition flex items-center gap-1">
+                                                <CheckCircle2 className="w-3 h-3"/> Encaisser Solde
+                                            </button>
+                                        )}
+                                    </div>
+                                ) : (localData.totalPrice || 0) > 0 ? (
+                                    <div className="flex items-center gap-2 bg-green-100 text-green-800 p-3 rounded-lg border border-green-200 font-bold text-sm">
+                                        <CheckCircle2 className="w-5 h-5"/> Prestation 100% payée (Acompte + Jour J)
+                                    </div>
+                                ) : null}
+                            </div>
+
+                            {/* Partie Équipe (Rémunération Freelances) */}
+                            <div className="p-4 bg-stone-50 rounded-xl border border-stone-100">
+                                <h5 className="font-bold text-sm text-stone-800 mb-3 flex items-center gap-2"><Users className="w-4 h-4"/> Rémunération Équipe</h5>
+                                <div className="space-y-2 mb-4">
+                                    {(localData.teamPayments || []).length === 0 && <p className="text-xs text-stone-400 italic">Aucun paiement enregistré.</p>}
+                                    {(localData.teamPayments || []).map((pay, idx) => (
+                                        <div key={pay.id} className="flex justify-between items-center bg-white p-2 rounded border border-stone-200 text-sm">
+                                            <div>
+                                                <div className="font-bold text-stone-700">{pay.recipient} <span className="text-green-600 ml-2">{pay.amount} €</span></div>
+                                                {pay.note && <div className="text-[10px] text-stone-400">{pay.note}</div>}
+                                            </div>
+                                            {canEdit && <button onClick={() => removeTeamPayment(idx)} className="text-red-400 hover:text-red-600 p-1"><Trash2 className="w-4 h-4"/></button>}
+                                        </div>
+                                    ))}
+                                </div>
+                                
+                                {canEdit && (
+                                    <div className="flex flex-col gap-2 pt-3 border-t border-stone-200">
+                                        <div className="flex gap-2">
+                                            <input className="flex-1 p-2 border rounded text-xs" placeholder="Prénom (Ex: Volkan)" value={newPayment.recipient} onChange={e => setNewPayment({...newPayment, recipient: e.target.value})} />
+                                            <input type="number" className="w-24 p-2 border rounded text-xs" placeholder="Montant €" value={newPayment.amount || ''} onChange={e => setNewPayment({...newPayment, amount: Number(e.target.value)})} />
+                                        </div>
+                                        <div className="flex gap-2">
+                                            <input className="flex-1 p-2 border rounded text-xs" placeholder="Note (Ex: Virement le 15/05)" value={newPayment.note} onChange={e => setNewPayment({...newPayment, note: e.target.value})} />
+                                            <button onClick={addTeamPayment} className="bg-stone-800 text-white px-4 py-2 rounded text-xs font-bold hover:bg-black">Ajouter</button>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+
                         <div className="h-[400px]"><TeamChat project={project} user={user} /></div>
                     </div>
 
                     <div className="space-y-6">
+                        {/* EQUIPE */}
                         <div className="bg-white p-6 rounded-xl border border-stone-200 shadow-sm">
                             <h4 className="font-bold text-stone-800 mb-4 flex items-center gap-2"><Briefcase className="w-5 h-5 text-stone-400"/> Équipe & Contact</h4>
                             <div className="space-y-4">
@@ -366,6 +420,7 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, staffD
                             </div>
                         </div>
 
+                        {/* PRODUCTION & CHECKLISTS */}
                         <div className="bg-white p-6 rounded-xl border border-stone-200 shadow-sm">
                             <h4 className="font-bold text-stone-800 mb-4 flex items-center gap-2"><Camera className="w-5 h-5 text-stone-400"/> Suivi Production</h4>
                             
@@ -435,6 +490,7 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, staffD
                             </div>
                         </div>
 
+                        {/* ALBUMS & COMMANDES + GALERIE SELECTION */}
                         <div className="bg-white p-6 rounded-xl border border-stone-200 shadow-sm">
                             <div className="flex justify-between items-center mb-4">
                                 <h4 className="font-bold text-stone-800 flex items-center gap-2"><BookOpen className="w-5 h-5 text-stone-400"/> Albums & Sélection</h4>
@@ -463,7 +519,6 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, staffD
                                 >
                                     <input type="file" ref={galleryInputRef} multiple accept="image/jpeg, image/png" className="hidden" onChange={handleGalleryUploadClick} />
                                     
-                                    {/* 👇 NOUVEAU : BARRE DE PROGRESSION VISUELLE */}
                                     {uploading ? (
                                         <div className="flex flex-col items-center text-amber-600 w-full px-8">
                                             <Loader2 className="w-8 h-8 animate-spin mb-2"/>
@@ -560,7 +615,6 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, staffD
                     </div>
                 </div>
                 
-                {/* HISTORIQUE */}
                 <div className="mt-8 bg-stone-100 p-6 rounded-xl border border-stone-200">
                     <h4 className="font-bold text-stone-700 mb-4 flex items-center gap-2"><History className="w-5 h-5"/> Historique</h4>
                     <div className="space-y-3 max-h-60 overflow-y-auto pr-2">
