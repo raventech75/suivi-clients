@@ -391,7 +391,7 @@ export default function ClientPortal({ projects, onBack }: { projects: Project[]
         
         <div className="max-w-4xl mx-auto px-4 -mt-16 space-y-8 relative z-10">
 
-          {/* 👇 GESTION DU CONTRAT CÔTÉ CLIENT AVEC CONDITIONS STRICTES */}
+          {/* GESTION DU CONTRAT CÔTÉ CLIENT AVEC CONDITIONS STRICTES */}
           {foundProject.totalPrice && foundProject.totalPrice > 0 ? (
               !foundProject.contractSigned ? (
                   <div className="bg-white p-6 rounded-2xl border-2 border-stone-800 shadow-xl relative overflow-hidden animate-fade-in">

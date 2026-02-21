@@ -473,7 +473,6 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, staffD
                             </div>
                         </div>
 
-                        {/* FEUILLE DE ROUTE CÔTÉ ADMIN */}
                         <div className="bg-white p-6 rounded-xl border border-stone-200 shadow-sm relative">
                             <h4 className="font-bold text-stone-800 mb-4 flex items-center gap-2"><ClipboardList className="w-5 h-5 text-indigo-500"/> Feuille de Route (Jour J)</h4>
                             
@@ -518,7 +517,6 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, staffD
                             </div>
                         </div>
 
-                        {/* CRÉATION DU DEVIS / CONTRAT DANS LES FINANCES */}
                         {isSuperAdmin && (
                             <div className="bg-white p-6 rounded-xl border border-stone-200 shadow-sm">
                                 <h4 className="font-bold text-stone-800 mb-4 flex items-center justify-between">
@@ -634,7 +632,6 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, staffD
 
                     <div className="space-y-6">
                         
-                        {/* EQUIPE */}
                         <div className="bg-white p-6 rounded-xl border border-stone-200 shadow-sm">
                             <h4 className="font-bold text-stone-800 mb-4 flex items-center gap-2"><Briefcase className="w-5 h-5 text-stone-400"/> Équipe & Contact</h4>
                             <div className="space-y-4">
@@ -644,7 +641,6 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, staffD
                             </div>
                         </div>
 
-                        {/* PRODUCTION & CHECKLISTS */}
                         <div className="bg-white p-6 rounded-xl border border-stone-200 shadow-sm">
                             <h4 className="font-bold text-stone-800 mb-4 flex items-center gap-2"><Camera className="w-5 h-5 text-stone-400"/> Suivi Production</h4>
                             
@@ -714,7 +710,6 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, staffD
                             </div>
                         </div>
 
-                        {/* ALBUMS & GALERIE */}
                         <div className="bg-white p-6 rounded-xl border border-stone-200 shadow-sm">
                             <div className="flex justify-between items-center mb-4">
                                 <h4 className="font-bold text-stone-800 flex items-center gap-2"><BookOpen className="w-5 h-5 text-stone-400"/> Albums & Sélection</h4>
@@ -809,7 +804,6 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, staffD
                             )}
                         </div>
 
-                        {/* COFFRET USB */}
                         <div className="bg-white p-6 rounded-xl border border-stone-200 shadow-sm">
                             <h4 className="font-bold text-stone-800 mb-4 flex items-center gap-2"><HardDrive className="w-5 h-5 text-stone-400"/> Coffret USB</h4>
                             <div className="space-y-4">
