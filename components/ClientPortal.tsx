@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { 
   ChevronRight, ChevronLeft, Search, AlertTriangle, ImageIcon, Film, Calendar, 
   Music, Rocket, CheckCircle, CheckSquare, BookOpen, 
-  Copy, ClipboardCheck, X, Users, Camera, Video, UserCheck, HardDrive, Download, Lock, ShoppingBag, Palette, PlayCircle, Heart, ZoomIn
+  Copy, ClipboardCheck, X, Users, Camera, Video, UserCheck, HardDrive, Download, Lock, ShoppingBag, Palette, PlayCircle, Heart, ZoomIn, MapPin, Clock, Phone, ClipboardList
 } from 'lucide-react';
 import { doc, updateDoc, serverTimestamp } from 'firebase/firestore';
 import { db, appId } from '../lib/firebase';
@@ -22,16 +22,27 @@ export default function ClientPortal({ projects, onBack }: { projects: Project[]
   const [searchCode, setSearchCode] = useState('');
   const [foundProject, setFoundProject] = useState<Project | null>(null);
   
+  // États de l'Espace Créatif
   const [musicLinks, setMusicLinks] = useState('');
   const [musicInstructions, setMusicInstructions] = useState('');
   const [moodLink, setMoodLink] = useState('');
   const [savingMusic, setSavingMusic] = useState(false);
   
-  const [selectedPhotos, setSelectedPhotos] = useState<string[]>([]);
-  
-  // 👇 NOUVEAU : ÉTAT DE LA VISIONNEUSE PLEIN ÉCRAN
-  const [previewIndex, setPreviewIndex] = useState<number | null>(null);
+  // États de la Feuille de Route
+  const [prepAddress, setPrepAddress] = useState('');
+  const [prepTime, setPrepTime] = useState('');
+  const [ceremonyAddress, setCeremonyAddress] = useState('');
+  const [ceremonyTime, setCeremonyTime] = useState('');
+  const [partyAddress, setPartyAddress] = useState('');
+  const [partyTime, setPartyTime] = useState('');
+  const [witness1Name, setWitness1Name] = useState('');
+  const [witness1Phone, setWitness1Phone] = useState('');
+  const [witness2Name, setWitness2Name] = useState('');
+  const [witness2Phone, setWitness2Phone] = useState('');
+  const [savingQuest, setSavingQuest] = useState(false);
 
+  const [selectedPhotos, setSelectedPhotos] = useState<string[]>([]);
+  const [previewIndex, setPreviewIndex] = useState<number | null>(null);
   const [error, setError] = useState('');
 
   useEffect(() => {
@@ -45,14 +56,26 @@ export default function ClientPortal({ projects, onBack }: { projects: Project[]
 
   useEffect(() => { 
       if(foundProject) { 
+          // Préférences artistiques
           setMusicLinks(foundProject.musicLinks || ''); 
           setMusicInstructions(foundProject.musicInstructions || '');
           setMoodLink(foundProject.moodboardLink || ''); 
           setSelectedPhotos(foundProject.selectedImages || []); 
+          
+          // Questionnaire
+          setPrepAddress(foundProject.prepAddress || '');
+          setPrepTime(foundProject.prepTime || '');
+          setCeremonyAddress(foundProject.ceremonyAddress || '');
+          setCeremonyTime(foundProject.ceremonyTime || '');
+          setPartyAddress(foundProject.partyAddress || '');
+          setPartyTime(foundProject.partyTime || '');
+          setWitness1Name(foundProject.witness1Name || '');
+          setWitness1Phone(foundProject.witness1Phone || '');
+          setWitness2Name(foundProject.witness2Name || '');
+          setWitness2Phone(foundProject.witness2Phone || '');
       } 
   }, [foundProject]);
 
-  // 👇 NOUVEAU : NAVIGATION CLAVIER POUR LE PLEIN ÉCRAN
   useEffect(() => {
       const handleKeyDown = (e: KeyboardEvent) => {
           if (previewIndex === null || !foundProject?.galleryImages) return;
@@ -77,8 +100,26 @@ export default function ClientPortal({ projects, onBack }: { projects: Project[]
       await updateDoc(doc(db, colPath, foundProject.id), { 
           musicLinks, musicInstructions, moodboardLink: moodLink, lastUpdated: serverTimestamp() 
       });
-      alert("Vos choix ont été enregistrés !");
+      alert("Vos choix artistiques ont été enregistrés !");
       setSavingMusic(false);
+  };
+
+  // 👇 NOUVEAU : SAUVEGARDE DU QUESTIONNAIRE CLIENT
+  const handleSaveQuestionnaire = async () => {
+      if(!foundProject) return;
+      setSavingQuest(true);
+      const colPath = typeof appId !== 'undefined' ? `artifacts/${appId}/public/data/${COLLECTION_NAME}` : COLLECTION_NAME;
+      await updateDoc(doc(db, colPath, foundProject.id), { 
+          prepAddress, prepTime, 
+          ceremonyAddress, ceremonyTime, 
+          partyAddress, partyTime, 
+          witness1Name, witness1Phone, 
+          witness2Name, witness2Phone,
+          questionnaireFilled: true,
+          lastUpdated: serverTimestamp() 
+      });
+      alert("Votre feuille de route a bien été transmise à notre équipe !");
+      setSavingQuest(false);
   };
 
   const confirmPhoto = async () => {
@@ -95,18 +136,12 @@ export default function ClientPortal({ projects, onBack }: { projects: Project[]
 
   const togglePhoto = async (filename: string) => {
       if(!foundProject || foundProject.selectionValidated) return;
-      
       let newSel = [...selectedPhotos];
-      if (newSel.includes(filename)) {
-          newSel = newSel.filter(f => f !== filename);
-      } else {
-          if (foundProject.maxSelection && newSel.length >= foundProject.maxSelection) {
-              alert(`Vous avez atteint la limite de ${foundProject.maxSelection} photos pour votre album.`);
-              return;
-          }
+      if (newSel.includes(filename)) { newSel = newSel.filter(f => f !== filename); } 
+      else {
+          if (foundProject.maxSelection && newSel.length >= foundProject.maxSelection) { alert(`Vous avez atteint la limite de ${foundProject.maxSelection} photos pour votre album.`); return; }
           newSel.push(filename);
       }
-      
       setSelectedPhotos(newSel); 
       const colPath = typeof appId !== 'undefined' ? `artifacts/${appId}/public/data/${COLLECTION_NAME}` : COLLECTION_NAME;
       await updateDoc(doc(db, colPath, foundProject.id), { selectedImages: newSel });
@@ -147,49 +182,23 @@ export default function ClientPortal({ projects, onBack }: { projects: Project[]
     return (
       <div className="min-h-screen bg-stone-50 pb-20">
         
-        {/* 👇 NOUVEAU : LA VISIONNEUSE PLEIN ÉCRAN */}
+        {/* VISIONNEUSE PLEIN ÉCRAN */}
         {previewIndex !== null && foundProject.galleryImages && (
             <div className="fixed inset-0 z-[100] bg-black/95 flex flex-col animate-fade-in backdrop-blur-sm">
-                {/* Header Top */}
                 <div className="flex justify-between items-center p-4 md:p-6 text-white absolute top-0 w-full z-10 bg-gradient-to-b from-black/80 to-transparent">
                     <div className="text-sm font-mono bg-black/50 px-3 py-1 rounded-lg border border-white/10">{foundProject.galleryImages[previewIndex].filename}</div>
                     <button onClick={() => setPreviewIndex(null)} className="p-2 bg-white/10 hover:bg-white/20 rounded-full transition-colors"><X className="w-6 h-6"/></button>
                 </div>
-                
-                {/* Image & Navigation */}
                 <div className="flex-1 relative flex items-center justify-center p-4">
-                    <button onClick={(e) => { e.stopPropagation(); setPreviewIndex((previewIndex - 1 + foundProject.galleryImages!.length) % foundProject.galleryImages!.length); }} className="absolute left-2 md:left-8 p-3 bg-black/50 hover:bg-black text-white rounded-full transition z-10 hidden md:block">
-                        <ChevronLeft className="w-8 h-8"/>
-                    </button>
-                    
-                    <img 
-                        src={foundProject.galleryImages[previewIndex].url} 
-                        className="max-h-[80vh] max-w-full object-contain rounded-lg shadow-2xl"
-                        alt="Aperçu plein écran"
-                    />
-
-                    <button onClick={(e) => { e.stopPropagation(); setPreviewIndex((previewIndex + 1) % foundProject.galleryImages!.length); }} className="absolute right-2 md:right-8 p-3 bg-black/50 hover:bg-black text-white rounded-full transition z-10 hidden md:block">
-                        <ChevronRight className="w-8 h-8"/>
-                    </button>
+                    <button onClick={(e) => { e.stopPropagation(); setPreviewIndex((previewIndex - 1 + foundProject.galleryImages!.length) % foundProject.galleryImages!.length); }} className="absolute left-2 md:left-8 p-3 bg-black/50 hover:bg-black text-white rounded-full transition z-10 hidden md:block"><ChevronLeft className="w-8 h-8"/></button>
+                    <img src={foundProject.galleryImages[previewIndex].url} className="max-h-[80vh] max-w-full object-contain rounded-lg shadow-2xl" alt="Aperçu plein écran" />
+                    <button onClick={(e) => { e.stopPropagation(); setPreviewIndex((previewIndex + 1) % foundProject.galleryImages!.length); }} className="absolute right-2 md:right-8 p-3 bg-black/50 hover:bg-black text-white rounded-full transition z-10 hidden md:block"><ChevronRight className="w-8 h-8"/></button>
                 </div>
-
-                {/* Footer Action (Bouton Sélection) */}
                 <div className="p-6 md:p-8 bg-gradient-to-t from-black to-transparent flex justify-center items-center gap-6 absolute bottom-0 w-full">
-                    {/* Flèches mobiles */}
                     <button onClick={() => setPreviewIndex((previewIndex - 1 + foundProject.galleryImages!.length) % foundProject.galleryImages!.length)} className="md:hidden p-3 bg-white/10 text-white rounded-full"><ChevronLeft className="w-6 h-6"/></button>
-                    
-                    <button 
-                        disabled={foundProject.selectionValidated}
-                        onClick={() => togglePhoto(foundProject.galleryImages![previewIndex].filename)} 
-                        className={`px-8 py-4 rounded-full font-bold text-lg transition-all shadow-2xl flex items-center gap-3 ${
-                            selectedPhotos.includes(foundProject.galleryImages[previewIndex].filename) 
-                            ? 'bg-green-500 text-white hover:bg-green-600 scale-105' 
-                            : 'bg-white text-stone-900 hover:bg-stone-200'
-                        }`}
-                    >
+                    <button disabled={foundProject.selectionValidated} onClick={() => togglePhoto(foundProject.galleryImages![previewIndex].filename)} className={`px-8 py-4 rounded-full font-bold text-lg transition-all shadow-2xl flex items-center gap-3 ${selectedPhotos.includes(foundProject.galleryImages[previewIndex].filename) ? 'bg-green-500 text-white hover:bg-green-600 scale-105' : 'bg-white text-stone-900 hover:bg-stone-200'}`}>
                         {selectedPhotos.includes(foundProject.galleryImages[previewIndex].filename) ? <><CheckCircle className="w-6 h-6"/> Photo Sélectionnée</> : <><Heart className="w-6 h-6"/> Ajouter à l'Album</>}
                     </button>
-
                     <button onClick={() => setPreviewIndex((previewIndex + 1) % foundProject.galleryImages!.length)} className="md:hidden p-3 bg-white/10 text-white rounded-full"><ChevronRight className="w-6 h-6"/></button>
                 </div>
             </div>
@@ -279,6 +288,74 @@ export default function ClientPortal({ projects, onBack }: { projects: Project[]
               )}
           </div>
 
+          {/* 👇 NOUVEAU : FEUILLE DE ROUTE (J-30) */}
+          <div className="bg-white p-6 rounded-2xl border border-stone-200 shadow-xl relative overflow-hidden">
+              {foundProject.questionnaireFilled && (
+                  <div className="absolute top-0 right-0 bg-green-500 text-white px-4 py-1.5 rounded-bl-xl font-bold text-xs flex items-center gap-1 shadow-sm">
+                      <CheckCircle2 className="w-3 h-3"/> Transmis à l'équipe
+                  </div>
+              )}
+              
+              <div className="mb-6">
+                  <h3 className="font-serif text-2xl text-stone-800 flex items-center gap-2 mb-2"><ClipboardList className="w-6 h-6 text-indigo-500"/> Feuille de Route (Jour J)</h3>
+                  <p className="text-sm text-stone-500">Pour assurer le bon déroulement de votre mariage, veuillez nous communiquer ces informations logistiques dès que possible.</p>
+              </div>
+
+              <div className="space-y-6">
+                  {/* Lieux et Horaires */}
+                  <div className="grid md:grid-cols-3 gap-4">
+                      <div className="bg-stone-50 p-4 rounded-xl border border-stone-100">
+                          <h4 className="font-bold text-sm text-stone-700 flex items-center gap-1 mb-3"><MapPin className="w-4 h-4 text-stone-400"/> Préparatifs</h4>
+                          <div className="space-y-3">
+                              <div><label className="text-[10px] uppercase font-bold text-stone-400">Heure d'arrivée de l'équipe</label><input type="time" className="w-full p-2 border rounded-lg bg-white text-sm focus:ring-2 outline-none mt-1" value={prepTime} onChange={e => setPrepTime(e.target.value)} /></div>
+                              <div><label className="text-[10px] uppercase font-bold text-stone-400">Adresse exacte</label><input className="w-full p-2 border rounded-lg bg-white text-sm focus:ring-2 outline-none mt-1" placeholder="N°, Rue, Code Postal, Ville" value={prepAddress} onChange={e => setPrepAddress(e.target.value)} /></div>
+                          </div>
+                      </div>
+                      
+                      <div className="bg-stone-50 p-4 rounded-xl border border-stone-100">
+                          <h4 className="font-bold text-sm text-stone-700 flex items-center gap-1 mb-3"><MapPin className="w-4 h-4 text-stone-400"/> Cérémonie</h4>
+                          <div className="space-y-3">
+                              <div><label className="text-[10px] uppercase font-bold text-stone-400">Heure de début</label><input type="time" className="w-full p-2 border rounded-lg bg-white text-sm focus:ring-2 outline-none mt-1" value={ceremonyTime} onChange={e => setCeremonyTime(e.target.value)} /></div>
+                              <div><label className="text-[10px] uppercase font-bold text-stone-400">Adresse de la cérémonie</label><input className="w-full p-2 border rounded-lg bg-white text-sm focus:ring-2 outline-none mt-1" placeholder="Mairie ou Église ou Domaine..." value={ceremonyAddress} onChange={e => setCeremonyAddress(e.target.value)} /></div>
+                          </div>
+                      </div>
+
+                      <div className="bg-stone-50 p-4 rounded-xl border border-stone-100">
+                          <h4 className="font-bold text-sm text-stone-700 flex items-center gap-1 mb-3"><MapPin className="w-4 h-4 text-stone-400"/> Soirée</h4>
+                          <div className="space-y-3">
+                              <div><label className="text-[10px] uppercase font-bold text-stone-400">Heure d'arrivée à la salle</label><input type="time" className="w-full p-2 border rounded-lg bg-white text-sm focus:ring-2 outline-none mt-1" value={partyTime} onChange={e => setPartyTime(e.target.value)} /></div>
+                              <div><label className="text-[10px] uppercase font-bold text-stone-400">Lieu de réception</label><input className="w-full p-2 border rounded-lg bg-white text-sm focus:ring-2 outline-none mt-1" placeholder="Nom du domaine, Ville..." value={partyAddress} onChange={e => setPartyAddress(e.target.value)} /></div>
+                          </div>
+                      </div>
+                  </div>
+
+                  {/* Contacts Témoins */}
+                  <div className="bg-stone-50 p-4 rounded-xl border border-stone-100">
+                      <h4 className="font-bold text-sm text-stone-700 flex items-center gap-1 mb-1"><Phone className="w-4 h-4 text-stone-400"/> Personnes de Confiance (Témoins / Wedding Planner)</h4>
+                      <p className="text-[10px] text-stone-500 mb-4">Pour éviter de vous déranger le jour J en cas de question logistique (parking, surprise, etc.).</p>
+                      
+                      <div className="grid md:grid-cols-2 gap-4">
+                          <div className="flex gap-2">
+                              <input className="w-1/2 p-2 border rounded-lg bg-white text-sm focus:ring-2 outline-none" placeholder="Prénom (Témoin 1)" value={witness1Name} onChange={e => setWitness1Name(e.target.value)} />
+                              <input className="w-1/2 p-2 border rounded-lg bg-white text-sm focus:ring-2 outline-none" placeholder="Numéro de téléphone" value={witness1Phone} onChange={e => setWitness1Phone(e.target.value)} />
+                          </div>
+                          <div className="flex gap-2">
+                              <input className="w-1/2 p-2 border rounded-lg bg-white text-sm focus:ring-2 outline-none" placeholder="Prénom (Témoin 2)" value={witness2Name} onChange={e => setWitness2Name(e.target.value)} />
+                              <input className="w-1/2 p-2 border rounded-lg bg-white text-sm focus:ring-2 outline-none" placeholder="Numéro de téléphone" value={witness2Phone} onChange={e => setWitness2Phone(e.target.value)} />
+                          </div>
+                      </div>
+                  </div>
+
+                  <button 
+                      onClick={handleSaveQuestionnaire} 
+                      disabled={savingQuest}
+                      className="w-full bg-stone-900 text-white py-4 rounded-xl font-bold hover:bg-black transition shadow-lg disabled:opacity-50 mt-2 flex items-center justify-center gap-2"
+                  >
+                      {savingQuest ? 'Transmission en cours...' : 'Transmettre à l\'équipe'}
+                  </button>
+              </div>
+          </div>
+
           {/* GALERIE DE SÉLECTION ALBUM NATIVE */}
           {foundProject.galleryImages && foundProject.galleryImages.length > 0 && (
               <div className="bg-white p-6 rounded-2xl border border-stone-200 shadow-xl overflow-hidden relative">
@@ -307,22 +384,9 @@ export default function ClientPortal({ projects, onBack }: { projects: Project[]
                                 className={`relative aspect-square rounded-xl overflow-hidden cursor-pointer group transition-all duration-300 ${isSelected ? 'ring-4 ring-amber-500 scale-95 shadow-lg' : 'hover:opacity-90'}`}
                               >
                                   <img src={img.url} alt={img.filename} loading="lazy" className="w-full h-full object-cover" />
-                                  
-                                  {/* BOUTON LOUPE (AGRANDIR) */}
-                                  <button 
-                                      onClick={(e) => { e.stopPropagation(); setPreviewIndex(i); }} 
-                                      className="absolute top-2 right-2 bg-black/50 hover:bg-black text-white p-1.5 rounded-full shadow-md backdrop-blur-sm transition-colors z-10"
-                                      title="Agrandir la photo"
-                                  >
-                                      <ZoomIn className="w-4 h-4"/>
-                                  </button>
-
+                                  <button onClick={(e) => { e.stopPropagation(); setPreviewIndex(i); }} className="absolute top-2 right-2 bg-black/50 hover:bg-black text-white p-1.5 rounded-full shadow-md backdrop-blur-sm transition-colors z-10" title="Agrandir la photo"><ZoomIn className="w-4 h-4"/></button>
                                   <div className={`absolute inset-0 transition-opacity flex items-center justify-center pointer-events-none ${isSelected ? 'bg-black/20 opacity-100' : 'bg-black/0 opacity-0 group-hover:opacity-100 group-hover:bg-black/10'}`}>
-                                      {isSelected ? (
-                                          <div className="bg-amber-500 text-white p-2 rounded-full shadow-lg transform scale-110 transition-transform"><CheckCircle className="w-6 h-6"/></div>
-                                      ) : (
-                                          <div className="bg-white/90 text-stone-400 p-2 rounded-full shadow-sm"><Heart className="w-6 h-6"/></div>
-                                      )}
+                                      {isSelected ? <div className="bg-amber-500 text-white p-2 rounded-full shadow-lg transform scale-110 transition-transform"><CheckCircle className="w-6 h-6"/></div> : <div className="bg-white/90 text-stone-400 p-2 rounded-full shadow-sm"><Heart className="w-6 h-6"/></div>}
                                   </div>
                               </div>
                           );
@@ -331,13 +395,7 @@ export default function ClientPortal({ projects, onBack }: { projects: Project[]
 
                   {!foundProject.selectionValidated && (
                       <div className="mt-6 pt-4 border-t border-stone-100 flex justify-end">
-                          <button 
-                            onClick={validateGallery} 
-                            disabled={selectedPhotos.length === 0}
-                            className="bg-stone-900 text-white px-8 py-4 rounded-xl font-bold shadow-xl hover:bg-black transition-all disabled:opacity-50 disabled:shadow-none transform hover:scale-105"
-                          >
-                              Valider définitivement ma sélection ({selectedPhotos.length})
-                          </button>
+                          <button onClick={validateGallery} disabled={selectedPhotos.length === 0} className="bg-stone-900 text-white px-8 py-4 rounded-xl font-bold shadow-xl hover:bg-black transition-all disabled:opacity-50 disabled:shadow-none transform hover:scale-105">Valider définitivement ma sélection ({selectedPhotos.length})</button>
                       </div>
                   )}
               </div>

@@ -3,7 +3,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { 
   Camera, Video, Ban, ChevronRight, Rocket, Mail, 
   BookOpen, Trash2, Image as ImageIcon, CheckSquare, 
-  Upload, Loader2, MapPin, FileText, Users, Calendar, Eye, Timer, Music, Briefcase, History, Archive, RefreshCw, UserCheck, Send, Palette, ExternalLink, HardDrive, Link, Printer, CheckCircle2, ImagePlus, Copy, Wallet, DollarSign
+  Upload, Loader2, MapPin, FileText, Users, Calendar, Eye, Timer, Music, Briefcase, History, Archive, RefreshCw, UserCheck, Send, Palette, ExternalLink, HardDrive, Link, Printer, CheckCircle2, ImagePlus, Copy, Wallet, DollarSign, ClipboardList, Clock, Phone
 } from 'lucide-react';
 import { doc, updateDoc, deleteDoc, serverTimestamp } from 'firebase/firestore'; 
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
@@ -340,12 +340,54 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, staffD
                             </div>
                         </div>
 
-                        {/* 👇 MODULE FINANCES & RÉMUNÉRATION (VISIBLE UNIQUEMENT PAR LA DIRECTION) */}
+                        {/* 👇 NOUVEAU : FEUILLE DE ROUTE / QUESTIONNAIRE J-30 CÔTÉ ADMIN */}
+                        <div className="bg-white p-6 rounded-xl border border-stone-200 shadow-sm relative">
+                            <h4 className="font-bold text-stone-800 mb-4 flex items-center gap-2"><ClipboardList className="w-5 h-5 text-indigo-500"/> Feuille de Route (Jour J)</h4>
+                            
+                            {localData.questionnaireFilled && (
+                                <div className="absolute top-6 right-6 bg-green-100 text-green-700 px-3 py-1 rounded text-xs font-bold flex items-center gap-1">
+                                    <CheckCircle2 className="w-3 h-3"/> Rempli par le client
+                                </div>
+                            )}
+
+                            <div className="space-y-5">
+                                {/* Adresses et Horaires */}
+                                <div className="space-y-3">
+                                    <div className="flex gap-3">
+                                        <div className="w-1/3"><label className="text-[10px] uppercase font-bold text-stone-400 flex items-center gap-1"><Clock className="w-3 h-3"/> Heure Prépa.</label><input disabled={!canEdit} type="time" className="w-full p-2 border rounded bg-stone-50 text-sm" value={localData.prepTime || ''} onChange={e=>updateField('prepTime', e.target.value)} /></div>
+                                        <div className="flex-1"><label className="text-[10px] uppercase font-bold text-stone-400 flex items-center gap-1"><MapPin className="w-3 h-3"/> Adresse Préparatifs</label><input disabled={!canEdit} className="w-full p-2 border rounded bg-stone-50 text-sm" placeholder="Où commencent les photos ?" value={localData.prepAddress || ''} onChange={e=>updateField('prepAddress', e.target.value)} /></div>
+                                    </div>
+                                    <div className="flex gap-3">
+                                        <div className="w-1/3"><label className="text-[10px] uppercase font-bold text-stone-400 flex items-center gap-1"><Clock className="w-3 h-3"/> Heure Cérémonie</label><input disabled={!canEdit} type="time" className="w-full p-2 border rounded bg-stone-50 text-sm" value={localData.ceremonyTime || ''} onChange={e=>updateField('ceremonyTime', e.target.value)} /></div>
+                                        <div className="flex-1"><label className="text-[10px] uppercase font-bold text-stone-400 flex items-center gap-1"><MapPin className="w-3 h-3"/> Adresse Cérémonie</label><input disabled={!canEdit} className="w-full p-2 border rounded bg-stone-50 text-sm" placeholder="Mairie, Église, Laïque..." value={localData.ceremonyAddress || ''} onChange={e=>updateField('ceremonyAddress', e.target.value)} /></div>
+                                    </div>
+                                    <div className="flex gap-3">
+                                        <div className="w-1/3"><label className="text-[10px] uppercase font-bold text-stone-400 flex items-center gap-1"><Clock className="w-3 h-3"/> Heure Soirée</label><input disabled={!canEdit} type="time" className="w-full p-2 border rounded bg-stone-50 text-sm" value={localData.partyTime || ''} onChange={e=>updateField('partyTime', e.target.value)} /></div>
+                                        <div className="flex-1"><label className="text-[10px] uppercase font-bold text-stone-400 flex items-center gap-1"><MapPin className="w-3 h-3"/> Adresse Soirée</label><input disabled={!canEdit} className="w-full p-2 border rounded bg-stone-50 text-sm" placeholder="Lieu de réception..." value={localData.partyAddress || ''} onChange={e=>updateField('partyAddress', e.target.value)} /></div>
+                                    </div>
+                                </div>
+
+                                {/* Contacts d'urgence */}
+                                <div className="pt-4 border-t border-stone-100 grid grid-cols-2 gap-4">
+                                    <div className="p-3 bg-stone-50 rounded-lg border border-stone-100">
+                                        <label className="text-[10px] uppercase font-bold text-stone-500 mb-2 block flex items-center gap-1"><Phone className="w-3 h-3"/> Contact Témoin 1</label>
+                                        <input disabled={!canEdit} className="w-full p-1.5 border rounded text-xs mb-2 bg-white" placeholder="Nom du témoin" value={localData.witness1Name || ''} onChange={e=>updateField('witness1Name', e.target.value)} />
+                                        <input disabled={!canEdit} className="w-full p-1.5 border rounded text-xs bg-white" placeholder="Téléphone" value={localData.witness1Phone || ''} onChange={e=>updateField('witness1Phone', e.target.value)} />
+                                    </div>
+                                    <div className="p-3 bg-stone-50 rounded-lg border border-stone-100">
+                                        <label className="text-[10px] uppercase font-bold text-stone-500 mb-2 block flex items-center gap-1"><Phone className="w-3 h-3"/> Contact Témoin 2</label>
+                                        <input disabled={!canEdit} className="w-full p-1.5 border rounded text-xs mb-2 bg-white" placeholder="Nom du témoin" value={localData.witness2Name || ''} onChange={e=>updateField('witness2Name', e.target.value)} />
+                                        <input disabled={!canEdit} className="w-full p-1.5 border rounded text-xs bg-white" placeholder="Téléphone" value={localData.witness2Phone || ''} onChange={e=>updateField('witness2Phone', e.target.value)} />
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* MODULE FINANCES & RÉMUNÉRATION (VISIBLE UNIQUEMENT PAR LA DIRECTION) */}
                         {isSuperAdmin && (
                             <div className="bg-white p-6 rounded-xl border border-stone-200 shadow-sm">
                                 <h4 className="font-bold text-stone-800 mb-4 flex items-center gap-2"><Wallet className="w-5 h-5 text-green-600"/> Finances & Rémunération</h4>
                                 
-                                {/* Partie Client (Acompte / Solde Jour J) */}
                                 <div className="mb-6 p-4 bg-green-50 rounded-xl border border-green-100">
                                     <h5 className="font-bold text-sm text-green-900 mb-3 flex items-center gap-2"><DollarSign className="w-4 h-4"/> Paiement Client</h5>
                                     <div className="grid grid-cols-2 gap-4 mb-4">
@@ -359,7 +401,6 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, staffD
                                         </div>
                                     </div>
                                     
-                                    {/* Calcul automatique du reste à payer le Jour J */}
                                     {((localData.totalPrice || 0) - (localData.depositAmount || 0)) > 0 ? (
                                         <div className="flex items-center justify-between bg-white p-3 rounded-lg border border-red-200 shadow-sm">
                                             <span className="text-sm font-bold text-red-600">Solde Jour J : {(localData.totalPrice || 0) - (localData.depositAmount || 0)} €</span>
@@ -376,7 +417,6 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, staffD
                                     ) : null}
                                 </div>
 
-                                {/* Partie Équipe (Rémunération Freelances) */}
                                 <div className="p-4 bg-stone-50 rounded-xl border border-stone-100">
                                     <h5 className="font-bold text-sm text-stone-800 mb-3 flex items-center gap-2"><Users className="w-4 h-4"/> Rémunération Équipe</h5>
                                     <div className="space-y-2 mb-4">

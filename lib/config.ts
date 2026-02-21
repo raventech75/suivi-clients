@@ -151,7 +151,6 @@ export interface Project {
     checkListPhoto?: Record<string, boolean>;
     checkListVideo?: Record<string, boolean>;
 
-    // 👇 NOUVEAU : SYSTÈME DE GALERIE ET SÉLECTION
     galleryImages?: { url: string, filename: string }[];
     selectedImages?: string[];
     selectionValidated?: boolean;
@@ -190,4 +189,17 @@ export interface Project {
     lastUpdated?: any;
     totalPrice?: number;
     depositAmount?: number;
+
+    // 👇 NOUVEAU : FEUILLE DE ROUTE / QUESTIONNAIRE J-30
+    prepAddress?: string;
+    prepTime?: string;
+    ceremonyAddress?: string;
+    ceremonyTime?: string;
+    partyAddress?: string;
+    partyTime?: string;
+    witness1Name?: string;
+    witness1Phone?: string;
+    witness2Name?: string;
+    witness2Phone?: string;
+    questionnaireFilled?: boolean;
 }
