@@ -3,7 +3,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { 
   Camera, Video, Ban, ChevronRight, Rocket, Mail, 
   BookOpen, Trash2, Image as ImageIcon, CheckSquare, 
-  Upload, Loader2, MapPin, FileText, Users, Calendar, Eye, Timer, Music, Briefcase, History, Archive, RefreshCw, UserCheck, Send, Palette, ExternalLink, HardDrive, Link, Printer, CheckCircle2, ImagePlus, Copy, Wallet, DollarSign, ClipboardList, Clock, Phone, FileSignature
+  Upload, Loader2, MapPin, FileText, Users, Calendar, Eye, Timer, Music, Briefcase, History, Archive, RefreshCw, UserCheck, Send, Palette, ExternalLink, HardDrive, Link, Printer, CheckCircle2, ImagePlus, Copy, Wallet, DollarSign, ClipboardList, Clock, Phone, FileSignature, AlertTriangle
 } from 'lucide-react';
 import { doc, updateDoc, deleteDoc, serverTimestamp } from 'firebase/firestore'; 
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
@@ -280,7 +280,6 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, staffD
       }
   };
 
-  // 👇 NOUVEAU : IMPRESSION DU CONTRAT JURIDIQUE
   const printContract = () => {
       const win = window.open('', '', 'width=800,height=900');
       if(!win) return;
@@ -479,7 +478,6 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, staffD
                                         </div>
                                     ) : null}
 
-                                    {/* 👇 NOUVEAU : STATUT DU CONTRAT */}
                                     {localData.totalPrice && localData.totalPrice > 0 ? (
                                         localData.contractSigned ? (
                                             <div className="pt-3 border-t border-green-200/50 flex items-center gap-2 text-xs font-bold text-green-700">
