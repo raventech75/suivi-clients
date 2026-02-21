@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { 
   ChevronRight, ChevronLeft, Search, AlertTriangle, ImageIcon, Film, Calendar, 
   Music, Rocket, CheckCircle, CheckSquare, BookOpen, 
-  Copy, ClipboardCheck, X, Users, Camera, Video, UserCheck, HardDrive, Download, Lock, ShoppingBag, Palette, PlayCircle, Heart, ZoomIn, MapPin, Clock, Phone, ClipboardList
+  Copy, ClipboardCheck, X, Users, Camera, Video, UserCheck, HardDrive, Download, Lock, ShoppingBag, Palette, PlayCircle, Heart, ZoomIn, MapPin, Clock, Phone, ClipboardList, CheckCircle2
 } from 'lucide-react';
 import { doc, updateDoc, serverTimestamp } from 'firebase/firestore';
 import { db, appId } from '../lib/firebase';
@@ -104,7 +104,6 @@ export default function ClientPortal({ projects, onBack }: { projects: Project[]
       setSavingMusic(false);
   };
 
-  // 👇 NOUVEAU : SAUVEGARDE DU QUESTIONNAIRE CLIENT
   const handleSaveQuestionnaire = async () => {
       if(!foundProject) return;
       setSavingQuest(true);
@@ -288,7 +287,7 @@ export default function ClientPortal({ projects, onBack }: { projects: Project[]
               )}
           </div>
 
-          {/* 👇 NOUVEAU : FEUILLE DE ROUTE (J-30) */}
+          {/* FEUILLE DE ROUTE (J-30) */}
           <div className="bg-white p-6 rounded-2xl border border-stone-200 shadow-xl relative overflow-hidden">
               {foundProject.questionnaireFilled && (
                   <div className="absolute top-0 right-0 bg-green-500 text-white px-4 py-1.5 rounded-bl-xl font-bold text-xs flex items-center gap-1 shadow-sm">
