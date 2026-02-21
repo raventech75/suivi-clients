@@ -340,71 +340,73 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, staffD
                             </div>
                         </div>
 
-                        {/* 👇 NOUVEAU : MODULE FINANCES & RÉMUNÉRATION */}
-                        <div className="bg-white p-6 rounded-xl border border-stone-200 shadow-sm">
-                            <h4 className="font-bold text-stone-800 mb-4 flex items-center gap-2"><Wallet className="w-5 h-5 text-green-600"/> Finances & Rémunération</h4>
-                            
-                            {/* Partie Client (Acompte / Solde Jour J) */}
-                            <div className="mb-6 p-4 bg-green-50 rounded-xl border border-green-100">
-                                <h5 className="font-bold text-sm text-green-900 mb-3 flex items-center gap-2"><DollarSign className="w-4 h-4"/> Paiement Client</h5>
-                                <div className="grid grid-cols-2 gap-4 mb-4">
-                                    <div>
-                                        <label className="text-[10px] uppercase font-bold text-green-800">Prix Total Contrat (€)</label>
-                                        <input type="number" disabled={!canEdit} className="w-full p-2 border border-green-200 rounded text-sm outline-none bg-white font-bold" value={localData.totalPrice || 0} onChange={e => updateField('totalPrice', Number(e.target.value))} />
-                                    </div>
-                                    <div>
-                                        <label className="text-[10px] uppercase font-bold text-green-800">Acompte Versé (€)</label>
-                                        <input type="number" disabled={!canEdit} className="w-full p-2 border border-green-200 rounded text-sm outline-none bg-white" value={localData.depositAmount || 0} onChange={e => updateField('depositAmount', Number(e.target.value))} title="Ce montant bloque la date." />
-                                    </div>
-                                </div>
+                        {/* 👇 MODULE FINANCES & RÉMUNÉRATION (VISIBLE UNIQUEMENT PAR LA DIRECTION) */}
+                        {isSuperAdmin && (
+                            <div className="bg-white p-6 rounded-xl border border-stone-200 shadow-sm">
+                                <h4 className="font-bold text-stone-800 mb-4 flex items-center gap-2"><Wallet className="w-5 h-5 text-green-600"/> Finances & Rémunération</h4>
                                 
-                                {/* Calcul automatique du reste à payer le Jour J */}
-                                {((localData.totalPrice || 0) - (localData.depositAmount || 0)) > 0 ? (
-                                    <div className="flex items-center justify-between bg-white p-3 rounded-lg border border-red-200 shadow-sm">
-                                        <span className="text-sm font-bold text-red-600">Solde Jour J : {(localData.totalPrice || 0) - (localData.depositAmount || 0)} €</span>
-                                        {canEdit && (
-                                            <button onClick={() => updateField('depositAmount', localData.totalPrice)} className="text-xs bg-green-600 hover:bg-green-700 text-white px-3 py-1.5 rounded-lg font-bold transition flex items-center gap-1">
-                                                <CheckCircle2 className="w-3 h-3"/> Encaisser Solde
-                                            </button>
-                                        )}
+                                {/* Partie Client (Acompte / Solde Jour J) */}
+                                <div className="mb-6 p-4 bg-green-50 rounded-xl border border-green-100">
+                                    <h5 className="font-bold text-sm text-green-900 mb-3 flex items-center gap-2"><DollarSign className="w-4 h-4"/> Paiement Client</h5>
+                                    <div className="grid grid-cols-2 gap-4 mb-4">
+                                        <div>
+                                            <label className="text-[10px] uppercase font-bold text-green-800">Prix Total Contrat (€)</label>
+                                            <input type="number" disabled={!canEdit} className="w-full p-2 border border-green-200 rounded text-sm outline-none bg-white font-bold" value={localData.totalPrice || 0} onChange={e => updateField('totalPrice', Number(e.target.value))} />
+                                        </div>
+                                        <div>
+                                            <label className="text-[10px] uppercase font-bold text-green-800">Acompte Versé (€)</label>
+                                            <input type="number" disabled={!canEdit} className="w-full p-2 border border-green-200 rounded text-sm outline-none bg-white" value={localData.depositAmount || 0} onChange={e => updateField('depositAmount', Number(e.target.value))} title="Ce montant bloque la date." />
+                                        </div>
                                     </div>
-                                ) : (localData.totalPrice || 0) > 0 ? (
-                                    <div className="flex items-center gap-2 bg-green-100 text-green-800 p-3 rounded-lg border border-green-200 font-bold text-sm">
-                                        <CheckCircle2 className="w-5 h-5"/> Prestation 100% payée (Acompte + Jour J)
-                                    </div>
-                                ) : null}
-                            </div>
+                                    
+                                    {/* Calcul automatique du reste à payer le Jour J */}
+                                    {((localData.totalPrice || 0) - (localData.depositAmount || 0)) > 0 ? (
+                                        <div className="flex items-center justify-between bg-white p-3 rounded-lg border border-red-200 shadow-sm">
+                                            <span className="text-sm font-bold text-red-600">Solde Jour J : {(localData.totalPrice || 0) - (localData.depositAmount || 0)} €</span>
+                                            {canEdit && (
+                                                <button onClick={() => updateField('depositAmount', localData.totalPrice)} className="text-xs bg-green-600 hover:bg-green-700 text-white px-3 py-1.5 rounded-lg font-bold transition flex items-center gap-1">
+                                                    <CheckCircle2 className="w-3 h-3"/> Encaisser Solde
+                                                </button>
+                                            )}
+                                        </div>
+                                    ) : (localData.totalPrice || 0) > 0 ? (
+                                        <div className="flex items-center gap-2 bg-green-100 text-green-800 p-3 rounded-lg border border-green-200 font-bold text-sm">
+                                            <CheckCircle2 className="w-5 h-5"/> Prestation 100% payée (Acompte + Jour J)
+                                        </div>
+                                    ) : null}
+                                </div>
 
-                            {/* Partie Équipe (Rémunération Freelances) */}
-                            <div className="p-4 bg-stone-50 rounded-xl border border-stone-100">
-                                <h5 className="font-bold text-sm text-stone-800 mb-3 flex items-center gap-2"><Users className="w-4 h-4"/> Rémunération Équipe</h5>
-                                <div className="space-y-2 mb-4">
-                                    {(localData.teamPayments || []).length === 0 && <p className="text-xs text-stone-400 italic">Aucun paiement enregistré.</p>}
-                                    {(localData.teamPayments || []).map((pay, idx) => (
-                                        <div key={pay.id} className="flex justify-between items-center bg-white p-2 rounded border border-stone-200 text-sm">
-                                            <div>
-                                                <div className="font-bold text-stone-700">{pay.recipient} <span className="text-green-600 ml-2">{pay.amount} €</span></div>
-                                                {pay.note && <div className="text-[10px] text-stone-400">{pay.note}</div>}
+                                {/* Partie Équipe (Rémunération Freelances) */}
+                                <div className="p-4 bg-stone-50 rounded-xl border border-stone-100">
+                                    <h5 className="font-bold text-sm text-stone-800 mb-3 flex items-center gap-2"><Users className="w-4 h-4"/> Rémunération Équipe</h5>
+                                    <div className="space-y-2 mb-4">
+                                        {(localData.teamPayments || []).length === 0 && <p className="text-xs text-stone-400 italic">Aucun paiement enregistré.</p>}
+                                        {(localData.teamPayments || []).map((pay, idx) => (
+                                            <div key={pay.id} className="flex justify-between items-center bg-white p-2 rounded border border-stone-200 text-sm">
+                                                <div>
+                                                    <div className="font-bold text-stone-700">{pay.recipient} <span className="text-green-600 ml-2">{pay.amount} €</span></div>
+                                                    {pay.note && <div className="text-[10px] text-stone-400">{pay.note}</div>}
+                                                </div>
+                                                {canEdit && <button onClick={() => removeTeamPayment(idx)} className="text-red-400 hover:text-red-600 p-1"><Trash2 className="w-4 h-4"/></button>}
                                             </div>
-                                            {canEdit && <button onClick={() => removeTeamPayment(idx)} className="text-red-400 hover:text-red-600 p-1"><Trash2 className="w-4 h-4"/></button>}
-                                        </div>
-                                    ))}
-                                </div>
-                                
-                                {canEdit && (
-                                    <div className="flex flex-col gap-2 pt-3 border-t border-stone-200">
-                                        <div className="flex gap-2">
-                                            <input className="flex-1 p-2 border rounded text-xs" placeholder="Prénom (Ex: Volkan)" value={newPayment.recipient} onChange={e => setNewPayment({...newPayment, recipient: e.target.value})} />
-                                            <input type="number" className="w-24 p-2 border rounded text-xs" placeholder="Montant €" value={newPayment.amount || ''} onChange={e => setNewPayment({...newPayment, amount: Number(e.target.value)})} />
-                                        </div>
-                                        <div className="flex gap-2">
-                                            <input className="flex-1 p-2 border rounded text-xs" placeholder="Note (Ex: Virement le 15/05)" value={newPayment.note} onChange={e => setNewPayment({...newPayment, note: e.target.value})} />
-                                            <button onClick={addTeamPayment} className="bg-stone-800 text-white px-4 py-2 rounded text-xs font-bold hover:bg-black">Ajouter</button>
-                                        </div>
+                                        ))}
                                     </div>
-                                )}
+                                    
+                                    {canEdit && (
+                                        <div className="flex flex-col gap-2 pt-3 border-t border-stone-200">
+                                            <div className="flex gap-2">
+                                                <input className="flex-1 p-2 border rounded text-xs" placeholder="Prénom (Ex: Volkan)" value={newPayment.recipient} onChange={e => setNewPayment({...newPayment, recipient: e.target.value})} />
+                                                <input type="number" className="w-24 p-2 border rounded text-xs" placeholder="Montant €" value={newPayment.amount || ''} onChange={e => setNewPayment({...newPayment, amount: Number(e.target.value)})} />
+                                            </div>
+                                            <div className="flex gap-2">
+                                                <input className="flex-1 p-2 border rounded text-xs" placeholder="Note (Ex: Virement le 15/05)" value={newPayment.note} onChange={e => setNewPayment({...newPayment, note: e.target.value})} />
+                                                <button onClick={addTeamPayment} className="bg-stone-800 text-white px-4 py-2 rounded text-xs font-bold hover:bg-black">Ajouter</button>
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
                             </div>
-                        </div>
+                        )}
 
                         <div className="h-[400px]"><TeamChat project={project} user={user} /></div>
                     </div>
