@@ -1,9 +1,9 @@
 'use client';
 import React, { useState, useEffect } from 'react';
 import { 
-  ChevronRight, Search, AlertTriangle, ImageIcon, Film, Calendar, 
+  ChevronRight, ChevronLeft, Search, AlertTriangle, ImageIcon, Film, Calendar, 
   Music, Rocket, CheckCircle, CheckSquare, BookOpen, 
-  Copy, ClipboardCheck, X, Users, Camera, Video, UserCheck, HardDrive, Download, Lock, ShoppingBag, Palette, PlayCircle, Heart
+  Copy, ClipboardCheck, X, Users, Camera, Video, UserCheck, HardDrive, Download, Lock, ShoppingBag, Palette, PlayCircle, Heart, ZoomIn
 } from 'lucide-react';
 import { doc, updateDoc, serverTimestamp } from 'firebase/firestore';
 import { db, appId } from '../lib/firebase';
@@ -27,8 +27,10 @@ export default function ClientPortal({ projects, onBack }: { projects: Project[]
   const [moodLink, setMoodLink] = useState('');
   const [savingMusic, setSavingMusic] = useState(false);
   
-  // 👇 NOUVEAU : ÉTAT DE LA SÉLECTION PHOTOS
   const [selectedPhotos, setSelectedPhotos] = useState<string[]>([]);
+  
+  // 👇 NOUVEAU : ÉTAT DE LA VISIONNEUSE PLEIN ÉCRAN
+  const [previewIndex, setPreviewIndex] = useState<number | null>(null);
 
   const [error, setError] = useState('');
 
@@ -46,9 +48,21 @@ export default function ClientPortal({ projects, onBack }: { projects: Project[]
           setMusicLinks(foundProject.musicLinks || ''); 
           setMusicInstructions(foundProject.musicInstructions || '');
           setMoodLink(foundProject.moodboardLink || ''); 
-          setSelectedPhotos(foundProject.selectedImages || []); // Charge la sélection depuis la BDD
+          setSelectedPhotos(foundProject.selectedImages || []); 
       } 
   }, [foundProject]);
+
+  // 👇 NOUVEAU : NAVIGATION CLAVIER POUR LE PLEIN ÉCRAN
+  useEffect(() => {
+      const handleKeyDown = (e: KeyboardEvent) => {
+          if (previewIndex === null || !foundProject?.galleryImages) return;
+          if (e.key === 'Escape') setPreviewIndex(null);
+          if (e.key === 'ArrowRight') setPreviewIndex((prev) => (prev! + 1) % foundProject.galleryImages!.length);
+          if (e.key === 'ArrowLeft') setPreviewIndex((prev) => (prev! - 1 + foundProject.galleryImages!.length) % foundProject.galleryImages!.length);
+      };
+      window.addEventListener('keydown', handleKeyDown);
+      return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [previewIndex, foundProject]);
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
@@ -79,7 +93,6 @@ export default function ClientPortal({ projects, onBack }: { projects: Project[]
       await updateDoc(doc(db, colPath, foundProject.id), { deliveryConfirmedVideo: true, deliveryConfirmedVideoDate: serverTimestamp() });
   };
 
-  // 👇 NOUVEAU : GESTION DU CLIC SUR UNE PHOTO
   const togglePhoto = async (filename: string) => {
       if(!foundProject || foundProject.selectionValidated) return;
       
@@ -94,14 +107,11 @@ export default function ClientPortal({ projects, onBack }: { projects: Project[]
           newSel.push(filename);
       }
       
-      setSelectedPhotos(newSel); // Maj UI immédiate
-      
-      // Sauvegarde silencieuse en BDD
+      setSelectedPhotos(newSel); 
       const colPath = typeof appId !== 'undefined' ? `artifacts/${appId}/public/data/${COLLECTION_NAME}` : COLLECTION_NAME;
       await updateDoc(doc(db, colPath, foundProject.id), { selectedImages: newSel });
   };
 
-  // 👇 NOUVEAU : VALIDATION DÉFINITIVE DE L'ALBUM
   const validateGallery = async () => {
       if(!foundProject || !confirm("Êtes-vous sûr(e) de vouloir valider cette sélection ?\nVous ne pourrez plus la modifier.")) return;
       const colPath = typeof appId !== 'undefined' ? `artifacts/${appId}/public/data/${COLLECTION_NAME}` : COLLECTION_NAME;
@@ -136,6 +146,55 @@ export default function ClientPortal({ projects, onBack }: { projects: Project[]
 
     return (
       <div className="min-h-screen bg-stone-50 pb-20">
+        
+        {/* 👇 NOUVEAU : LA VISIONNEUSE PLEIN ÉCRAN */}
+        {previewIndex !== null && foundProject.galleryImages && (
+            <div className="fixed inset-0 z-[100] bg-black/95 flex flex-col animate-fade-in backdrop-blur-sm">
+                {/* Header Top */}
+                <div className="flex justify-between items-center p-4 md:p-6 text-white absolute top-0 w-full z-10 bg-gradient-to-b from-black/80 to-transparent">
+                    <div className="text-sm font-mono bg-black/50 px-3 py-1 rounded-lg border border-white/10">{foundProject.galleryImages[previewIndex].filename}</div>
+                    <button onClick={() => setPreviewIndex(null)} className="p-2 bg-white/10 hover:bg-white/20 rounded-full transition-colors"><X className="w-6 h-6"/></button>
+                </div>
+                
+                {/* Image & Navigation */}
+                <div className="flex-1 relative flex items-center justify-center p-4">
+                    <button onClick={(e) => { e.stopPropagation(); setPreviewIndex((previewIndex - 1 + foundProject.galleryImages!.length) % foundProject.galleryImages!.length); }} className="absolute left-2 md:left-8 p-3 bg-black/50 hover:bg-black text-white rounded-full transition z-10 hidden md:block">
+                        <ChevronLeft className="w-8 h-8"/>
+                    </button>
+                    
+                    <img 
+                        src={foundProject.galleryImages[previewIndex].url} 
+                        className="max-h-[80vh] max-w-full object-contain rounded-lg shadow-2xl"
+                        alt="Aperçu plein écran"
+                    />
+
+                    <button onClick={(e) => { e.stopPropagation(); setPreviewIndex((previewIndex + 1) % foundProject.galleryImages!.length); }} className="absolute right-2 md:right-8 p-3 bg-black/50 hover:bg-black text-white rounded-full transition z-10 hidden md:block">
+                        <ChevronRight className="w-8 h-8"/>
+                    </button>
+                </div>
+
+                {/* Footer Action (Bouton Sélection) */}
+                <div className="p-6 md:p-8 bg-gradient-to-t from-black to-transparent flex justify-center items-center gap-6 absolute bottom-0 w-full">
+                    {/* Flèches mobiles */}
+                    <button onClick={() => setPreviewIndex((previewIndex - 1 + foundProject.galleryImages!.length) % foundProject.galleryImages!.length)} className="md:hidden p-3 bg-white/10 text-white rounded-full"><ChevronLeft className="w-6 h-6"/></button>
+                    
+                    <button 
+                        disabled={foundProject.selectionValidated}
+                        onClick={() => togglePhoto(foundProject.galleryImages![previewIndex].filename)} 
+                        className={`px-8 py-4 rounded-full font-bold text-lg transition-all shadow-2xl flex items-center gap-3 ${
+                            selectedPhotos.includes(foundProject.galleryImages[previewIndex].filename) 
+                            ? 'bg-green-500 text-white hover:bg-green-600 scale-105' 
+                            : 'bg-white text-stone-900 hover:bg-stone-200'
+                        }`}
+                    >
+                        {selectedPhotos.includes(foundProject.galleryImages[previewIndex].filename) ? <><CheckCircle className="w-6 h-6"/> Photo Sélectionnée</> : <><Heart className="w-6 h-6"/> Ajouter à l'Album</>}
+                    </button>
+
+                    <button onClick={() => setPreviewIndex((previewIndex + 1) % foundProject.galleryImages!.length)} className="md:hidden p-3 bg-white/10 text-white rounded-full"><ChevronRight className="w-6 h-6"/></button>
+                </div>
+            </div>
+        )}
+
         <div className="bg-stone-900 text-white p-10 text-center relative h-[40vh] flex flex-col justify-center items-center overflow-hidden">
              <img src={bgImage} className="absolute inset-0 w-full h-full object-cover opacity-40" />
              <button onClick={onBack} className="absolute top-6 left-6 text-white/70 hover:text-white flex gap-2 items-center z-10 transition-colors"><ChevronRight className="rotate-180 w-4 h-4"/> Retour Accueil</button>
@@ -220,13 +279,13 @@ export default function ClientPortal({ projects, onBack }: { projects: Project[]
               )}
           </div>
 
-          {/* 👇 NOUVEAU : LA GALERIE DE SÉLECTION ALBUM NATIVE */}
+          {/* GALERIE DE SÉLECTION ALBUM NATIVE */}
           {foundProject.galleryImages && foundProject.galleryImages.length > 0 && (
               <div className="bg-white p-6 rounded-2xl border border-stone-200 shadow-xl overflow-hidden relative">
                   <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6 border-b pb-6">
                       <div>
                           <h3 className="font-serif text-2xl text-stone-800 flex items-center gap-2 mb-2"><ImageIcon className="w-6 h-6 text-amber-500"/> Sélection pour votre Album</h3>
-                          <p className="text-sm text-stone-500">Cliquez sur les photos pour les ajouter à votre sélection d'album. {foundProject.selectionValidated && <strong className="text-green-600">Sélection validée et envoyée.</strong>}</p>
+                          <p className="text-sm text-stone-500">Cliquez sur une photo pour l'ajouter, ou sur la loupe pour l'agrandir. {foundProject.selectionValidated && <strong className="text-green-600">Sélection envoyée.</strong>}</p>
                       </div>
                       
                       <div className="bg-stone-50 px-6 py-3 rounded-xl border border-stone-200 text-center shadow-sm">
@@ -248,7 +307,17 @@ export default function ClientPortal({ projects, onBack }: { projects: Project[]
                                 className={`relative aspect-square rounded-xl overflow-hidden cursor-pointer group transition-all duration-300 ${isSelected ? 'ring-4 ring-amber-500 scale-95 shadow-lg' : 'hover:opacity-90'}`}
                               >
                                   <img src={img.url} alt={img.filename} loading="lazy" className="w-full h-full object-cover" />
-                                  <div className={`absolute inset-0 transition-opacity flex items-center justify-center ${isSelected ? 'bg-black/20 opacity-100' : 'bg-black/0 opacity-0 group-hover:opacity-100 group-hover:bg-black/10'}`}>
+                                  
+                                  {/* BOUTON LOUPE (AGRANDIR) */}
+                                  <button 
+                                      onClick={(e) => { e.stopPropagation(); setPreviewIndex(i); }} 
+                                      className="absolute top-2 right-2 bg-black/50 hover:bg-black text-white p-1.5 rounded-full shadow-md backdrop-blur-sm transition-colors z-10"
+                                      title="Agrandir la photo"
+                                  >
+                                      <ZoomIn className="w-4 h-4"/>
+                                  </button>
+
+                                  <div className={`absolute inset-0 transition-opacity flex items-center justify-center pointer-events-none ${isSelected ? 'bg-black/20 opacity-100' : 'bg-black/0 opacity-0 group-hover:opacity-100 group-hover:bg-black/10'}`}>
                                       {isSelected ? (
                                           <div className="bg-amber-500 text-white p-2 rounded-full shadow-lg transform scale-110 transition-transform"><CheckCircle className="w-6 h-6"/></div>
                                       ) : (
@@ -260,7 +329,6 @@ export default function ClientPortal({ projects, onBack }: { projects: Project[]
                       })}
                   </div>
 
-                  {/* Barre de validation Fixe en bas du conteneur */}
                   {!foundProject.selectionValidated && (
                       <div className="mt-6 pt-4 border-t border-stone-100 flex justify-end">
                           <button 
