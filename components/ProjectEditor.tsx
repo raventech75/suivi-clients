@@ -111,6 +111,7 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, staffD
       updateField('selectedOptions', currentOptions);
   };
 
+  // 👇 NOUVEAU : Calcul avec Alerte Avenant
   const calculateTotalPrice = () => {
       let total = 0;
       if (localData.selectedFormula) {
@@ -123,19 +124,37 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, staffD
               if (option) total += option.price;
           });
       }
+
+      if (localData.contractSigned && (localData.totalPrice || 0) !== total) {
+          alert("⚠️ ATTENTION : Vous modifiez le tarif d'un contrat déjà signé.\n\nN'oubliez pas de cliquer sur le bouton rouge 'Refaire signer (Avenant)' juste en dessous pour annuler l'ancienne signature et envoyer le nouveau devis au client !");
+      }
+
       updateField('totalPrice', total);
   };
 
-  // 👇 NOUVEAU : Fonction pour réinitialiser la signature (Avenant)
-  const resetContract = () => {
-      if(!confirm("Créer un avenant ?\n\nCela effacera la signature actuelle. Le client devra re-signer le contrat avec les nouvelles options. Continuer ?")) return;
-      setLocalData(prev => ({ 
-          ...prev, 
+  // 👇 NOUVEAU : Réinitialisation et Sauvegarde Automatique de l'Avenant
+  const resetContract = async () => {
+      if(!confirm("Créer un avenant ?\n\nCela effacera la signature actuelle et sauvegardera vos nouvelles modifications (Options/Prix). Le client devra re-signer le contrat.\n\nContinuer ?")) return;
+      
+      const cleanData = { 
+          ...localData, 
           contractSigned: false, 
           contractSignatureData: '', 
-          contractSignedDate: '' 
-      }));
-      setHasChanges(true);
+          contractSignedDate: '',
+          lastUpdated: serverTimestamp() 
+      };
+      
+      setLocalData(cleanData as any);
+      
+      const colPath = typeof appId !== 'undefined' ? `artifacts/${appId}/public/data/${COLLECTION_NAME}` : COLLECTION_NAME;
+      try {
+          await updateDoc(doc(db, colPath, project.id), cleanData);
+          originalDataRef.current = JSON.parse(JSON.stringify(cleanData));
+          setHasChanges(false);
+          alert("✅ Avenant généré et sauvegardé avec succès ! Le client peut maintenant re-signer le nouveau contrat sur son espace.");
+      } catch (e: any) {
+          alert(`Erreur: ${e.message}`);
+      }
   };
 
   const toggleCheck = (type: 'photo' | 'video', taskId: string, weight: number) => {
@@ -291,7 +310,6 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, staffD
           if (old.linkPhoto !== cur.linkPhoto) changes.push(`Lien Galerie ${cur.linkPhoto ? 'MAJ' : 'Supprimé'}`);
           if (old.linkVideo !== cur.linkVideo) changes.push(`Lien Vidéo ${cur.linkVideo ? 'MAJ' : 'Supprimé'}`);
           if (old.depositAmount !== cur.depositAmount || old.totalPrice !== cur.totalPrice) changes.push(`Finances mises à jour`);
-          if (old.contractSigned !== cur.contractSigned) changes.push(`Statut Contrat mis à jour`);
       }
 
       let updatedHistory = [...(localData.history || [])];
@@ -530,6 +548,7 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, staffD
                             </div>
                         </div>
 
+                        {/* CRÉATION DU DEVIS / CONTRAT DANS LES FINANCES */}
                         {isSuperAdmin && (
                             <div className="bg-white p-6 rounded-xl border border-stone-200 shadow-sm">
                                 <h4 className="font-bold text-stone-800 mb-4 flex items-center justify-between">
@@ -595,6 +614,7 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, staffD
                                         </div>
                                     ) : null}
 
+                                    {/* STATUT DU CONTRAT ET BOUTON AVENANT */}
                                     {localData.totalPrice && localData.totalPrice > 0 ? (
                                         localData.contractSigned ? (
                                             <div className="pt-3 border-t border-green-200/50 flex flex-col gap-2">
@@ -603,7 +623,7 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, staffD
                                                         <CheckCircle2 className="w-4 h-4"/> Contrat signé le {formatDateFR(localData.contractSignedDate!)}
                                                     </div>
                                                     {canEdit && (
-                                                        <button onClick={resetContract} className="bg-white border border-red-200 text-red-600 px-2 py-1 rounded shadow-sm hover:bg-red-50 text-[10px] font-bold transition">
+                                                        <button onClick={resetContract} className="bg-white border border-red-200 text-red-600 px-3 py-1.5 rounded-lg shadow-sm hover:bg-red-50 text-[10px] font-bold transition">
                                                             Refaire signer (Avenant)
                                                         </button>
                                                     )}
