@@ -190,9 +190,11 @@ export interface Project {
     totalPrice?: number;
     depositAmount?: number;
 
-    // 👇 NOUVEAU : FEUILLE DE ROUTE / QUESTIONNAIRE J-30
-    prepAddress?: string;
-    prepTime?: string;
+    // 👇 NOUVEAU : FEUILLE DE ROUTE DÉTAILLÉE
+    prepAddressBride?: string;
+    prepTimeBride?: string;
+    prepAddressGroom?: string;
+    prepTimeGroom?: string;
     ceremonyAddress?: string;
     ceremonyTime?: string;
     partyAddress?: string;

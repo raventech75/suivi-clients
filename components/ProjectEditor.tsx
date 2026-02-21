@@ -329,7 +329,6 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, staffD
                 <div className="grid lg:grid-cols-2 gap-8">
                     <div className="space-y-6">
                         
-                        {/* FICHE MARIÉS */}
                         <div className="bg-white p-6 rounded-xl border border-stone-200 shadow-sm">
                             <h4 className="font-bold text-stone-800 mb-4 flex items-center gap-2"><Users className="w-5 h-5 text-stone-400"/> Fiche Mariés</h4>
                             <div className="space-y-4">
@@ -340,7 +339,7 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, staffD
                             </div>
                         </div>
 
-                        {/* 👇 NOUVEAU : FEUILLE DE ROUTE / QUESTIONNAIRE J-30 CÔTÉ ADMIN */}
+                        {/* 👇 FEUILLE DE ROUTE CÔTÉ ADMIN (DOUBLE PRÉPA) */}
                         <div className="bg-white p-6 rounded-xl border border-stone-200 shadow-sm relative">
                             <h4 className="font-bold text-stone-800 mb-4 flex items-center gap-2"><ClipboardList className="w-5 h-5 text-indigo-500"/> Feuille de Route (Jour J)</h4>
                             
@@ -354,10 +353,14 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, staffD
                                 {/* Adresses et Horaires */}
                                 <div className="space-y-3">
                                     <div className="flex gap-3">
-                                        <div className="w-1/3"><label className="text-[10px] uppercase font-bold text-stone-400 flex items-center gap-1"><Clock className="w-3 h-3"/> Heure Prépa.</label><input disabled={!canEdit} type="time" className="w-full p-2 border rounded bg-stone-50 text-sm" value={localData.prepTime || ''} onChange={e=>updateField('prepTime', e.target.value)} /></div>
-                                        <div className="flex-1"><label className="text-[10px] uppercase font-bold text-stone-400 flex items-center gap-1"><MapPin className="w-3 h-3"/> Adresse Préparatifs</label><input disabled={!canEdit} className="w-full p-2 border rounded bg-stone-50 text-sm" placeholder="Où commencent les photos ?" value={localData.prepAddress || ''} onChange={e=>updateField('prepAddress', e.target.value)} /></div>
+                                        <div className="w-1/3"><label className="text-[10px] uppercase font-bold text-pink-500 flex items-center gap-1"><Clock className="w-3 h-3"/> Heure (Mariée)</label><input disabled={!canEdit} type="time" className="w-full p-2 border rounded bg-stone-50 text-sm" value={localData.prepTimeBride || ''} onChange={e=>updateField('prepTimeBride', e.target.value)} /></div>
+                                        <div className="flex-1"><label className="text-[10px] uppercase font-bold text-pink-500 flex items-center gap-1"><MapPin className="w-3 h-3"/> Préparatifs (Mariée)</label><input disabled={!canEdit} className="w-full p-2 border rounded bg-stone-50 text-sm" placeholder="Où se prépare la mariée ?" value={localData.prepAddressBride || ''} onChange={e=>updateField('prepAddressBride', e.target.value)} /></div>
                                     </div>
                                     <div className="flex gap-3">
+                                        <div className="w-1/3"><label className="text-[10px] uppercase font-bold text-blue-500 flex items-center gap-1"><Clock className="w-3 h-3"/> Heure (Marié)</label><input disabled={!canEdit} type="time" className="w-full p-2 border rounded bg-stone-50 text-sm" value={localData.prepTimeGroom || ''} onChange={e=>updateField('prepTimeGroom', e.target.value)} /></div>
+                                        <div className="flex-1"><label className="text-[10px] uppercase font-bold text-blue-500 flex items-center gap-1"><MapPin className="w-3 h-3"/> Préparatifs (Marié)</label><input disabled={!canEdit} className="w-full p-2 border rounded bg-stone-50 text-sm" placeholder="Où se prépare le marié ?" value={localData.prepAddressGroom || ''} onChange={e=>updateField('prepAddressGroom', e.target.value)} /></div>
+                                    </div>
+                                    <div className="flex gap-3 pt-2 border-t border-stone-100">
                                         <div className="w-1/3"><label className="text-[10px] uppercase font-bold text-stone-400 flex items-center gap-1"><Clock className="w-3 h-3"/> Heure Cérémonie</label><input disabled={!canEdit} type="time" className="w-full p-2 border rounded bg-stone-50 text-sm" value={localData.ceremonyTime || ''} onChange={e=>updateField('ceremonyTime', e.target.value)} /></div>
                                         <div className="flex-1"><label className="text-[10px] uppercase font-bold text-stone-400 flex items-center gap-1"><MapPin className="w-3 h-3"/> Adresse Cérémonie</label><input disabled={!canEdit} className="w-full p-2 border rounded bg-stone-50 text-sm" placeholder="Mairie, Église, Laïque..." value={localData.ceremonyAddress || ''} onChange={e=>updateField('ceremonyAddress', e.target.value)} /></div>
                                     </div>
@@ -383,7 +386,6 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, staffD
                             </div>
                         </div>
 
-                        {/* MODULE FINANCES & RÉMUNÉRATION (VISIBLE UNIQUEMENT PAR LA DIRECTION) */}
                         {isSuperAdmin && (
                             <div className="bg-white p-6 rounded-xl border border-stone-200 shadow-sm">
                                 <h4 className="font-bold text-stone-800 mb-4 flex items-center gap-2"><Wallet className="w-5 h-5 text-green-600"/> Finances & Rémunération</h4>

@@ -29,8 +29,10 @@ export default function ClientPortal({ projects, onBack }: { projects: Project[]
   const [savingMusic, setSavingMusic] = useState(false);
   
   // États de la Feuille de Route
-  const [prepAddress, setPrepAddress] = useState('');
-  const [prepTime, setPrepTime] = useState('');
+  const [prepAddressBride, setPrepAddressBride] = useState('');
+  const [prepTimeBride, setPrepTimeBride] = useState('');
+  const [prepAddressGroom, setPrepAddressGroom] = useState('');
+  const [prepTimeGroom, setPrepTimeGroom] = useState('');
   const [ceremonyAddress, setCeremonyAddress] = useState('');
   const [ceremonyTime, setCeremonyTime] = useState('');
   const [partyAddress, setPartyAddress] = useState('');
@@ -62,9 +64,12 @@ export default function ClientPortal({ projects, onBack }: { projects: Project[]
           setMoodLink(foundProject.moodboardLink || ''); 
           setSelectedPhotos(foundProject.selectedImages || []); 
           
-          // Questionnaire
-          setPrepAddress(foundProject.prepAddress || '');
-          setPrepTime(foundProject.prepTime || '');
+          // Questionnaire (Double prépa)
+          setPrepAddressBride(foundProject.prepAddressBride || '');
+          setPrepTimeBride(foundProject.prepTimeBride || '');
+          setPrepAddressGroom(foundProject.prepAddressGroom || '');
+          setPrepTimeGroom(foundProject.prepTimeGroom || '');
+          
           setCeremonyAddress(foundProject.ceremonyAddress || '');
           setCeremonyTime(foundProject.ceremonyTime || '');
           setPartyAddress(foundProject.partyAddress || '');
@@ -109,7 +114,8 @@ export default function ClientPortal({ projects, onBack }: { projects: Project[]
       setSavingQuest(true);
       const colPath = typeof appId !== 'undefined' ? `artifacts/${appId}/public/data/${COLLECTION_NAME}` : COLLECTION_NAME;
       await updateDoc(doc(db, colPath, foundProject.id), { 
-          prepAddress, prepTime, 
+          prepAddressBride, prepTimeBride, 
+          prepAddressGroom, prepTimeGroom,
           ceremonyAddress, ceremonyTime, 
           partyAddress, partyTime, 
           witness1Name, witness1Phone, 
@@ -303,11 +309,25 @@ export default function ClientPortal({ projects, onBack }: { projects: Project[]
               <div className="space-y-6">
                   {/* Lieux et Horaires */}
                   <div className="grid md:grid-cols-3 gap-4">
+                      {/* Préparatifs (Double) */}
                       <div className="bg-stone-50 p-4 rounded-xl border border-stone-100">
                           <h4 className="font-bold text-sm text-stone-700 flex items-center gap-1 mb-3"><MapPin className="w-4 h-4 text-stone-400"/> Préparatifs</h4>
-                          <div className="space-y-3">
-                              <div><label className="text-[10px] uppercase font-bold text-stone-400">Heure d'arrivée de l'équipe</label><input type="time" className="w-full p-2 border rounded-lg bg-white text-sm focus:ring-2 outline-none mt-1" value={prepTime} onChange={e => setPrepTime(e.target.value)} /></div>
-                              <div><label className="text-[10px] uppercase font-bold text-stone-400">Adresse exacte</label><input className="w-full p-2 border rounded-lg bg-white text-sm focus:ring-2 outline-none mt-1" placeholder="N°, Rue, Code Postal, Ville" value={prepAddress} onChange={e => setPrepAddress(e.target.value)} /></div>
+                          
+                          <div className="space-y-4">
+                              <div className="border-l-2 border-pink-300 pl-3">
+                                  <h5 className="text-[10px] font-bold text-pink-600 uppercase mb-2">💍 Côté Mariée</h5>
+                                  <div className="flex gap-2">
+                                     <div className="w-1/3"><input type="time" className="w-full p-2 border rounded-lg bg-white text-xs focus:ring-2 outline-none" value={prepTimeBride} onChange={e => setPrepTimeBride(e.target.value)} /></div>
+                                     <div className="flex-1"><input className="w-full p-2 border rounded-lg bg-white text-xs focus:ring-2 outline-none" placeholder="Adresse complète" value={prepAddressBride} onChange={e => setPrepAddressBride(e.target.value)} /></div>
+                                  </div>
+                              </div>
+                              <div className="border-l-2 border-blue-300 pl-3">
+                                  <h5 className="text-[10px] font-bold text-blue-600 uppercase mb-2">🎩 Côté Marié</h5>
+                                  <div className="flex gap-2">
+                                     <div className="w-1/3"><input type="time" className="w-full p-2 border rounded-lg bg-white text-xs focus:ring-2 outline-none" value={prepTimeGroom} onChange={e => setPrepTimeGroom(e.target.value)} /></div>
+                                     <div className="flex-1"><input className="w-full p-2 border rounded-lg bg-white text-xs focus:ring-2 outline-none" placeholder="Adresse complète" value={prepAddressGroom} onChange={e => setPrepAddressGroom(e.target.value)} /></div>
+                                  </div>
+                              </div>
                           </div>
                       </div>
                       
