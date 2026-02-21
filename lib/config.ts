@@ -5,13 +5,11 @@
 export const COLLECTION_NAME = "wedding_projects";
 export const SETTINGS_COLLECTION = "settings";
 
-// 👇 METTEZ VOS URLS ICI
 export const MAKE_WEBHOOK_URL = "https://hook.eu2.make.com/xnuln15n6zggpfk18p78o7olikrd8a99"; 
 export const STRIPE_PRIORITY_LINK = "https://buy.stripe.com/fZu4gz07eaPzcRt54Y5gc0c";
 export const STRIPE_RAW_LINK = "https://buy.stripe.com/cNi5kD5rye1L2cP2WQ5gc0d";
 export const STRIPE_ARCHIVE_RESTORE_LINK = "https://buy.stripe.com/fZu00j3jq4rb5p140U5gc0e";
 
-/// Annuaire de l'équipe (Nom -> Email)
 export const STAFF_DIRECTORY: Record<string, string> = {
     'Yunus': 'yunus34@hotmail.fr',
     'Serife': 'serifevideography@gmail.com',
@@ -19,7 +17,22 @@ export const STAFF_DIRECTORY: Record<string, string> = {
     'Feridun': 'feridun.kizgin@gmail.com',
 };
 
-// Checklists
+// 👇 NOUVEAU : DÉFINITION DES FORMULES ET OPTIONS
+export const FORMULAS = [
+    { id: 'essentielle', name: 'Formule 1 : Essentielle', price: 1800, details: ['Prises de vue à la mairie', 'Séance photo de couple', 'Vidéo des moments clés', '1 Caméraman', 'Montage vidéo complet', 'Album photo numérique', 'Clef USB'] },
+    { id: 'prestige', name: 'Formule 2 : Prestige', price: 2800, details: ['Prises de vue à la mairie', 'Séance photo de couple', 'Vidéo des moments clés', '1 Caméraman', 'Montage vidéo complet', 'Album photo numérique et imprimé (30x30)', 'Prestations drone', 'Clef USB'] },
+    { id: 'excellence', name: 'Formule 3 : Excellence', price: 3800, details: ['Shooting préparatifs', 'Prises de vue à la mairie', 'Séance photo de couple', 'Vidéo des moments clés', '2 Caméramans', 'Montage vidéo complet', 'Album photo numérique et imprimé de luxe (40x30)', 'Prestations drone', 'Projection vidéos sur écran (soirée)', 'Clef USB'] },
+    { id: 'luxe', name: 'Formule 4 : Luxe', price: 4800, details: ['Shooting préparatifs', 'Prises de vue à la mairie', 'Séance photo de couple', 'Vidéo des moments clés', '2 Caméramans', 'Montage vidéo complet', 'Album photo numérique et imprimé de luxe (40x30 + 15x21 x2)', 'Prestations drone', 'Diffusion direct sur Youtube', 'Projection photos/vidéos (soirée)', 'Projection meilleurs moments', 'Clef USB'] }
+];
+
+export const FORMULA_OPTIONS = [
+    { id: 'preparatifs', name: 'Shooting des préparatifs', price: 200 },
+    { id: 'drone', name: 'Drone', price: 400 },
+    { id: 'usb', name: 'Clef USB supplémentaire', price: 50 },
+    { id: 'projection', name: 'Projection Jour J', price: 300 },
+    { id: 'kina', name: 'Kina / Henne (Lundi au Jeudi)', price: 1500 }
+];
+
 export const CHECKLIST_PHOTO = [
     { id: 'backup', label: 'Sauvegarde Cartes', weight: 10 },
     { id: 'culling', label: 'Tri & Sélection', weight: 20 },
@@ -38,7 +51,6 @@ export const CHECKLIST_VIDEO = [
     { id: 'export', label: 'Export 4K & Upload', weight: 10 }
 ];
 
-// Étapes
 export const PHOTO_STEPS = {
     'none': { label: 'En attente', percent: 0 },
     'waiting': { label: 'En attente des fichiers', percent: 10 },
@@ -79,47 +91,11 @@ export const ALBUM_FORMATS = [
     "30x30", "40x30", "25x25", "20x30", "Coffret Luxe", "Livre Parents (20x20)"
 ];
 
-// --- INTERFACES TYPESCRIPT ---
-
-export interface HistoryLog {
-    date: string;
-    user: string;
-    action: string;
-}
-
-export interface Album {
-    id: string;
-    name: string;
-    format: string;
-    price: number;
-    status: string;
-    paid: boolean;
-    stripeLink?: string;
-}
-
-export interface Message {
-    id: string;
-    author: string;
-    text: string;
-    date: string;
-    isStaff: boolean;
-}
-
-export interface InternalMessage {
-    id: string;
-    author: string;
-    role: string;
-    text: string;
-    date: string;
-}
-
-export interface TeamPayment {
-    id: string;
-    recipient: string;
-    amount: number;
-    date: string;
-    note?: string;
-}
+export interface HistoryLog { date: string; user: string; action: string; }
+export interface Album { id: string; name: string; format: string; price: number; status: string; paid: boolean; stripeLink?: string; }
+export interface Message { id: string; author: string; text: string; date: string; isStaff: boolean; }
+export interface InternalMessage { id: string; author: string; role: string; text: string; date: string; }
+export interface TeamPayment { id: string; recipient: string; amount: number; date: string; note?: string; }
 
 export interface Project {
     id: string;
@@ -204,8 +180,11 @@ export interface Project {
     witness2Phone?: string;
     questionnaireFilled?: boolean;
 
-    // 👇 NOUVEAU : CONTRAT ET SIGNATURE ÉLECTRONIQUE
     contractSigned?: boolean;
     contractSignatureData?: string;
     contractSignedDate?: string;
+    
+    // 👇 NOUVEAU : SÉLECTION DU CONTRAT
+    selectedFormula?: string;
+    selectedOptions?: string[];
 }

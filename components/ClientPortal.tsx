@@ -3,13 +3,13 @@ import React, { useState, useEffect, useRef } from 'react';
 import { 
   ChevronRight, ChevronLeft, Search, AlertTriangle, ImageIcon, Film, Calendar, 
   Music, Rocket, CheckCircle, CheckSquare, BookOpen, 
-  Copy, ClipboardCheck, X, Users, Camera, Video, UserCheck, HardDrive, Download, Lock, ShoppingBag, Palette, PlayCircle, Heart, ZoomIn, MapPin, Clock, Phone, ClipboardList, CheckCircle2, PenTool, Eraser
+  Copy, ClipboardCheck, X, Users, Camera, Video, UserCheck, HardDrive, Download, Lock, ShoppingBag, Palette, PlayCircle, Heart, ZoomIn, MapPin, Clock, Phone, ClipboardList, CheckCircle2, PenTool, Eraser, FileText
 } from 'lucide-react';
 import { doc, updateDoc, serverTimestamp } from 'firebase/firestore';
 import { db, appId } from '../lib/firebase';
 import { 
   COLLECTION_NAME, STRIPE_PRIORITY_LINK, STRIPE_RAW_LINK, STRIPE_ARCHIVE_RESTORE_LINK,
-  PHOTO_STEPS, VIDEO_STEPS, ALBUM_STATUSES, Project 
+  PHOTO_STEPS, VIDEO_STEPS, ALBUM_STATUSES, Project, FORMULAS, FORMULA_OPTIONS 
 } from '../lib/config';
 import ChatBox from './ChatSystem';
 
@@ -45,7 +45,6 @@ export default function ClientPortal({ projects, onBack }: { projects: Project[]
   const [previewIndex, setPreviewIndex] = useState<number | null>(null);
   const [error, setError] = useState('');
 
-  // 👇 NOUVEAU : CANVAS POUR LA SIGNATURE
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [isDrawing, setIsDrawing] = useState(false);
   const [savingSignature, setSavingSignature] = useState(false);
@@ -92,20 +91,15 @@ export default function ClientPortal({ projects, onBack }: { projects: Project[]
       return () => window.removeEventListener('keydown', handleKeyDown);
   }, [previewIndex, foundProject]);
 
-  // 👇 NOUVELLES FONCTIONS DE DESSIN (SIGNATURE)
   const startDrawing = (e: any) => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
-    
-    // Empêcher le scroll sur mobile
     if(e.type.includes('touch')) document.body.style.overflow = 'hidden';
-
     const rect = canvas.getBoundingClientRect();
     const clientX = e.touches ? e.touches[0].clientX : e.clientX;
     const clientY = e.touches ? e.touches[0].clientY : e.clientY;
-    
     ctx.beginPath();
     ctx.moveTo(clientX - rect.left, clientY - rect.top);
     ctx.strokeStyle = "#1c1917";
@@ -120,11 +114,9 @@ export default function ClientPortal({ projects, onBack }: { projects: Project[]
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
-
     const rect = canvas.getBoundingClientRect();
     const clientX = e.touches ? e.touches[0].clientX : e.clientX;
     const clientY = e.touches ? e.touches[0].clientY : e.clientY;
-
     ctx.lineTo(clientX - rect.left, clientY - rect.top);
     ctx.stroke();
   };
@@ -146,18 +138,13 @@ export default function ClientPortal({ projects, onBack }: { projects: Project[]
       const canvas = canvasRef.current;
       if (!canvas) return;
 
-      // Vérifier si le canvas est vide
       const blank = document.createElement('canvas');
       blank.width = canvas.width;
       blank.height = canvas.height;
-      if (canvas.toDataURL() === blank.toDataURL()) {
-          alert("Veuillez dessiner votre signature avant de valider.");
-          return;
-      }
+      if (canvas.toDataURL() === blank.toDataURL()) { alert("Veuillez dessiner votre signature avant de valider."); return; }
 
       setSavingSignature(true);
       const signatureData = canvas.toDataURL('image/png');
-      
       const colPath = typeof appId !== 'undefined' ? `artifacts/${appId}/public/data/${COLLECTION_NAME}` : COLLECTION_NAME;
       await updateDoc(doc(db, colPath, foundProject.id), { 
           contractSigned: true,
@@ -165,75 +152,123 @@ export default function ClientPortal({ projects, onBack }: { projects: Project[]
           contractSignedDate: new Date().toISOString(),
           lastUpdated: serverTimestamp() 
       });
-      alert("Contrat signé et validé avec succès !");
+      alert("Contrat signé et validé avec succès ! Vous pouvez maintenant le télécharger.");
       setSavingSignature(false);
+  };
+
+  // 👇 NOUVEAU : FONCTION D'IMPRESSION DU CONTRAT POUR LE CLIENT
+  const printContract = () => {
+      if(!foundProject) return;
+      const win = window.open('', '', 'width=900,height=1000');
+      if(!win) return;
+      
+      const formulasHtml = FORMULAS.map(f => {
+          const isSelected = foundProject.selectedFormula === f.id;
+          const box = isSelected ? '☑' : '☐';
+          return `
+            <div style="margin-bottom: 15px; padding: 10px; border: ${isSelected ? '2px solid #111' : '1px solid #eee'}; background: ${isSelected ? '#f9f9f9' : '#fff'}; border-radius: 5px;">
+                <div style="font-weight: bold; font-size: 16px;">${box} ${f.name} (${f.price} €)</div>
+                <div style="font-size: 12px; color: #555; margin-left: 20px; margin-top: 5px;">${f.details.join(' • ')}</div>
+            </div>
+          `;
+      }).join('');
+
+      const optionsHtml = FORMULA_OPTIONS.map(o => {
+          const isSelected = (foundProject.selectedOptions || []).includes(o.id);
+          const box = isSelected ? '☑' : '☐';
+          return `<div style="font-size: 14px; margin-bottom: 5px;">${box} ${o.name} (+${o.price} €)</div>`;
+      }).join('');
+
+      const content = `
+        <html>
+          <head>
+            <title>Contrat - ${foundProject.clientNames}</title>
+            <style>
+              body { font-family: 'Georgia', serif; padding: 40px; line-height: 1.5; color: #111; max-width: 800px; margin: 0 auto; }
+              h1 { text-align: center; font-size: 26px; margin-bottom: 5px; text-transform: uppercase; letter-spacing: 2px; border-bottom: 2px solid #111; padding-bottom: 10px;}
+              .subtitle { text-align: center; font-size: 12px; color: #666; margin-bottom: 40px; font-family: sans-serif;}
+              .box { border: 1px solid #ccc; padding: 20px; margin-bottom: 30px; background: #fafafa; border-radius: 8px;}
+              .row { display: flex; justify-content: space-between; margin-bottom: 10px; font-family: sans-serif; font-size: 14px;}
+              .title { font-weight: bold; font-size: 18px; margin-top: 30px; border-bottom: 1px solid #111; padding-bottom: 5px; margin-bottom: 15px; text-transform: uppercase; letter-spacing: 1px;}
+              .signature-box { margin-top: 50px; border-top: 1px solid #ccc; padding-top: 20px; display: flex; justify-content: space-between; }
+              .signature-img { max-width: 250px; max-height: 100px; border-bottom: 1px solid #000; padding-bottom: 5px; margin-bottom: 10px; }
+              .terms { font-size: 11px; color: #444; text-align: justify; column-count: 2; column-gap: 30px;}
+            </style>
+          </head>
+          <body>
+            <h1>WEDDING CONTRACT - IRZZEN PRODUCTIONS</h1>
+            <div class="subtitle">Référence: ${foundProject.code} | Edité le: ${new Date().toLocaleDateString()}</div>
+            
+            <div class="box">
+                <div class="row"><strong>LES MARIÉS :</strong> <span>${foundProject.clientNames}</span></div>
+                <div class="row"><strong>EMAIL :</strong> <span>${foundProject.clientEmail}</span></div>
+                <div class="row"><strong>TÉLÉPHONE :</strong> <span>${foundProject.clientPhone || 'Non renseigné'}</span></div>
+                <div class="row"><strong>DATE DE L'ÉVÉNEMENT :</strong> <span>${formatDateFR(foundProject.weddingDate)}</span></div>
+            </div>
+
+            <div class="title">1. FORMULE SÉLECTIONNÉE</div>
+            ${formulasHtml}
+
+            <div class="title">2. OPTIONS SUPPLÉMENTAIRES</div>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                ${optionsHtml}
+            </div>
+
+            <div class="title">3. DÉTAILS FINANCIERS</div>
+            <div style="background: #f0f0f0; padding: 15px; border-radius: 5px; font-family: sans-serif;">
+                <div style="display: flex; justify-content: space-between; font-size: 16px; margin-bottom: 5px;">
+                    <span>Prix total convenu :</span> <strong>${foundProject.totalPrice || 0} €</strong>
+                </div>
+                <div style="display: flex; justify-content: space-between; font-size: 14px; color: #555; margin-bottom: 5px;">
+                    <span>Acompte versé à la réservation :</span> <span>${foundProject.depositAmount || 0} €</span>
+                </div>
+                <div style="display: flex; justify-content: space-between; font-size: 18px; color: #d32f2f; margin-top: 10px; padding-top: 10px; border-top: 1px dashed #ccc; font-weight: bold;">
+                    <span>Reste à percevoir le jour J :</span> <span>${(foundProject.totalPrice || 0) - (foundProject.depositAmount || 0)} €</span>
+                </div>
+            </div>
+
+            <div style="page-break-before: always;"></div>
+            <h1>CONDITIONS GÉNÉRALES DE VENTE</h1>
+            
+            <div class="terms">
+                <p><strong>ACOMPTE POUR RÉSERVATION :</strong> Le premier paiement est un acompte qui correspond à environ 30% de la somme totale. L'acompte n'est pas récupérable. Le paiement est à effectuer lors de la signature du présent contrat. Ainsi la date du mariage sera réservée.</p>
+                
+                <p><strong>GÉNÉRALITÉS :</strong> Les futurs Mariés déclarent être majeurs et poser librement. La prestation du Photographe se déroule d'un seul tenant. Son temps de présence ne peut être fractionné sauf accord préalable. Les Mariés peuvent choisir de passer à une collection supérieure, mais l'inverse n'est pas autorisé.</p>
+                
+                <p><strong>DROIT À L'IMAGE ET PROPRIÉTÉ INTELLECTUELLE :</strong> Toute réalisation photographique confère au Photographe, son auteur, des droits de propriété artistique, patrimoniaux et moraux, tels que définis par le Code de la Propriété Intellectuelle. Les Mariés autorisent le Photographe à prendre en photo l'ensemble des invités.</p>
+                
+                <p><strong>ANNULATION :</strong> Aucune annulation ne pourra intervenir du fait du Photographe, excepté les cas de force majeure dûment justifiés. Tout changement de date de la prestation fait office d'annulation. Dans l'éventualité où ce contrat serait rompu par les clients, le Photographe serait libéré d'honorer le présent contrat et garderait les sommes versées jusqu'alors.</p>
+                
+                <p><strong>APRÈS LE MARIAGE :</strong> Le coffret final avec la clé USB et les tirages sera livré dans les trois mois suivant le choix des Mariés sur les images à tirer. Le Photographe s'engage à conserver les fichiers numériques HD pendant une durée de 12 mois à compter de la date du mariage.</p>
+            </div>
+
+            <div class="signature-box">
+                <div style="width: 45%;">
+                    <p style="font-size: 12px; margin-bottom: 30px;"><strong>LE STUDIO :</strong><br/>IRZZEN PRODUCTIONS</p>
+                    <div style="height:80px; width:200px; border-bottom:1px solid #000;">
+                        <span style="font-family: 'Brush Script MT', cursive; font-size: 24px; color: #111; line-height: 80px; padding-left: 20px;">Irzzen</span>
+                    </div>
+                </div>
+                <div style="width: 45%; text-align: right;">
+                    <p style="font-size: 12px; margin-bottom: 5px;"><strong>LES MARIÉS :</strong><br/>${foundProject.clientNames}</p>
+                    <p style="font-size: 10px; color: #666; margin-bottom: 10px;">Lu et approuvé. Bon pour accord.</p>
+                    ${foundProject.contractSignatureData ? `<img src="${foundProject.contractSignatureData}" class="signature-img"/>` : '<div style="height:80px; width:100%; border-bottom:1px dashed #000;"></div>'}
+                    <p style="font-size:10px; color:#999; margin-top:5px;">Signé numériquement le ${foundProject.contractSignedDate ? formatDateFR(foundProject.contractSignedDate) : '...'}</p>
+                </div>
+            </div>
+            
+            <script>window.print();</script>
+          </body>
+        </html>
+      `;
+      win.document.write(content);
+      win.document.close();
   };
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
     const p = projects.find(p => p.code === searchCode.trim().toUpperCase());
     if (p) { setFoundProject(p); setError(''); } else setError('Code introuvable. Vérifiez les majuscules.');
-  };
-
-  const handleSaveMusic = async () => {
-      if(!foundProject) return;
-      setSavingMusic(true);
-      const colPath = typeof appId !== 'undefined' ? `artifacts/${appId}/public/data/${COLLECTION_NAME}` : COLLECTION_NAME;
-      await updateDoc(doc(db, colPath, foundProject.id), { 
-          musicLinks, musicInstructions, moodboardLink: moodLink, lastUpdated: serverTimestamp() 
-      });
-      alert("Vos choix artistiques ont été enregistrés !");
-      setSavingMusic(false);
-  };
-
-  const handleSaveQuestionnaire = async () => {
-      if(!foundProject) return;
-      setSavingQuest(true);
-      const colPath = typeof appId !== 'undefined' ? `artifacts/${appId}/public/data/${COLLECTION_NAME}` : COLLECTION_NAME;
-      await updateDoc(doc(db, colPath, foundProject.id), { 
-          prepAddressBride, prepTimeBride, 
-          prepAddressGroom, prepTimeGroom,
-          ceremonyAddress, ceremonyTime, 
-          partyAddress, partyTime, 
-          witness1Name, witness1Phone, 
-          witness2Name, witness2Phone,
-          questionnaireFilled: true,
-          lastUpdated: serverTimestamp() 
-      });
-      alert("Votre feuille de route a bien été transmise à notre équipe !");
-      setSavingQuest(false);
-  };
-
-  const confirmPhoto = async () => {
-      if(!foundProject || !confirm("⚠️ ATTENTION :\n\nEn confirmant, vous certifiez avoir téléchargé TOUS vos fichiers.")) return;
-      const colPath = typeof appId !== 'undefined' ? `artifacts/${appId}/public/data/${COLLECTION_NAME}` : COLLECTION_NAME;
-      await updateDoc(doc(db, colPath, foundProject.id), { deliveryConfirmedPhoto: true, deliveryConfirmedPhotoDate: serverTimestamp() });
-  };
-
-  const confirmVideo = async () => {
-      if(!foundProject || !confirm("⚠️ ATTENTION :\n\nEn confirmant, vous certifiez avoir téléchargé votre film.")) return;
-      const colPath = typeof appId !== 'undefined' ? `artifacts/${appId}/public/data/${COLLECTION_NAME}` : COLLECTION_NAME;
-      await updateDoc(doc(db, colPath, foundProject.id), { deliveryConfirmedVideo: true, deliveryConfirmedVideoDate: serverTimestamp() });
-  };
-
-  const togglePhoto = async (filename: string) => {
-      if(!foundProject || foundProject.selectionValidated) return;
-      let newSel = [...selectedPhotos];
-      if (newSel.includes(filename)) { newSel = newSel.filter(f => f !== filename); } 
-      else {
-          if (foundProject.maxSelection && newSel.length >= foundProject.maxSelection) { alert(`Vous avez atteint la limite de ${foundProject.maxSelection} photos pour votre album.`); return; }
-          newSel.push(filename);
-      }
-      setSelectedPhotos(newSel); 
-      const colPath = typeof appId !== 'undefined' ? `artifacts/${appId}/public/data/${COLLECTION_NAME}` : COLLECTION_NAME;
-      await updateDoc(doc(db, colPath, foundProject.id), { selectedImages: newSel });
-  };
-
-  const validateGallery = async () => {
-      if(!foundProject || !confirm("Êtes-vous sûr(e) de vouloir valider cette sélection ?\nVous ne pourrez plus la modifier.")) return;
-      const colPath = typeof appId !== 'undefined' ? `artifacts/${appId}/public/data/${COLLECTION_NAME}` : COLLECTION_NAME;
-      await updateDoc(doc(db, colPath, foundProject.id), { selectionValidated: true, lastUpdated: serverTimestamp() });
-      alert("Félicitations ! Votre sélection a été envoyée au Studio pour la création de votre Album.");
   };
 
   if (foundProject) {
@@ -264,7 +299,6 @@ export default function ClientPortal({ projects, onBack }: { projects: Project[]
     return (
       <div className="min-h-screen bg-stone-50 pb-20">
         
-        {/* VISIONNEUSE PLEIN ÉCRAN */}
         {previewIndex !== null && foundProject.galleryImages && (
             <div className="fixed inset-0 z-[100] bg-black/95 flex flex-col animate-fade-in backdrop-blur-sm">
                 <div className="flex justify-between items-center p-4 md:p-6 text-white absolute top-0 w-full z-10 bg-gradient-to-b from-black/80 to-transparent">
@@ -295,71 +329,80 @@ export default function ClientPortal({ projects, onBack }: { projects: Project[]
         
         <div className="max-w-4xl mx-auto px-4 -mt-16 space-y-8 relative z-10">
 
-          {/* 👇 NOUVEAU : MODULE CONTRAT & SIGNATURE */}
-          {foundProject.totalPrice && foundProject.totalPrice > 0 && !foundProject.contractSigned ? (
-              <div className="bg-white p-6 rounded-2xl border-2 border-stone-800 shadow-xl relative overflow-hidden animate-fade-in">
-                  <div className="absolute top-0 right-0 bg-stone-800 text-white px-4 py-1.5 rounded-bl-xl font-bold text-xs flex items-center gap-1 shadow-sm">
-                      <PenTool className="w-3 h-3"/> Action Requise
-                  </div>
-                  
-                  <h3 className="font-serif text-2xl text-stone-800 flex items-center gap-2 mb-4">Contrat de Prestation</h3>
-                  
-                  <div className="bg-stone-50 p-4 rounded-xl border border-stone-200 text-sm text-stone-600 mb-6 max-h-[150px] overflow-y-auto">
-                      <p className="font-bold text-stone-900 mb-2">Conditions Générales (Extrait) - Résumé de la prestation :</p>
-                      <ul className="list-disc pl-5 space-y-1 mb-4">
-                          <li>Client(s) : {foundProject.clientNames}</li>
-                          <li>Date de l'événement : {formatDateFR(foundProject.weddingDate)}</li>
-                          <li>Prix Total : {foundProject.totalPrice} €</li>
-                          <li>Acompte versé : {foundProject.depositAmount || 0} €</li>
-                          <li className="text-red-600 font-bold">Solde restant dû le jour J : {foundProject.totalPrice - (foundProject.depositAmount || 0)} €</li>
-                      </ul>
-                      <p>Par la présente signature, le client accepte les conditions générales de vente du Studio RavenTech. Les droits d'auteur restent la propriété du photographe/vidéaste. La livraison finale ne pourra s'effectuer qu'après règlement intégral de la somme due.</p>
-                  </div>
+          {/* 👇 NOUVEAU : GESTION DU CONTRAT CÔTÉ CLIENT */}
+          {foundProject.totalPrice && foundProject.totalPrice > 0 ? (
+              !foundProject.contractSigned ? (
+                  <div className="bg-white p-6 rounded-2xl border-2 border-stone-800 shadow-xl relative overflow-hidden animate-fade-in">
+                      <div className="absolute top-0 right-0 bg-stone-800 text-white px-4 py-1.5 rounded-bl-xl font-bold text-xs flex items-center gap-1 shadow-sm">
+                          <PenTool className="w-3 h-3"/> Action Requise
+                      </div>
+                      
+                      <h3 className="font-serif text-2xl text-stone-800 flex items-center gap-2 mb-4">Signature du Contrat</h3>
+                      
+                      <div className="bg-stone-50 p-4 rounded-xl border border-stone-200 text-sm text-stone-600 mb-6">
+                          <p className="font-bold text-stone-900 mb-2 text-lg">Résumé de votre devis :</p>
+                          <ul className="list-disc pl-5 space-y-2 mb-4">
+                              {foundProject.selectedFormula && (
+                                  <li>Formule choisie : <strong>{FORMULAS.find(f => f.id === foundProject.selectedFormula)?.name}</strong></li>
+                              )}
+                              {foundProject.selectedOptions && foundProject.selectedOptions.length > 0 && (
+                                  <li>Options : <strong>{foundProject.selectedOptions.map(id => FORMULA_OPTIONS.find(o => o.id === id)?.name).filter(Boolean).join(', ')}</strong></li>
+                              )}
+                              <li>Prix Total : <strong>{foundProject.totalPrice} €</strong></li>
+                              <li>Acompte versé : <strong>{foundProject.depositAmount || 0} €</strong></li>
+                              <li className="text-red-600 font-bold">Reste à régler le jour de l'événement : {foundProject.totalPrice - (foundProject.depositAmount || 0)} €</li>
+                          </ul>
+                          <p className="text-xs italic mt-4 border-t pt-2 border-stone-200">En signant ci-dessous, j'accepte les conditions générales de vente du Studio RavenTech (droits d'image, politique d'annulation, délais de livraison).</p>
+                      </div>
 
-                  <div className="mb-4">
-                      <div className="flex justify-between items-center mb-2">
-                          <label className="text-sm font-bold text-stone-800 flex items-center gap-2">Votre Signature</label>
-                          <button onClick={clearSignature} className="text-xs text-stone-400 hover:text-stone-700 flex items-center gap-1"><Eraser className="w-3 h-3"/> Effacer</button>
+                      <div className="mb-4">
+                          <div className="flex justify-between items-center mb-2">
+                              <label className="text-sm font-bold text-stone-800 flex items-center gap-2">Votre Signature</label>
+                              <button onClick={clearSignature} className="text-xs text-stone-400 hover:text-stone-700 flex items-center gap-1"><Eraser className="w-3 h-3"/> Effacer</button>
+                          </div>
+                          <div className="border-2 border-dashed border-stone-300 rounded-xl bg-stone-50 overflow-hidden cursor-crosshair touch-none relative">
+                              {!isDrawing && !canvasRef.current?.toDataURL() && <span className="absolute inset-0 flex items-center justify-center text-stone-300 pointer-events-none text-sm">Signez ici</span>}
+                              <canvas 
+                                  ref={canvasRef}
+                                  width={800} 
+                                  height={200}
+                                  className="w-full h-[200px]"
+                                  onMouseDown={startDrawing}
+                                  onMouseMove={draw}
+                                  onMouseUp={stopDrawing}
+                                  onMouseLeave={stopDrawing}
+                                  onTouchStart={startDrawing}
+                                  onTouchMove={draw}
+                                  onTouchEnd={stopDrawing}
+                              />
+                          </div>
                       </div>
-                      <div className="border-2 border-dashed border-stone-300 rounded-xl bg-stone-50 overflow-hidden cursor-crosshair touch-none">
-                          <canvas 
-                              ref={canvasRef}
-                              width={800} 
-                              height={200}
-                              className="w-full h-[200px]"
-                              onMouseDown={startDrawing}
-                              onMouseMove={draw}
-                              onMouseUp={stopDrawing}
-                              onMouseLeave={stopDrawing}
-                              onTouchStart={startDrawing}
-                              onTouchMove={draw}
-                              onTouchEnd={stopDrawing}
-                          />
-                      </div>
-                      <p className="text-[10px] text-stone-400 text-center mt-2">Dessinez avec votre doigt ou votre souris dans le cadre ci-dessus.</p>
-                  </div>
 
-                  <button 
-                      onClick={handleSignContract} 
-                      disabled={savingSignature}
-                      className="w-full bg-stone-900 text-white py-4 rounded-xl font-bold hover:bg-black transition shadow-lg disabled:opacity-50 flex items-center justify-center gap-2"
-                  >
-                      {savingSignature ? 'Validation...' : 'Signer numériquement le contrat'}
-                  </button>
-              </div>
-          ) : foundProject.contractSigned ? (
-              <div className="bg-green-50 p-4 rounded-xl border border-green-200 shadow-sm flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                      <div className="p-2 bg-green-100 rounded-full"><CheckCircle2 className="w-6 h-6 text-green-600"/></div>
-                      <div>
-                          <div className="font-bold text-green-900">Contrat signé</div>
-                          <div className="text-xs text-green-700">Le {formatDateFR(foundProject.contractSignedDate!)}</div>
-                      </div>
+                      <button 
+                          onClick={handleSignContract} 
+                          disabled={savingSignature}
+                          className="w-full bg-stone-900 text-white py-4 rounded-xl font-bold hover:bg-black transition shadow-lg disabled:opacity-50 flex items-center justify-center gap-2"
+                      >
+                          {savingSignature ? 'Validation...' : 'Signer et valider le contrat'}
+                      </button>
                   </div>
-              </div>
+              ) : (
+                  <div className="bg-green-50 p-6 rounded-2xl border border-green-200 shadow-md flex flex-col md:flex-row items-center justify-between gap-4">
+                      <div className="flex items-center gap-3">
+                          <div className="p-3 bg-green-100 rounded-full"><CheckCircle2 className="w-8 h-8 text-green-600"/></div>
+                          <div>
+                              <div className="font-bold text-green-900 text-lg">Contrat officiel signé</div>
+                              <div className="text-sm text-green-700">Validé numériquement le {formatDateFR(foundProject.contractSignedDate!)}</div>
+                          </div>
+                      </div>
+                      <button onClick={printContract} className="w-full md:w-auto bg-green-600 hover:bg-green-700 text-white px-6 py-3 rounded-xl font-bold shadow-sm transition flex items-center justify-center gap-2">
+                          <FileText className="w-5 h-5"/> Télécharger PDF
+                      </button>
+                  </div>
+              )
           ) : null}
-          
-          {/* RESTE DU CODE (inchangé) */}
+
+          {/* SAUVEGARDE ET PAIEMENT */}
           {hasDelivery && !allConfirmed && (
               <div className="bg-red-600 text-white p-6 rounded-2xl shadow-xl border-2 border-red-400 flex flex-col md:flex-row gap-4 items-start animate-fade-in">
                   <div className="bg-white/20 p-3 rounded-full shrink-0"><HardDrive className="w-8 h-8 text-white" /></div>
@@ -435,6 +478,7 @@ export default function ClientPortal({ projects, onBack }: { projects: Project[]
               )}
           </div>
 
+          {/* FEUILLE DE ROUTE */}
           <div className="bg-white p-6 rounded-2xl border border-stone-200 shadow-xl relative overflow-hidden">
               {foundProject.questionnaireFilled && (
                   <div className="absolute top-0 right-0 bg-green-500 text-white px-4 py-1.5 rounded-bl-xl font-bold text-xs flex items-center gap-1 shadow-sm">
@@ -513,49 +557,47 @@ export default function ClientPortal({ projects, onBack }: { projects: Project[]
               </div>
           </div>
 
-          {foundProject.galleryImages && foundProject.galleryImages.length > 0 && (
-              <div className="bg-white p-6 rounded-2xl border border-stone-200 shadow-xl overflow-hidden relative">
-                  <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6 border-b pb-6">
-                      <div>
-                          <h3 className="font-serif text-2xl text-stone-800 flex items-center gap-2 mb-2"><ImageIcon className="w-6 h-6 text-amber-500"/> Sélection pour votre Album</h3>
-                          <p className="text-sm text-stone-500">Cliquez sur une photo pour l'ajouter, ou sur la loupe pour l'agrandir. {foundProject.selectionValidated && <strong className="text-green-600">Sélection envoyée.</strong>}</p>
-                      </div>
-                      
-                      <div className="bg-stone-50 px-6 py-3 rounded-xl border border-stone-200 text-center shadow-sm">
-                          <div className="text-3xl font-bold text-stone-900">
-                              <span className={selectedPhotos.length === foundProject.maxSelection ? "text-green-600" : "text-amber-500"}>{selectedPhotos.length}</span> 
-                              <span className="text-stone-300 text-lg"> / {foundProject.maxSelection || '∞'}</span>
-                          </div>
-                          <div className="text-[10px] uppercase font-bold text-stone-400 tracking-wider">Sélectionnées</div>
-                      </div>
+          <div className="bg-white p-6 rounded-2xl border border-stone-200 shadow-xl overflow-hidden relative">
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6 border-b pb-6">
+                  <div>
+                      <h3 className="font-serif text-2xl text-stone-800 flex items-center gap-2 mb-2"><ImageIcon className="w-6 h-6 text-amber-500"/> Sélection pour votre Album</h3>
+                      <p className="text-sm text-stone-500">Cliquez sur une photo pour l'ajouter, ou sur la loupe pour l'agrandir. {foundProject.selectionValidated && <strong className="text-green-600">Sélection envoyée.</strong>}</p>
                   </div>
-
-                  <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-3 max-h-[600px] overflow-y-auto pr-2 pb-4">
-                      {foundProject.galleryImages.map((img, i) => {
-                          const isSelected = selectedPhotos.includes(img.filename);
-                          return (
-                              <div 
-                                key={i} 
-                                onClick={() => togglePhoto(img.filename)}
-                                className={`relative aspect-square rounded-xl overflow-hidden cursor-pointer group transition-all duration-300 ${isSelected ? 'ring-4 ring-amber-500 scale-95 shadow-lg' : 'hover:opacity-90'}`}
-                              >
-                                  <img src={img.url} alt={img.filename} loading="lazy" className="w-full h-full object-cover" />
-                                  <button onClick={(e) => { e.stopPropagation(); setPreviewIndex(i); }} className="absolute top-2 right-2 bg-black/50 hover:bg-black text-white p-1.5 rounded-full shadow-md backdrop-blur-sm transition-colors z-10" title="Agrandir la photo"><ZoomIn className="w-4 h-4"/></button>
-                                  <div className={`absolute inset-0 transition-opacity flex items-center justify-center pointer-events-none ${isSelected ? 'bg-black/20 opacity-100' : 'bg-black/0 opacity-0 group-hover:opacity-100 group-hover:bg-black/10'}`}>
-                                      {isSelected ? <div className="bg-amber-500 text-white p-2 rounded-full shadow-lg transform scale-110 transition-transform"><CheckCircle className="w-6 h-6"/></div> : <div className="bg-white/90 text-stone-400 p-2 rounded-full shadow-sm"><Heart className="w-6 h-6"/></div>}
-                                  </div>
-                              </div>
-                          );
-                      })}
-                  </div>
-
-                  {!foundProject.selectionValidated && (
-                      <div className="mt-6 pt-4 border-t border-stone-100 flex justify-end">
-                          <button onClick={validateGallery} disabled={selectedPhotos.length === 0} className="bg-stone-900 text-white px-8 py-4 rounded-xl font-bold shadow-xl hover:bg-black transition-all disabled:opacity-50 disabled:shadow-none transform hover:scale-105">Valider définitivement ma sélection ({selectedPhotos.length})</button>
+                  
+                  <div className="bg-stone-50 px-6 py-3 rounded-xl border border-stone-200 text-center shadow-sm">
+                      <div className="text-3xl font-bold text-stone-900">
+                          <span className={selectedPhotos.length === foundProject.maxSelection ? "text-green-600" : "text-amber-500"}>{selectedPhotos.length}</span> 
+                          <span className="text-stone-300 text-lg"> / {foundProject.maxSelection || '∞'}</span>
                       </div>
-                  )}
+                      <div className="text-[10px] uppercase font-bold text-stone-400 tracking-wider">Sélectionnées</div>
+                  </div>
               </div>
-          )}
+
+              <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-3 max-h-[600px] overflow-y-auto pr-2 pb-4">
+                  {foundProject.galleryImages && foundProject.galleryImages.map((img, i) => {
+                      const isSelected = selectedPhotos.includes(img.filename);
+                      return (
+                          <div 
+                            key={i} 
+                            onClick={() => togglePhoto(img.filename)}
+                            className={`relative aspect-square rounded-xl overflow-hidden cursor-pointer group transition-all duration-300 ${isSelected ? 'ring-4 ring-amber-500 scale-95 shadow-lg' : 'hover:opacity-90'}`}
+                          >
+                              <img src={img.url} alt={img.filename} loading="lazy" className="w-full h-full object-cover" />
+                              <button onClick={(e) => { e.stopPropagation(); setPreviewIndex(i); }} className="absolute top-2 right-2 bg-black/50 hover:bg-black text-white p-1.5 rounded-full shadow-md backdrop-blur-sm transition-colors z-10" title="Agrandir la photo"><ZoomIn className="w-4 h-4"/></button>
+                              <div className={`absolute inset-0 transition-opacity flex items-center justify-center pointer-events-none ${isSelected ? 'bg-black/20 opacity-100' : 'bg-black/0 opacity-0 group-hover:opacity-100 group-hover:bg-black/10'}`}>
+                                  {isSelected ? <div className="bg-amber-500 text-white p-2 rounded-full shadow-lg transform scale-110 transition-transform"><CheckCircle className="w-6 h-6"/></div> : <div className="bg-white/90 text-stone-400 p-2 rounded-full shadow-sm"><Heart className="w-6 h-6"/></div>}
+                              </div>
+                          </div>
+                      );
+                  })}
+              </div>
+
+              {!foundProject.selectionValidated && foundProject.galleryImages && foundProject.galleryImages.length > 0 && (
+                  <div className="mt-6 pt-4 border-t border-stone-100 flex justify-end">
+                      <button onClick={validateGallery} disabled={selectedPhotos.length === 0} className="bg-stone-900 text-white px-8 py-4 rounded-xl font-bold shadow-xl hover:bg-black transition-all disabled:opacity-50 disabled:shadow-none transform hover:scale-105">Valider définitivement ma sélection ({selectedPhotos.length})</button>
+                  </div>
+              )}
+          </div>
           
           <div className="space-y-6">
               <h3 className="font-serif text-2xl text-stone-800 flex items-center gap-2 border-b pb-4"><ShoppingBag className="w-6 h-6"/> Boutique & Options</h3>
