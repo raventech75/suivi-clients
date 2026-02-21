@@ -3,7 +3,8 @@ import React, { useState, useMemo } from 'react';
 import { 
   Plus, Search, Calendar, MapPin, Users, LogOut, BarChart3, 
   Settings, Trash2, Save, AlertCircle, Clock, CheckCircle2, 
-  Rocket, Bell, MessageSquare, AlertTriangle, ArrowUpDown, UserCheck, CalendarDays, ArrowLeft
+  Rocket, Bell, MessageSquare, AlertTriangle, ArrowUpDown, UserCheck, CalendarDays, ArrowLeft,
+  Camera, Video, ChevronRight // <-- Les icônes manquantes sont ici !
 } from 'lucide-react';
 import { collection, addDoc, serverTimestamp, setDoc, doc } from 'firebase/firestore'; 
 import { db, appId } from '../lib/firebase';
@@ -21,7 +22,6 @@ export default function AdminDashboard({
   
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
   
-  // 👇 NOUVEAU : État pour le calendrier
   const [isViewingCalendar, setIsViewingCalendar] = useState(false);
 
   const selectedProject = useMemo(() => 
@@ -106,7 +106,6 @@ export default function AdminDashboard({
     });
   }, [projects, searchTerm, statusFilter, sortMode, user]);
 
-  // 👇 NOUVEAU : Regroupement des projets pour le Calendrier
   const calendarGroups = useMemo(() => {
       const upcoming = projects
           .filter(p => !p.isArchived)
@@ -196,7 +195,6 @@ export default function AdminDashboard({
     );
   }
 
-  // 👇 NOUVEAU : VUE CALENDRIER D'ÉQUIPE
   if (isViewingCalendar) {
       return (
         <div className="min-h-screen bg-stone-100 pb-20">
@@ -288,7 +286,6 @@ export default function AdminDashboard({
             <div className="flex gap-4 items-center mt-2 text-sm text-stone-500 overflow-x-auto pb-2">
                 <span className="bg-stone-200 px-2 py-0.5 rounded text-stone-600 font-bold whitespace-nowrap">{processedProjects.length} dossiers</span>
                 <button onClick={onStats} className="flex items-center gap-1 hover:text-stone-900 transition whitespace-nowrap"><BarChart3 className="w-4 h-4"/> Statistiques</button>
-                {/* 👇 BOUTON CALENDRIER */}
                 <button onClick={() => setIsViewingCalendar(true)} className="flex items-center gap-1 text-emerald-600 hover:text-emerald-700 font-bold transition whitespace-nowrap"><CalendarDays className="w-4 h-4"/> Calendrier</button>
                 <button onClick={() => setIsManagingTeam(true)} className="flex items-center gap-1 hover:text-stone-900 transition text-amber-600 font-bold whitespace-nowrap"><Settings className="w-4 h-4"/> Équipe</button>
                 <button onClick={onLogout} className="flex items-center gap-1 text-red-400 hover:text-red-600 transition whitespace-nowrap"><LogOut className="w-4 h-4"/> Quitter</button>
