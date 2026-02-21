@@ -19,7 +19,7 @@ export const STAFF_DIRECTORY: Record<string, string> = {
     'Feridun': 'feridun.kizgin@gmail.com',
 };
 
-// 👇 NOUVEAU : DÉFINITION DES TASKS (CHECKLISTS)
+// Checklists
 export const CHECKLIST_PHOTO = [
     { id: 'backup', label: 'Sauvegarde Cartes', weight: 10 },
     { id: 'culling', label: 'Tri & Sélection', weight: 20 },
@@ -38,7 +38,7 @@ export const CHECKLIST_VIDEO = [
     { id: 'export', label: 'Export 4K & Upload', weight: 10 }
 ];
 
-// Étapes Photo (Pour affichage client simplifié)
+// Étapes
 export const PHOTO_STEPS = {
     'none': { label: 'En attente', percent: 0 },
     'waiting': { label: 'En attente des fichiers', percent: 10 },
@@ -49,7 +49,6 @@ export const PHOTO_STEPS = {
     'delivered': { label: 'Livraison Finale', percent: 100 }
 };
 
-// Étapes Vidéo (Pour affichage client simplifié)
 export const VIDEO_STEPS = {
     'none': { label: 'En attente', percent: 0 },
     'waiting': { label: 'En attente des fichiers', percent: 10 },
@@ -114,7 +113,6 @@ export interface InternalMessage {
     date: string;
 }
 
-// 👇 C'EST CE CHAMP QUI MANQUAIT ET CAUSAIT L'ERREUR
 export interface TeamPayment {
     id: string;
     recipient: string;
@@ -136,7 +134,6 @@ export interface Project {
     weddingVenueZip?: string;
     clientCity?: string;
 
-    // Staff
     managerName?: string;
     managerEmail?: string;
     photographerName?: string;
@@ -144,7 +141,6 @@ export interface Project {
     videographerName?: string;
     videographerEmail?: string;
 
-    // Production
     hasPhoto: boolean;
     hasVideo: boolean;
     statusPhoto: string;
@@ -152,11 +148,15 @@ export interface Project {
     progressPhoto: number;
     progressVideo: number;
     
-    // 👇 NOUVEAU : Checklists détaillées
     checkListPhoto?: Record<string, boolean>;
     checkListVideo?: Record<string, boolean>;
 
-    // Dates & Livraisons
+    // 👇 NOUVEAU : SYSTÈME DE GALERIE ET SÉLECTION
+    galleryImages?: { url: string, filename: string }[];
+    selectedImages?: string[];
+    selectionValidated?: boolean;
+    maxSelection?: number;
+
     estimatedDeliveryPhoto?: string;
     estimatedDeliveryVideo?: string;
     deliveryConfirmedPhoto?: boolean;
@@ -164,7 +164,6 @@ export interface Project {
     deliveryConfirmedPhotoDate?: any;
     deliveryConfirmedVideoDate?: any;
 
-    // Liens
     linkPhoto?: string;
     linkVideo?: string;
     moodboardLink?: string;
@@ -172,29 +171,23 @@ export interface Project {
     musicInstructions?: string;
     coverImage?: string;
 
-    // Options
     isPriority: boolean;
     isArchived: boolean;
     fastTrackActivationDate?: string;
+    
     usbAddress?: string;
     usbStatus?: string;
 
-    // Données complexes
     albums: Album[];
     messages: Message[];
     internalChat: InternalMessage[];
     history: HistoryLog[];
-    
-    // 👇 LE COUPABLE ÉTAIT ICI :
     teamPayments?: TeamPayment[];
     
-    // Meta
     inviteCount?: number;
     lastAdminRead?: string;
     createdAt?: any;
     lastUpdated?: any;
-    
-    // Financier
     totalPrice?: number;
     depositAmount?: number;
 }

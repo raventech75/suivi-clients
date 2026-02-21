@@ -3,7 +3,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { 
   Camera, Video, Ban, ChevronRight, Rocket, Mail, 
   BookOpen, Trash2, Image as ImageIcon, CheckSquare, 
-  Upload, Loader2, MapPin, FileText, Users, Calendar, Eye, Timer, Music, Briefcase, History, Archive, RefreshCw, UserCheck, Send, Palette, ExternalLink, HardDrive, Link, Printer, CheckCircle2
+  Upload, Loader2, MapPin, FileText, Users, Calendar, Eye, Timer, Music, Briefcase, History, Archive, RefreshCw, UserCheck, Send, Palette, ExternalLink, HardDrive, Link, Printer, CheckCircle2, ImagePlus, Copy
 } from 'lucide-react';
 import { doc, updateDoc, deleteDoc, serverTimestamp } from 'firebase/firestore'; 
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
@@ -16,7 +16,6 @@ import {
 import ChatBox from './ChatSystem';
 import TeamChat from './TeamChat';
 
-// Utilitaires dates
 const formatDateFR = (dateString: string) => {
     if (!dateString) return "";
     return new Date(dateString).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric' });
@@ -36,7 +35,9 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, staffD
   const [uploading, setUploading] = useState(false);
   const [sendingInvite, setSendingInvite] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
+  
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const galleryInputRef = useRef<HTMLInputElement>(null); // Pour la galerie multiple
 
   const canEdit = !!user; 
   const now = Date.now();
@@ -45,7 +46,6 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, staffD
       ? Math.ceil((new Date(project.fastTrackActivationDate).getTime() + (14 * 24 * 60 * 60 * 1000) - now) / (1000 * 60 * 60 * 24))
       : 0;
 
-  // Style Bordure
   let borderStyle = 'border-l-4 border-l-stone-300 border-y border-r border-stone-200';
   let bgStyle = 'bg-white';
   const wedDate = new Date(project.weddingDate).getTime();
@@ -64,7 +64,6 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, staffD
       bgStyle = 'bg-orange-50/20';
   }
 
-  // Synchronisation
   useEffect(() => { 
       if (!hasChanges) {
           setLocalData(project);
@@ -72,7 +71,6 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, staffD
       }
   }, [project]);
 
-  // Marquer comme lu
   useEffect(() => {
       const lastMsg = project.messages?.[project.messages.length - 1];
       if (lastMsg && !lastMsg.isStaff) {
@@ -97,10 +95,8 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, staffD
     setHasChanges(true); 
   };
 
-  // --- LOGIQUE CHECKLIST ---
   const toggleCheck = (type: 'photo' | 'video', taskId: string, weight: number) => {
       if (!canEdit) return;
-      
       const listKey = type === 'photo' ? 'checkListPhoto' : 'checkListVideo';
       const progressKey = type === 'photo' ? 'progressPhoto' : 'progressVideo';
       const statusKey = type === 'photo' ? 'statusPhoto' : 'statusVideo';
@@ -109,48 +105,27 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, staffD
       const newValue = !currentList[taskId];
       const newList = { ...currentList, [taskId]: newValue };
       
-      // Recalcul du pourcentage
       const refList = type === 'photo' ? CHECKLIST_PHOTO : CHECKLIST_VIDEO;
-      let totalWeight = 0;
-      let currentWeight = 0;
-      
-      refList.forEach(task => {
-          totalWeight += task.weight;
-          if (newList[task.id]) currentWeight += task.weight;
-      });
-      
+      let totalWeight = 0, currentWeight = 0;
+      refList.forEach(task => { totalWeight += task.weight; if (newList[task.id]) currentWeight += task.weight; });
       const newPercent = Math.min(100, Math.round((currentWeight / totalWeight) * 100));
       
-      // Mise à jour automatique du statut textuel
       let newStatus = localData[statusKey];
       if (newPercent === 0) newStatus = 'waiting';
       else if (newPercent < 100) newStatus = type === 'photo' ? 'editing' : 'cutting';
       else newStatus = 'delivered';
 
-      setLocalData(prev => ({
-          ...prev,
-          [listKey]: newList,
-          [progressKey]: newPercent,
-          [statusKey]: newStatus
-      }));
+      setLocalData(prev => ({ ...prev, [listKey]: newList, [progressKey]: newPercent, [statusKey]: newStatus }));
       setHasChanges(true);
   };
 
-  // --- FONCTIONS MANQUANTES ---
   const toggleArchive = async () => {
       if(!confirm(localData.isArchived ? "Réactiver ce dossier ?" : "Clôturer et archiver ce dossier ?")) return;
       const newStatus = !localData.isArchived;
-      const newHistory = [{
-          date: new Date().toISOString(),
-          user: user.email ? user.email.split('@')[0] : 'Admin',
-          action: newStatus ? 'DOSSIER ARCHIVÉ' : 'DOSSIER RÉACTIVÉ'
-      }, ...(localData.history || [])];
-      
+      const newHistory = [{ date: new Date().toISOString(), user: user.email ? user.email.split('@')[0] : 'Admin', action: newStatus ? 'DOSSIER ARCHIVÉ' : 'DOSSIER RÉACTIVÉ' }, ...(localData.history || [])];
       setLocalData(prev => ({ ...prev, isArchived: newStatus, history: newHistory }));
       const colPath = typeof appId !== 'undefined' ? `artifacts/${appId}/public/data/${COLLECTION_NAME}` : COLLECTION_NAME;
-      await updateDoc(doc(db, colPath, project.id), {
-          isArchived: newStatus, history: newHistory, lastUpdated: serverTimestamp()
-      });
+      await updateDoc(doc(db, colPath, project.id), { isArchived: newStatus, history: newHistory, lastUpdated: serverTimestamp() });
   };
 
   const toggleFastTrack = () => {
@@ -159,29 +134,62 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, staffD
       updateField('fastTrackActivationDate', isActive ? new Date().toISOString() : null);
   };
 
+  // UPLOAD COUVERTURE
   const processFile = async (file: File) => {
     if (!canEdit) return;
     try {
       setUploading(true);
-      const fileName = `${project.id}_${Date.now()}`; 
-      let storageRef = ref(storage, `covers/${fileName}`);
+      const storageRef = ref(storage, `covers/${project.id}_${Date.now()}`);
       await uploadBytes(storageRef, file);
       const url = await getDownloadURL(storageRef);
       setLocalData(prev => ({ ...prev, coverImage: url }));
       const colPath = typeof appId !== 'undefined' ? `artifacts/${appId}/public/data/${COLLECTION_NAME}` : COLLECTION_NAME;
       await updateDoc(doc(db, colPath, project.id), { coverImage: url, lastUpdated: serverTimestamp() });
-    } catch (error: any) { alert(`Erreur upload: ${error.message}`); } finally { setUploading(false); setIsDragging(false); }
+    } catch (error: any) { alert(`Erreur: ${error.message}`); } finally { setUploading(false); setIsDragging(false); }
   };
-
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-      if(e.target.files && e.target.files[0]) processFile(e.target.files[0]);
-  };
-  
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => { if(e.target.files && e.target.files[0]) processFile(e.target.files[0]); };
   const handleDrag = (e: React.DragEvent) => { e.preventDefault(); setIsDragging(e.type === "dragenter" || e.type === "dragover"); };
   const handleDrop = (e: React.DragEvent) => { e.preventDefault(); setIsDragging(false); if (e.dataTransfer.files[0]) processFile(e.dataTransfer.files[0]); };
 
+  // 👇 NOUVEAU : UPLOAD GALERIE DE SÉLECTION MULTIPLE
+  const handleGalleryUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+      if (!e.target.files || e.target.files.length === 0 || !canEdit) return;
+      setUploading(true);
+      const files = Array.from(e.target.files);
+      const newImages: {url: string, filename: string}[] = [];
+      
+      try {
+          for (const file of files) {
+              const fileRef = ref(storage, `galleries/${project.id}/${file.name}`);
+              await uploadBytes(fileRef, file);
+              const url = await getDownloadURL(fileRef);
+              newImages.push({ url, filename: file.name });
+          }
+          const currentGallery = localData.galleryImages || [];
+          const finalGallery = [...currentGallery, ...newImages];
+          
+          setLocalData(prev => ({ ...prev, galleryImages: finalGallery }));
+          const colPath = typeof appId !== 'undefined' ? `artifacts/${appId}/public/data/${COLLECTION_NAME}` : COLLECTION_NAME;
+          await updateDoc(doc(db, colPath, project.id), { galleryImages: finalGallery });
+          alert(`${newImages.length} photos ajoutées à la sélection client !`);
+      } catch(err: any) {
+          alert(`Erreur d'upload: ${err.message}`);
+      } finally {
+          setUploading(false);
+          if (galleryInputRef.current) galleryInputRef.current.value = '';
+      }
+  };
+
+  // 👇 NOUVEAU : COPIE POUR LIGHTROOM
+  const copyLightroomString = () => {
+      if (!localData.selectedImages || localData.selectedImages.length === 0) return alert("Aucune photo sélectionnée.");
+      const query = localData.selectedImages.join(' OR ');
+      navigator.clipboard.writeText(query);
+      alert("Requête copiée avec succès !\n\nCollez ceci dans la barre de recherche Lightroom.");
+  };
+
   const handleDelete = async () => {
-    if(!confirm('Supprimer ?')) return;
+    if(!confirm('Supprimer ce dossier ?')) return;
     const colPath = typeof appId !== 'undefined' ? `artifacts/${appId}/public/data/${COLLECTION_NAME}` : COLLECTION_NAME;
     await deleteDoc(doc(db, colPath, project.id));
   };
@@ -190,10 +198,7 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, staffD
       if (!localData.clientEmail) { alert("Email client manquant"); return; }
       setSendingInvite(true);
       try {
-          await fetch(MAKE_WEBHOOK_URL, { 
-              method:'POST', headers:{'Content-Type':'application/json'}, 
-              body:JSON.stringify({ type:'invite', clientName: localData.clientNames, clientEmail: localData.clientEmail, projectCode: localData.code, url: window.location.origin }) 
-          });
+          await fetch(MAKE_WEBHOOK_URL, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ type:'invite', clientName: localData.clientNames, clientEmail: localData.clientEmail, projectCode: localData.code, url: window.location.origin }) });
           const newCount = (localData.inviteCount || 0) + 1;
           const newHistory = [{ date: new Date().toISOString(), user: user.email?.split('@')[0] || 'Admin', action: `INVITATION ENVOYÉE (N°${newCount})` }, ...(localData.history||[])];
           setLocalData(prev => ({ ...prev, inviteCount: newCount, history: newHistory }));
@@ -218,7 +223,7 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, staffD
   };
 
   const save = async () => {
-      if (!localData.clientEmail) { alert("Email manquant."); return; }
+      if (!localData.clientEmail) return alert("Email manquant.");
       const cleanData = { ...localData, lastUpdated: serverTimestamp() };
       
       const changes: string[] = [];
@@ -231,15 +236,13 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, staffD
           if (old.usbStatus !== cur.usbStatus) changes.push(`Statut USB : ${old.usbStatus || 'aucun'} ➔ ${cur.usbStatus}`);
           if (old.linkPhoto !== cur.linkPhoto) changes.push(`Lien Galerie ${cur.linkPhoto ? 'MAJ' : 'Supprimé'}`);
           if (old.linkVideo !== cur.linkVideo) changes.push(`Lien Vidéo ${cur.linkVideo ? 'MAJ' : 'Supprimé'}`);
-          // Traces si l'équipe modifie la zique
           if (old.musicInstructions !== cur.musicInstructions || old.musicLinks !== cur.musicLinks) changes.push(`Préférences musicales mises à jour`);
           if (old.moodboardLink !== cur.moodboardLink) changes.push(`Moodboard mis à jour`);
+          if (old.maxSelection !== cur.maxSelection) changes.push(`Limite sélection album fixée à ${cur.maxSelection}`);
       }
 
       let updatedHistory = [...(localData.history || [])];
-      if (changes.length > 0) {
-          updatedHistory.unshift({ date: new Date().toISOString(), user: user.email ? user.email.split('@')[0] : 'Admin', action: changes.join(' | ') });
-      }
+      if (changes.length > 0) { updatedHistory.unshift({ date: new Date().toISOString(), user: user.email ? user.email.split('@')[0] : 'Admin', action: changes.join(' | ') }); }
       cleanData.history = updatedHistory;
 
       const colPath = typeof appId !== 'undefined' ? `artifacts/${appId}/public/data/${COLLECTION_NAME}` : COLLECTION_NAME;
@@ -251,71 +254,23 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, staffD
       setHasChanges(false); 
       originalDataRef.current = JSON.parse(JSON.stringify(cleanData));
 
-      // Webhook Trigger
       const hasPhotoChanged = localData.statusPhoto !== project.statusPhoto;
       const hasVideoChanged = localData.statusVideo !== project.statusVideo;
       if (hasPhotoChanged || hasVideoChanged) {
           let stepLabel = (PHOTO_STEPS as any)[localData.statusPhoto]?.label || "Mise à jour";
           if (hasVideoChanged) stepLabel = (VIDEO_STEPS as any)[localData.statusVideo]?.label || "Mise à jour";
-          
           fetch(MAKE_WEBHOOK_URL, {
               method: 'POST', headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ 
-                  type: 'step_update', 
-                  clientName: localData.clientNames, 
-                  clientEmail: localData.clientEmail,
-                  projectCode: localData.code, 
-                  managerEmail: localData.managerEmail || null,
-                  photographerEmail: localData.photographerEmail || null,
-                  videographerEmail: localData.videographerEmail || null,
-                  stepName: stepLabel, 
-                  url: window.location.origin 
-              })
+              body: JSON.stringify({ type: 'step_update', clientName: localData.clientNames, clientEmail: localData.clientEmail, projectCode: localData.code, managerEmail: localData.managerEmail || null, photographerEmail: localData.photographerEmail || null, videographerEmail: localData.videographerEmail || null, stepName: stepLabel, url: window.location.origin })
           }).catch(console.error);
       }
   };
 
-  // --- GENERATEUR BON DE COMMANDE ---
   const printOrder = () => {
+      // (Gardé identique)
       const win = window.open('', '', 'width=800,height=600');
       if(!win) return;
-      const content = `
-        <html>
-          <head><title>Bon de Commande - ${project.code}</title></head>
-          <body style="font-family: sans-serif; padding: 40px;">
-            <div style="text-align:center; margin-bottom: 40px;">
-                <h1>RavenTech Studio</h1>
-                <p>Bon de Commande / Récapitulatif</p>
-            </div>
-            <div style="border: 1px solid #ccc; padding: 20px; border-radius: 8px; margin-bottom: 30px;">
-                <h3>Client : ${project.clientNames}</h3>
-                <p>Code Projet : <strong>${project.code}</strong></p>
-                <p>Date Mariage : ${formatDateFR(project.weddingDate)}</p>
-                <p>Email : ${project.clientEmail}</p>
-            </div>
-            <h3>Commandes & Options :</h3>
-            <table style="width: 100%; border-collapse: collapse;">
-                <tr style="background: #f0f0f0;">
-                    <th style="border: 1px solid #ddd; padding: 10px; text-align: left;">Désignation</th>
-                    <th style="border: 1px solid #ddd; padding: 10px; text-align: left;">Statut</th>
-                    <th style="border: 1px solid #ddd; padding: 10px; text-align: right;">Prix</th>
-                </tr>
-                ${project.isPriority ? `<tr><td style="border:1px solid #ddd; padding:10px;">Option Fast Track (Prioritaire)</td><td style="border:1px solid #ddd; padding:10px;">Activé</td><td style="border:1px solid #ddd; padding:10px; text-align:right;">290 €</td></tr>` : ''}
-                ${(project.albums || []).map(a => `
-                    <tr>
-                        <td style="border:1px solid #ddd; padding:10px;">Album ${a.name} (${a.format})</td>
-                        <td style="border:1px solid #ddd; padding:10px;">${a.paid ? 'PAYÉ' : 'À RÉGLER'}</td>
-                        <td style="border:1px solid #ddd; padding:10px; text-align:right;">${a.price} €</td>
-                    </tr>
-                `).join('')}
-            </table>
-            <div style="margin-top: 40px; text-align: right;">
-                <p>Date d'impression : ${new Date().toLocaleDateString()}</p>
-            </div>
-            <script>window.print();</script>
-          </body>
-        </html>
-      `;
+      const content = `<html><head><title>Bon de Commande - ${project.code}</title></head><body style="font-family: sans-serif; padding: 40px;"><div style="text-align:center; margin-bottom: 40px;"><h1>RavenTech Studio</h1><p>Bon de Commande / Récapitulatif</p></div><div style="border: 1px solid #ccc; padding: 20px; border-radius: 8px; margin-bottom: 30px;"><h3>Client : ${project.clientNames}</h3><p>Code Projet : <strong>${project.code}</strong></p><p>Date Mariage : ${formatDateFR(project.weddingDate)}</p><p>Email : ${project.clientEmail}</p></div><h3>Commandes & Options :</h3><table style="width: 100%; border-collapse: collapse;"><tr style="background: #f0f0f0;"><th style="border: 1px solid #ddd; padding: 10px; text-align: left;">Désignation</th><th style="border: 1px solid #ddd; padding: 10px; text-align: left;">Statut</th><th style="border: 1px solid #ddd; padding: 10px; text-align: right;">Prix</th></tr>${project.isPriority ? `<tr><td style="border:1px solid #ddd; padding:10px;">Option Fast Track (Prioritaire)</td><td style="border:1px solid #ddd; padding:10px;">Activé</td><td style="border:1px solid #ddd; padding:10px; text-align:right;">290 €</td></tr>` : ''}${(project.albums || []).map(a => `<tr><td style="border:1px solid #ddd; padding:10px;">Album ${a.name} (${a.format})</td><td style="border:1px solid #ddd; padding:10px;">${a.paid ? 'PAYÉ' : 'À RÉGLER'}</td><td style="border:1px solid #ddd; padding:10px; text-align:right;">${a.price} €</td></tr>`).join('')}</table><div style="margin-top: 40px; text-align: right;"><p>Date d'impression : ${new Date().toLocaleDateString()}</p></div><script>window.print();</script></body></html>`;
       win.document.write(content);
       win.document.close();
   };
@@ -344,10 +299,6 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, staffD
                     <div className="flex flex-col items-center w-16 text-center" title="Vidéaste"><Video className="w-4 h-4 mb-1 text-blue-400"/><span className="truncate w-full font-bold">{project.videographerName || '-'}</span></div>
                 </div>
                 <div className="hidden md:block text-sm text-stone-500 font-mono bg-stone-50 px-2 py-1 rounded">{formatDateFR(project.weddingDate)}</div>
-                <div className="hidden md:flex gap-3">
-                    {project.statusPhoto !== 'none' && <div className={`flex items-center gap-3 px-3 py-2 rounded-lg border shadow-sm transition-all ${project.statusPhoto === 'delivered' ? 'bg-white border-green-200' : 'bg-white border-amber-200'} ${localData.isArchived ? 'opacity-50 grayscale' : ''}`}><div className={`p-1.5 rounded-md ${project.statusPhoto === 'delivered' ? 'bg-green-50 text-green-600' : 'bg-amber-50 text-amber-600'}`}><Camera className="w-4 h-4" /></div><div className="flex flex-col leading-none"><span className={`text-[10px] font-bold uppercase tracking-wider mb-0.5 ${project.statusPhoto === 'delivered' ? 'text-green-700' : 'text-amber-700'}`}>{(PHOTO_STEPS as any)[project.statusPhoto]?.label || project.statusPhoto}</span><span className="text-[10px] text-stone-400 font-mono">{project.estimatedDeliveryPhoto ? formatDateFR(project.estimatedDeliveryPhoto) : 'Date à définir'}</span></div></div>}
-                    {project.statusVideo !== 'none' && <div className={`flex items-center gap-3 px-3 py-2 rounded-lg border shadow-sm transition-all ${project.statusVideo === 'delivered' ? 'bg-white border-green-200' : 'bg-white border-blue-200'} ${localData.isArchived ? 'opacity-50 grayscale' : ''}`}><div className={`p-1.5 rounded-md ${project.statusVideo === 'delivered' ? 'bg-green-50 text-green-600' : 'bg-blue-50 text-blue-600'}`}><Video className="w-4 h-4" /></div><div className="flex flex-col leading-none"><span className={`text-[10px] font-bold uppercase tracking-wider mb-0.5 ${project.statusVideo === 'delivered' ? 'text-green-700' : 'text-blue-700'}`}>{(VIDEO_STEPS as any)[project.statusVideo]?.label || project.statusVideo}</span><span className="text-[10px] text-stone-400 font-mono">{project.estimatedDeliveryVideo ? formatDateFR(project.estimatedDeliveryVideo) : 'Date à définir'}</span></div></div>}
-                </div>
             </div>
             <div className="flex items-center gap-4">{(project.deliveryConfirmedPhoto || project.deliveryConfirmedVideo) && <span className="bg-green-600 text-white px-2 py-1 rounded text-xs font-bold flex items-center gap-1 shadow-sm"><CheckSquare className="w-3 h-3"/> LIVRÉ</span>}<ChevronRight className={`text-stone-400 transition-transform ${isExpanded ? 'rotate-90' : ''}`} /></div>
         </div>
@@ -396,7 +347,7 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, staffD
                         <div className="bg-white p-6 rounded-xl border border-stone-200 shadow-sm">
                             <h4 className="font-bold text-stone-800 mb-4 flex items-center gap-2"><Camera className="w-5 h-5 text-stone-400"/> Suivi Production</h4>
                             
-                            {/* 👇 NOUVEAU : PREFERENCES CLIENTS (Moodboard & Musique) */}
+                            {/* PRÉFÉRENCES CLIENTS (Moodboard & Musique) */}
                             <div className="grid md:grid-cols-2 gap-4 mb-6">
                                 <div className="p-4 bg-pink-50 rounded-xl border border-pink-100 flex flex-col gap-3">
                                     <div className="flex items-center justify-between text-pink-800">
@@ -466,6 +417,75 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, staffD
                             </div>
                         </div>
 
+                        {/* ALBUMS & COMMANDES + GALERIE SELECTION */}
+                        <div className="bg-white p-6 rounded-xl border border-stone-200 shadow-sm">
+                            <div className="flex justify-between items-center mb-4">
+                                <h4 className="font-bold text-stone-800 flex items-center gap-2"><BookOpen className="w-5 h-5 text-stone-400"/> Albums & Sélection</h4>
+                                <button onClick={printOrder} className="text-xs bg-stone-100 hover:bg-stone-200 text-stone-600 px-3 py-1.5 rounded-lg flex items-center gap-1 font-bold transition"><Printer className="w-3 h-3"/> Bon de Commande</button>
+                            </div>
+                            
+                            {/* 👇 NOUVEAU : SYSTÈME DE GALERIE UPLOAD ADMIN */}
+                            <div className="mb-6 p-4 bg-amber-50 rounded-xl border border-amber-100">
+                                <h5 className="font-bold text-sm text-amber-900 mb-2 flex items-center gap-2"><ImagePlus className="w-4 h-4"/> Galerie de Sélection Client</h5>
+                                <p className="text-xs text-amber-700 mb-3">Uploadez ici les JPEG Basse Résolution. Le client les verra dans son espace pour choisir les photos de l'album.</p>
+                                
+                                <div className="flex items-center gap-3 mb-3">
+                                    <input type="number" className="w-20 p-2 rounded border border-amber-200 text-sm outline-none" placeholder="Max" value={localData.maxSelection || ''} onChange={e => updateField('maxSelection', Number(e.target.value))} title="Nombre maximum de photos autorisées"/>
+                                    <span className="text-xs font-bold text-amber-800">Photos max à sélectionner</span>
+                                </div>
+
+                                <div className="flex items-center gap-3">
+                                    <input type="file" ref={galleryInputRef} multiple accept="image/jpeg, image/png" className="hidden" onChange={handleGalleryUpload} />
+                                    <button onClick={() => galleryInputRef.current?.click()} disabled={uploading} className="bg-amber-600 hover:bg-amber-700 text-white px-4 py-2 rounded-lg text-xs font-bold transition flex items-center gap-2">
+                                        {uploading ? <Loader2 className="w-4 h-4 animate-spin"/> : <Upload className="w-4 h-4"/>} 
+                                        Uploader les photos
+                                    </button>
+                                    <span className="text-xs font-bold text-amber-800">{(localData.galleryImages || []).length} images en ligne</span>
+                                </div>
+
+                                {/* Résultat de la sélection client */}
+                                {localData.selectedImages && localData.selectedImages.length > 0 && (
+                                    <div className="mt-4 pt-4 border-t border-amber-200/50">
+                                        <div className="flex justify-between items-center mb-2">
+                                            <span className="text-xs font-bold text-stone-800">Sélection Client ({localData.selectedImages.length} photos)</span>
+                                            {localData.selectionValidated && <span className="bg-green-100 text-green-700 px-2 py-1 rounded text-[10px] font-bold flex items-center gap-1"><CheckCircle2 className="w-3 h-3"/> VALIDÉ</span>}
+                                        </div>
+                                        <button onClick={copyLightroomString} className="w-full bg-stone-900 text-white py-2 rounded-lg text-xs font-bold hover:bg-black transition flex items-center justify-center gap-2"><Copy className="w-4 h-4"/> Copier la requête Lightroom</button>
+                                    </div>
+                                )}
+                            </div>
+
+                            <div className="space-y-2">
+                                {(localData.albums || []).map((album, idx) => (
+                                    <div key={idx} className="flex flex-wrap gap-2 items-center bg-stone-50 p-2 rounded-lg text-sm">
+                                        <div className="flex-1">
+                                            <div className="font-bold">{album.name}</div>
+                                            <div className="flex items-center gap-1">
+                                                <span className="text-[10px] text-stone-400">Format :</span>
+                                                <input className="text-[10px] font-bold text-stone-600 bg-transparent border-none p-0 focus:ring-0 w-24" value={album.format} disabled={!canEdit} onChange={(e) => updateAlbum(idx, 'format', e.target.value)} />
+                                            </div>
+                                        </div>
+                                        <select disabled={!canEdit} value={album.status} onChange={e => updateAlbum(idx, 'status', e.target.value)} className="p-1 border rounded text-xs">{Object.entries(ALBUM_STATUSES).map(([k,v]) => <option key={k} value={k}>{v}</option>)}</select>
+                                        <button disabled={!canEdit} onClick={() => updateAlbum(idx, 'paid', !album.paid)} className={`px-2 py-1 rounded text-[10px] font-bold ${album.paid ? 'bg-green-200 text-green-800' : 'bg-red-100 text-red-800'}`}>{album.paid ? 'PAYÉ' : 'DÛ'}</button>
+                                        {canEdit && <button onClick={() => { const a = [...(localData.albums||[])]; a.splice(idx, 1); updateField('albums', a); }} className="text-red-400"><Trash2 className="w-3 h-3"/></button>}
+                                    </div>
+                                ))}
+                            </div>
+                            
+                            {canEdit && (
+                                <div className="mt-4 pt-4 border-t flex flex-col gap-2">
+                                    <div className="flex gap-2">
+                                        <input className="flex-1 p-2 border rounded text-xs" placeholder="Nom (Ex: Livre Parents)" value={newAlbum.name} onChange={e => setNewAlbum({...newAlbum, name: e.target.value})} />
+                                        <input className="w-1/3 p-2 border rounded text-xs" placeholder="Format (Ex: 30x30)" value={newAlbum.format} onChange={e => setNewAlbum({...newAlbum, format: e.target.value})} />
+                                    </div>
+                                    <div className="flex gap-2">
+                                         <input type="number" className="w-20 p-2 border rounded text-xs" placeholder="Prix €" value={newAlbum.price} onChange={e => setNewAlbum({...newAlbum, price: Number(e.target.value)})} />
+                                         <button onClick={addAlbum} className="flex-1 bg-stone-900 text-white px-3 py-2 rounded text-xs font-bold hover:bg-black">Ajouter la commande</button>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+
                         {/* SECTION CLEF USB */}
                         <div className="bg-white p-6 rounded-xl border border-stone-200 shadow-sm">
                             <h4 className="font-bold text-stone-800 mb-4 flex items-center gap-2"><HardDrive className="w-5 h-5 text-stone-400"/> Coffret USB</h4>
@@ -494,47 +514,6 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, staffD
                             </div>
                         </div>
 
-                        {/* ALBUMS & COMMANDES */}
-                        <div className="bg-white p-6 rounded-xl border border-stone-200 shadow-sm">
-                            <div className="flex justify-between items-center mb-4">
-                                <h4 className="font-bold text-stone-800 flex items-center gap-2"><BookOpen className="w-5 h-5 text-stone-400"/> Albums</h4>
-                                <button onClick={printOrder} className="text-xs bg-stone-100 hover:bg-stone-200 text-stone-600 px-3 py-1.5 rounded-lg flex items-center gap-1 font-bold transition"><Printer className="w-3 h-3"/> Bon de Commande</button>
-                            </div>
-                            <div className="space-y-2">
-                                {(localData.albums || []).map((album, idx) => (
-                                    <div key={idx} className="flex flex-wrap gap-2 items-center bg-stone-50 p-2 rounded-lg text-sm">
-                                        <div className="flex-1">
-                                            <div className="font-bold">{album.name}</div>
-                                            <div className="flex items-center gap-1">
-                                                <span className="text-[10px] text-stone-400">Format :</span>
-                                                <input 
-                                                    className="text-[10px] font-bold text-stone-600 bg-transparent border-none p-0 focus:ring-0 w-24" 
-                                                    value={album.format} 
-                                                    disabled={!canEdit}
-                                                    onChange={(e) => updateAlbum(idx, 'format', e.target.value)}
-                                                />
-                                            </div>
-                                        </div>
-                                        <select disabled={!canEdit} value={album.status} onChange={e => updateAlbum(idx, 'status', e.target.value)} className="p-1 border rounded text-xs">{Object.entries(ALBUM_STATUSES).map(([k,v]) => <option key={k} value={k}>{v}</option>)}</select>
-                                        <button disabled={!canEdit} onClick={() => updateAlbum(idx, 'paid', !album.paid)} className={`px-2 py-1 rounded text-[10px] font-bold ${album.paid ? 'bg-green-200 text-green-800' : 'bg-red-100 text-red-800'}`}>{album.paid ? 'PAYÉ' : 'DÛ'}</button>
-                                        {canEdit && <button onClick={() => { const a = [...(localData.albums||[])]; a.splice(idx, 1); updateField('albums', a); }} className="text-red-400"><Trash2 className="w-3 h-3"/></button>}
-                                    </div>
-                                ))}
-                            </div>
-                            
-                            {canEdit && (
-                                <div className="mt-4 pt-4 border-t flex flex-col gap-2">
-                                    <div className="flex gap-2">
-                                        <input className="flex-1 p-2 border rounded text-xs" placeholder="Nom (Ex: Livre Parents)" value={newAlbum.name} onChange={e => setNewAlbum({...newAlbum, name: e.target.value})} />
-                                        <input className="w-1/3 p-2 border rounded text-xs" placeholder="Format (Ex: 30x30)" value={newAlbum.format} onChange={e => setNewAlbum({...newAlbum, format: e.target.value})} />
-                                    </div>
-                                    <div className="flex gap-2">
-                                         <input type="number" className="w-20 p-2 border rounded text-xs" placeholder="Prix €" value={newAlbum.price} onChange={e => setNewAlbum({...newAlbum, price: Number(e.target.value)})} />
-                                         <button onClick={addAlbum} className="flex-1 bg-stone-900 text-white px-3 py-2 rounded text-xs font-bold hover:bg-black">Ajouter la commande</button>
-                                    </div>
-                                </div>
-                            )}
-                        </div>
                     </div>
                 </div>
                 

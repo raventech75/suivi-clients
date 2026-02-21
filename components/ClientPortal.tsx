@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { 
   ChevronRight, Search, AlertTriangle, ImageIcon, Film, Calendar, 
   Music, Rocket, CheckCircle, CheckSquare, BookOpen, 
-  Copy, ClipboardCheck, X, Users, Camera, Video, UserCheck, HardDrive, Download, Lock, ShoppingBag, Palette, PlayCircle
+  Copy, ClipboardCheck, X, Users, Camera, Video, UserCheck, HardDrive, Download, Lock, ShoppingBag, Palette, PlayCircle, Heart
 } from 'lucide-react';
 import { doc, updateDoc, serverTimestamp } from 'firebase/firestore';
 import { db, appId } from '../lib/firebase';
@@ -21,12 +21,16 @@ const formatDateFR = (dateString: string) => {
 export default function ClientPortal({ projects, onBack }: { projects: Project[], onBack: () => void }) {
   const [searchCode, setSearchCode] = useState('');
   const [foundProject, setFoundProject] = useState<Project | null>(null);
+  
   const [musicLinks, setMusicLinks] = useState('');
   const [musicInstructions, setMusicInstructions] = useState('');
   const [moodLink, setMoodLink] = useState('');
   const [savingMusic, setSavingMusic] = useState(false);
+  
+  // 👇 NOUVEAU : ÉTAT DE LA SÉLECTION PHOTOS
+  const [selectedPhotos, setSelectedPhotos] = useState<string[]>([]);
+
   const [error, setError] = useState('');
-  const [emailCopied, setEmailCopied] = useState(false);
 
   useEffect(() => {
     if (projects.length === 1 && projects[0].id) {
@@ -42,6 +46,7 @@ export default function ClientPortal({ projects, onBack }: { projects: Project[]
           setMusicLinks(foundProject.musicLinks || ''); 
           setMusicInstructions(foundProject.musicInstructions || '');
           setMoodLink(foundProject.moodboardLink || ''); 
+          setSelectedPhotos(foundProject.selectedImages || []); // Charge la sélection depuis la BDD
       } 
   }, [foundProject]);
 
@@ -74,6 +79,36 @@ export default function ClientPortal({ projects, onBack }: { projects: Project[]
       await updateDoc(doc(db, colPath, foundProject.id), { deliveryConfirmedVideo: true, deliveryConfirmedVideoDate: serverTimestamp() });
   };
 
+  // 👇 NOUVEAU : GESTION DU CLIC SUR UNE PHOTO
+  const togglePhoto = async (filename: string) => {
+      if(!foundProject || foundProject.selectionValidated) return;
+      
+      let newSel = [...selectedPhotos];
+      if (newSel.includes(filename)) {
+          newSel = newSel.filter(f => f !== filename);
+      } else {
+          if (foundProject.maxSelection && newSel.length >= foundProject.maxSelection) {
+              alert(`Vous avez atteint la limite de ${foundProject.maxSelection} photos pour votre album.`);
+              return;
+          }
+          newSel.push(filename);
+      }
+      
+      setSelectedPhotos(newSel); // Maj UI immédiate
+      
+      // Sauvegarde silencieuse en BDD
+      const colPath = typeof appId !== 'undefined' ? `artifacts/${appId}/public/data/${COLLECTION_NAME}` : COLLECTION_NAME;
+      await updateDoc(doc(db, colPath, foundProject.id), { selectedImages: newSel });
+  };
+
+  // 👇 NOUVEAU : VALIDATION DÉFINITIVE DE L'ALBUM
+  const validateGallery = async () => {
+      if(!foundProject || !confirm("Êtes-vous sûr(e) de vouloir valider cette sélection ?\nVous ne pourrez plus la modifier.")) return;
+      const colPath = typeof appId !== 'undefined' ? `artifacts/${appId}/public/data/${COLLECTION_NAME}` : COLLECTION_NAME;
+      await updateDoc(doc(db, colPath, foundProject.id), { selectionValidated: true, lastUpdated: serverTimestamp() });
+      alert("Félicitations ! Votre sélection a été envoyée au Studio pour la création de votre Album.");
+  };
+
   if (foundProject) {
     const now = Date.now();
     const deliveryDatePhoto = foundProject.estimatedDeliveryPhoto ? new Date(foundProject.estimatedDeliveryPhoto).getTime() : null;
@@ -84,10 +119,7 @@ export default function ClientPortal({ projects, onBack }: { projects: Project[]
     const isVideoExpired = deliveryDateVideo && (now > deliveryDateVideo + SIX_MONTHS_MS);
     const isBlocked = ((foundProject.totalPrice || 0) - (foundProject.depositAmount || 0)) > 0 && (foundProject.totalPrice || 0) > 0;
     
-    // Conditions d'affichage
     const canViewGallery = foundProject.statusPhoto === 'delivered' && !isBlocked && foundProject.linkPhoto && foundProject.linkPhoto.length > 5;
-    
-    // 👇 NOUVELLE LOGIQUE VIDEO : Visible si 'delivered' OU 'partial'
     const canViewVideo = (foundProject.statusVideo === 'delivered' || foundProject.statusVideo === 'partial') && !isBlocked && foundProject.linkVideo && foundProject.linkVideo.length > 5;
     const isPartialVideo = foundProject.statusVideo === 'partial';
     
@@ -153,7 +185,6 @@ export default function ClientPortal({ projects, onBack }: { projects: Project[]
               </div>
               )}
 
-              {/* VIDEO CARD MODIFIÉE POUR GÉRER LE PARTIEL */}
               {foundProject.statusVideo !== 'none' && (
                 <div className="bg-white rounded-2xl p-6 shadow-md border border-stone-100 flex flex-col h-full">
                   <div className="flex items-center gap-4 mb-4"><div className="w-12 h-12 bg-blue-100 text-blue-600 rounded-xl flex items-center justify-center"><Film className="w-6 h-6"/></div><h3 className="font-bold text-xl">Vidéo</h3></div>
@@ -169,13 +200,10 @@ export default function ClientPortal({ projects, onBack }: { projects: Project[]
                               <div className="text-center space-y-3"><div className="bg-stone-100 p-4 rounded-xl text-stone-500 text-sm flex flex-col items-center gap-2"><Lock className="w-6 h-6 text-stone-400"/><span>Archive verrouillée</span></div><a href={archiveLink} className="block w-full bg-stone-900 text-white py-3 rounded-xl font-bold">Débloquer (290€)</a></div>
                           ) : (
                               <>
-                                  {/* BOUTON D'ACCÈS ADAPTÉ : CLIP OU FILM */}
                                   <a href={foundProject.linkVideo} target="_blank" className={`block w-full text-white text-center py-3 rounded-xl font-bold transition shadow-lg flex items-center justify-center gap-2 ${isPartialVideo ? 'bg-blue-600 hover:bg-blue-700' : 'bg-stone-900 hover:bg-stone-800'}`}>
                                       {isPartialVideo ? <PlayCircle className="w-4 h-4"/> : <Download className="w-4 h-4"/>} 
                                       {isPartialVideo ? 'Voir le Clip (Teaser)' : 'Télécharger le Film'}
                                   </a>
-                                  
-                                  {/* CONFIRMATION : SEULEMENT SI LIVRAISON FINALE */}
                                   {!isPartialVideo && (
                                       !foundProject.deliveryConfirmedVideo ? (
                                           <button onClick={confirmVideo} className="w-full bg-white border-2 border-green-500 text-green-600 py-3 rounded-xl font-bold hover:bg-green-50 transition flex items-center justify-center gap-2 text-sm"><CheckSquare className="w-4 h-4"/> Confirmer réception</button>
@@ -183,11 +211,7 @@ export default function ClientPortal({ projects, onBack }: { projects: Project[]
                                           <div className="flex items-center justify-center gap-2 text-green-600 text-xs font-bold bg-green-50 p-2 rounded-lg border border-green-100"><CheckCircle className="w-4 h-4"/> Réception confirmée</div>
                                       )
                                   )}
-
-                                  {/* MESSAGE SI PARTIEL */}
-                                  {isPartialVideo && (
-                                      <div className="text-center text-xs text-stone-400 italic">La livraison complète du film est en cours de finition.</div>
-                                  )}
+                                  {isPartialVideo && <div className="text-center text-xs text-stone-400 italic">La livraison complète du film est en cours de finition.</div>}
                               </>
                           )
                       ) : foundProject.statusVideo === 'delivered' ? <button disabled className="block w-full bg-stone-200 text-stone-400 text-center py-3 rounded-xl font-bold cursor-not-allowed">Lien en cours...</button> : null}
@@ -195,6 +219,61 @@ export default function ClientPortal({ projects, onBack }: { projects: Project[]
                 </div>
               )}
           </div>
+
+          {/* 👇 NOUVEAU : LA GALERIE DE SÉLECTION ALBUM NATIVE */}
+          {foundProject.galleryImages && foundProject.galleryImages.length > 0 && (
+              <div className="bg-white p-6 rounded-2xl border border-stone-200 shadow-xl overflow-hidden relative">
+                  <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6 border-b pb-6">
+                      <div>
+                          <h3 className="font-serif text-2xl text-stone-800 flex items-center gap-2 mb-2"><ImageIcon className="w-6 h-6 text-amber-500"/> Sélection pour votre Album</h3>
+                          <p className="text-sm text-stone-500">Cliquez sur les photos pour les ajouter à votre sélection d'album. {foundProject.selectionValidated && <strong className="text-green-600">Sélection validée et envoyée.</strong>}</p>
+                      </div>
+                      
+                      <div className="bg-stone-50 px-6 py-3 rounded-xl border border-stone-200 text-center shadow-sm">
+                          <div className="text-3xl font-bold text-stone-900">
+                              <span className={selectedPhotos.length === foundProject.maxSelection ? "text-green-600" : "text-amber-500"}>{selectedPhotos.length}</span> 
+                              <span className="text-stone-300 text-lg"> / {foundProject.maxSelection || '∞'}</span>
+                          </div>
+                          <div className="text-[10px] uppercase font-bold text-stone-400 tracking-wider">Sélectionnées</div>
+                      </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-3 max-h-[600px] overflow-y-auto pr-2 pb-4">
+                      {foundProject.galleryImages.map((img, i) => {
+                          const isSelected = selectedPhotos.includes(img.filename);
+                          return (
+                              <div 
+                                key={i} 
+                                onClick={() => togglePhoto(img.filename)}
+                                className={`relative aspect-square rounded-xl overflow-hidden cursor-pointer group transition-all duration-300 ${isSelected ? 'ring-4 ring-amber-500 scale-95 shadow-lg' : 'hover:opacity-90'}`}
+                              >
+                                  <img src={img.url} alt={img.filename} loading="lazy" className="w-full h-full object-cover" />
+                                  <div className={`absolute inset-0 transition-opacity flex items-center justify-center ${isSelected ? 'bg-black/20 opacity-100' : 'bg-black/0 opacity-0 group-hover:opacity-100 group-hover:bg-black/10'}`}>
+                                      {isSelected ? (
+                                          <div className="bg-amber-500 text-white p-2 rounded-full shadow-lg transform scale-110 transition-transform"><CheckCircle className="w-6 h-6"/></div>
+                                      ) : (
+                                          <div className="bg-white/90 text-stone-400 p-2 rounded-full shadow-sm"><Heart className="w-6 h-6"/></div>
+                                      )}
+                                  </div>
+                              </div>
+                          );
+                      })}
+                  </div>
+
+                  {/* Barre de validation Fixe en bas du conteneur */}
+                  {!foundProject.selectionValidated && (
+                      <div className="mt-6 pt-4 border-t border-stone-100 flex justify-end">
+                          <button 
+                            onClick={validateGallery} 
+                            disabled={selectedPhotos.length === 0}
+                            className="bg-stone-900 text-white px-8 py-4 rounded-xl font-bold shadow-xl hover:bg-black transition-all disabled:opacity-50 disabled:shadow-none transform hover:scale-105"
+                          >
+                              Valider définitivement ma sélection ({selectedPhotos.length})
+                          </button>
+                      </div>
+                  )}
+              </div>
+          )}
           
           <div className="space-y-6">
               <h3 className="font-serif text-2xl text-stone-800 flex items-center gap-2 border-b pb-4"><ShoppingBag className="w-6 h-6"/> Boutique & Options</h3>
