@@ -126,6 +126,18 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, staffD
       updateField('totalPrice', total);
   };
 
+  // 👇 NOUVEAU : Fonction pour réinitialiser la signature (Avenant)
+  const resetContract = () => {
+      if(!confirm("Créer un avenant ?\n\nCela effacera la signature actuelle. Le client devra re-signer le contrat avec les nouvelles options. Continuer ?")) return;
+      setLocalData(prev => ({ 
+          ...prev, 
+          contractSigned: false, 
+          contractSignatureData: '', 
+          contractSignedDate: '' 
+      }));
+      setHasChanges(true);
+  };
+
   const toggleCheck = (type: 'photo' | 'video', taskId: string, weight: number) => {
       if (!canEdit) return;
       const listKey = type === 'photo' ? 'checkListPhoto' : 'checkListVideo';
@@ -279,6 +291,7 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, staffD
           if (old.linkPhoto !== cur.linkPhoto) changes.push(`Lien Galerie ${cur.linkPhoto ? 'MAJ' : 'Supprimé'}`);
           if (old.linkVideo !== cur.linkVideo) changes.push(`Lien Vidéo ${cur.linkVideo ? 'MAJ' : 'Supprimé'}`);
           if (old.depositAmount !== cur.depositAmount || old.totalPrice !== cur.totalPrice) changes.push(`Finances mises à jour`);
+          if (old.contractSigned !== cur.contractSigned) changes.push(`Statut Contrat mis à jour`);
       }
 
       let updatedHistory = [...(localData.history || [])];
@@ -584,8 +597,17 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, staffD
 
                                     {localData.totalPrice && localData.totalPrice > 0 ? (
                                         localData.contractSigned ? (
-                                            <div className="pt-3 border-t border-green-200/50 flex items-center gap-2 text-xs font-bold text-green-700">
-                                                <CheckCircle2 className="w-4 h-4"/> Contrat signé numériquement le {formatDateFR(localData.contractSignedDate!)}
+                                            <div className="pt-3 border-t border-green-200/50 flex flex-col gap-2">
+                                                <div className="flex items-center justify-between">
+                                                    <div className="flex items-center gap-2 text-xs font-bold text-green-700">
+                                                        <CheckCircle2 className="w-4 h-4"/> Contrat signé le {formatDateFR(localData.contractSignedDate!)}
+                                                    </div>
+                                                    {canEdit && (
+                                                        <button onClick={resetContract} className="bg-white border border-red-200 text-red-600 px-2 py-1 rounded shadow-sm hover:bg-red-50 text-[10px] font-bold transition">
+                                                            Refaire signer (Avenant)
+                                                        </button>
+                                                    )}
+                                                </div>
                                             </div>
                                         ) : (
                                             <div className="pt-3 border-t border-green-200/50 flex items-center justify-between text-xs font-bold text-amber-600">
