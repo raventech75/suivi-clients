@@ -33,10 +33,12 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, staffD
 
   const [newAlbum, setNewAlbum] = useState({ name: '', format: '', price: 0 });
   const [uploading, setUploading] = useState(false);
+  // 👇 NOUVEAU : Suivi de la progression
+  const [uploadProgress, setUploadProgress] = useState({ current: 0, total: 0 }); 
   const [sendingInvite, setSendingInvite] = useState(false);
   
-  const [isDragging, setIsDragging] = useState(false); // Pour la couverture
-  const [isGalleryDragging, setIsGalleryDragging] = useState(false); // 👇 NOUVEAU : Pour la galerie
+  const [isDragging, setIsDragging] = useState(false); 
+  const [isGalleryDragging, setIsGalleryDragging] = useState(false); 
   
   const fileInputRef = useRef<HTMLInputElement>(null);
   const galleryInputRef = useRef<HTMLInputElement>(null); 
@@ -136,7 +138,6 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, staffD
       updateField('fastTrackActivationDate', isActive ? new Date().toISOString() : null);
   };
 
-  // --- UPLOAD COUVERTURE ---
   const processFile = async (file: File) => {
     if (!canEdit) return;
     try {
@@ -153,32 +154,46 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, staffD
   const handleDrag = (e: React.DragEvent) => { e.preventDefault(); setIsDragging(e.type === "dragenter" || e.type === "dragover"); };
   const handleDrop = (e: React.DragEvent) => { e.preventDefault(); setIsDragging(false); if (e.dataTransfer.files[0]) processFile(e.dataTransfer.files[0]); };
 
-  // 👇 NOUVEAU : UPLOAD GALERIE (DRAG & DROP MASSIF)
+  // 👇 NOUVEAU : UPLOAD PARALLÈLE ULTRA-RAPIDE AVEC BARRE DE PROGRESSION
   const processGalleryFiles = async (files: File[]) => {
       if (!canEdit || files.length === 0) return;
+      
       setUploading(true);
-      const newImages: {url: string, filename: string}[] = [];
+      setUploadProgress({ current: 0, total: files.length });
+      setIsGalleryDragging(false);
       
       try {
-          // Upload en boucle
-          for (const file of files) {
+          // Création de toutes les requêtes en même temps (Promise.all)
+          const uploadPromises = files.map(async (file) => {
               const fileRef = ref(storage, `galleries/${project.id}/${file.name}`);
               await uploadBytes(fileRef, file);
               const url = await getDownloadURL(fileRef);
-              newImages.push({ url, filename: file.name });
-          }
+              
+              // Mise à jour du compteur pour l'interface visuelle
+              setUploadProgress(prev => ({ ...prev, current: prev.current + 1 }));
+              
+              return { url, filename: file.name };
+          });
+
+          // Le site lance toutes les requêtes d'un coup et attend qu'elles soient toutes finies
+          const newImages = await Promise.all(uploadPromises);
+
+          // Sauvegarde finale
           const currentGallery = localData.galleryImages || [];
           const finalGallery = [...currentGallery, ...newImages];
           
           setLocalData(prev => ({ ...prev, galleryImages: finalGallery }));
           const colPath = typeof appId !== 'undefined' ? `artifacts/${appId}/public/data/${COLLECTION_NAME}` : COLLECTION_NAME;
           await updateDoc(doc(db, colPath, project.id), { galleryImages: finalGallery });
-          alert(`${newImages.length} photos ajoutées à la sélection client !`);
+          
+          // Petit délai visuel pour que l'utilisateur voit le 100%
+          setTimeout(() => { alert(`${newImages.length} photos ajoutées à la sélection client !`); }, 500);
+
       } catch(err: any) {
           alert(`Erreur d'upload: ${err.message}`);
       } finally {
           setUploading(false);
-          setIsGalleryDragging(false);
+          setUploadProgress({ current: 0, total: 0 });
           if (galleryInputRef.current) galleryInputRef.current.value = '';
       }
   };
@@ -196,7 +211,6 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, staffD
       if (e.dataTransfer.files) processGalleryFiles(Array.from(e.dataTransfer.files)); 
   };
 
-  // COPIE POUR LIGHTROOM
   const copyLightroomString = () => {
       if (!localData.selectedImages || localData.selectedImages.length === 0) return alert("Aucune photo sélectionnée.");
       const query = localData.selectedImages.join(' OR ');
@@ -292,7 +306,6 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, staffD
 
   return (
     <div className={`rounded-lg transition-all duration-200 mb-4 ${borderStyle} ${bgStyle}`}>
-        {/* EN-TÊTE CARTE */}
         <div className="p-4 flex items-center justify-between cursor-pointer" onClick={(e) => { if(!(e.target as HTMLElement).closest('.avatar-uploader')) setIsExpanded(!isExpanded); }}>
             <div className="flex items-center gap-4 flex-1">
                 <div 
@@ -301,7 +314,7 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, staffD
                     onClick={() => canEdit && fileInputRef.current?.click()} title="Changer couverture"
                 >
                     <input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={handleFileChange} />
-                    {uploading ? <Loader2 className="w-5 h-5 text-stone-500 animate-spin"/> : localData.coverImage ? <img src={localData.coverImage} className={`w-full h-full object-cover transition-opacity ${isDragging ? 'opacity-50' : ''}`}/> : <span className="text-lg">{localData.clientNames.charAt(0)}</span>}
+                    {uploading && !uploadProgress.total ? <Loader2 className="w-5 h-5 text-stone-500 animate-spin"/> : localData.coverImage ? <img src={localData.coverImage} className={`w-full h-full object-cover transition-opacity ${isDragging ? 'opacity-50' : ''}`}/> : <span className="text-lg">{localData.clientNames.charAt(0)}</span>}
                     {canEdit && !uploading && <div className={`absolute inset-0 bg-black/50 flex items-center justify-center transition-opacity ${isDragging ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}><Upload className="w-4 h-4 text-white"/></div>}
                 </div>
                 <div className="min-w-[180px]">
@@ -318,11 +331,9 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, staffD
             <div className="flex items-center gap-4">{(project.deliveryConfirmedPhoto || project.deliveryConfirmedVideo) && <span className="bg-green-600 text-white px-2 py-1 rounded text-xs font-bold flex items-center gap-1 shadow-sm"><CheckSquare className="w-3 h-3"/> LIVRÉ</span>}<ChevronRight className={`text-stone-400 transition-transform ${isExpanded ? 'rotate-90' : ''}`} /></div>
         </div>
 
-        {/* CONTENU EDITABLE */}
         {isExpanded && (
             <div className="p-6 border-t bg-stone-50/50 space-y-8 animate-fade-in">
                 
-                {/* BARRE ACTIONS */}
                 <div className="flex flex-col md:flex-row justify-between items-center gap-4 bg-white p-4 rounded-xl border border-stone-100 shadow-sm">
                     <div className="flex items-center gap-4 w-full md:w-auto"><button onClick={toggleFastTrack} className={`flex-1 md:flex-none flex items-center justify-center gap-2 px-6 py-3 rounded-xl font-bold transition-all ${localData.isPriority ? 'bg-orange-500 text-white shadow-lg shadow-orange-200 transform scale-105' : 'bg-stone-100 text-stone-400 hover:bg-stone-200'}`}><Rocket className="w-5 h-5"/> {localData.isPriority ? 'FAST TRACK ACTIF' : 'Activer Fast Track'}</button></div>
                     <div className="flex gap-2 w-full md:w-auto items-center">
@@ -333,7 +344,6 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, staffD
 
                 <div className="grid lg:grid-cols-2 gap-8">
                     <div className="space-y-6">
-                        {/* FICHE MARIÉS */}
                         <div className="bg-white p-6 rounded-xl border border-stone-200 shadow-sm">
                             <h4 className="font-bold text-stone-800 mb-4 flex items-center gap-2"><Users className="w-5 h-5 text-stone-400"/> Fiche Mariés</h4>
                             <div className="space-y-4">
@@ -343,12 +353,10 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, staffD
                                 <div className="pt-2 border-t border-dashed mt-2"><div className="grid grid-cols-3 gap-2"><div className="col-span-1"><label className="text-[10px] uppercase font-bold text-stone-400">Date Mariage</label><input required type="date" disabled={!canEdit} className="w-full p-2 border rounded bg-stone-50" value={localData.weddingDate} onChange={e=>updateField('weddingDate', e.target.value)} /></div><div className="col-span-2"><label className="text-[10px] uppercase font-bold text-stone-400">Nom Salle / Lieu</label><input disabled={!canEdit} className="w-full p-2 border rounded bg-stone-50" placeholder="Château de..." value={localData.weddingVenue || ''} onChange={e=>updateField('weddingVenue', e.target.value)} /></div></div><div className="mt-2"><label className="text-[10px] uppercase font-bold text-stone-400">Code Postal</label><input disabled={!canEdit} className="w-full p-2 border rounded bg-stone-50" placeholder="75000" value={localData.weddingVenueZip || ''} onChange={e=>updateField('weddingVenueZip', e.target.value)} /></div></div>
                             </div>
                         </div>
-                        {/* CHAT EQUIPE */}
                         <div className="h-[400px]"><TeamChat project={project} user={user} /></div>
                     </div>
 
                     <div className="space-y-6">
-                        {/* EQUIPE */}
                         <div className="bg-white p-6 rounded-xl border border-stone-200 shadow-sm">
                             <h4 className="font-bold text-stone-800 mb-4 flex items-center gap-2"><Briefcase className="w-5 h-5 text-stone-400"/> Équipe & Contact</h4>
                             <div className="space-y-4">
@@ -358,11 +366,9 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, staffD
                             </div>
                         </div>
 
-                        {/* PRODUCTION & CHECKLISTS */}
                         <div className="bg-white p-6 rounded-xl border border-stone-200 shadow-sm">
                             <h4 className="font-bold text-stone-800 mb-4 flex items-center gap-2"><Camera className="w-5 h-5 text-stone-400"/> Suivi Production</h4>
                             
-                            {/* PRÉFÉRENCES CLIENTS (Moodboard & Musique) */}
                             <div className="grid md:grid-cols-2 gap-4 mb-6">
                                 <div className="p-4 bg-pink-50 rounded-xl border border-pink-100 flex flex-col gap-3">
                                     <div className="flex items-center justify-between text-pink-800">
@@ -382,7 +388,6 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, staffD
                                 </div>
                             </div>
 
-                            {/* CHECKLIST PHOTO */}
                             <div className="mb-6 pb-6 border-b border-stone-100">
                                 <div className="flex justify-between mb-2 items-center"><span className="font-bold text-stone-600 flex gap-2 items-center"><Camera className="w-4 h-4"/> Photo</span><span className="text-xs bg-stone-100 px-2 py-1 rounded font-mono">{localData.progressPhoto}%</span></div>
                                 <div className="grid grid-cols-2 gap-2 mb-3">
@@ -399,7 +404,6 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, staffD
                                 <div className="flex gap-2 items-center"><div className="w-1/3"><label className="text-[10px] font-bold text-stone-400">LIVRAISON PRÉVUE</label><input disabled={!canEdit} type="date" className={`w-full p-2 border rounded text-xs ${!localData.estimatedDeliveryPhoto && localData.statusPhoto !== 'none' ? 'border-red-400 bg-red-50' : 'bg-yellow-50 border-yellow-200'}`} value={localData.estimatedDeliveryPhoto || ''} onChange={e=>updateField('estimatedDeliveryPhoto', e.target.value)}/></div></div>
                             </div>
 
-                            {/* CHECKLIST VIDEO */}
                             <div className="mb-6 pb-6 border-b border-stone-100">
                                 <div className="flex justify-between mb-2 items-center"><span className="font-bold text-stone-600 flex gap-2 items-center"><Video className="w-4 h-4"/> Vidéo</span><span className="text-xs bg-stone-100 px-2 py-1 rounded font-mono">{localData.progressVideo}%</span></div>
                                 <div className="grid grid-cols-2 gap-2 mb-3">
@@ -416,7 +420,6 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, staffD
                                 <div className="flex gap-2 items-center"><div className="w-1/3"><label className="text-[10px] font-bold text-stone-400">LIVRAISON PRÉVUE</label><input disabled={!canEdit} type="date" className={`w-full p-2 border rounded text-xs ${!localData.estimatedDeliveryVideo && localData.statusVideo !== 'none' ? 'border-red-400 bg-red-50' : 'bg-yellow-50 border-yellow-200'}`} value={localData.estimatedDeliveryVideo || ''} onChange={e=>updateField('estimatedDeliveryVideo', e.target.value)}/></div></div>
                             </div>
 
-                            {/* SECTION LIVRABLES */}
                             <div className="bg-stone-50 p-4 rounded-xl border border-stone-200">
                                 <h5 className="font-bold text-xs uppercase text-stone-500 mb-3 flex items-center gap-2"><Link className="w-3 h-3"/> Liens Livrables Finaux</h5>
                                 <div className="space-y-2">
@@ -432,14 +435,12 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, staffD
                             </div>
                         </div>
 
-                        {/* ALBUMS & COMMANDES + GALERIE SELECTION */}
                         <div className="bg-white p-6 rounded-xl border border-stone-200 shadow-sm">
                             <div className="flex justify-between items-center mb-4">
                                 <h4 className="font-bold text-stone-800 flex items-center gap-2"><BookOpen className="w-5 h-5 text-stone-400"/> Albums & Sélection</h4>
                                 <button onClick={printOrder} className="text-xs bg-stone-100 hover:bg-stone-200 text-stone-600 px-3 py-1.5 rounded-lg flex items-center gap-1 font-bold transition"><Printer className="w-3 h-3"/> Bon de Commande</button>
                             </div>
                             
-                            {/* 👇 NOUVEAU : LA ZONE DE GLISSER-DÉPOSER POUR LA GALERIE */}
                             <div className="mb-6 p-4 bg-amber-50 rounded-xl border border-amber-100">
                                 <div className="flex items-center justify-between mb-4">
                                     <div>
@@ -452,7 +453,6 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, staffD
                                     </div>
                                 </div>
 
-                                {/* ZONE DROPZONE GÉANTE */}
                                 <div 
                                     onDragEnter={handleGalleryDrag} 
                                     onDragLeave={handleGalleryDrag} 
@@ -463,10 +463,14 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, staffD
                                 >
                                     <input type="file" ref={galleryInputRef} multiple accept="image/jpeg, image/png" className="hidden" onChange={handleGalleryUploadClick} />
                                     
+                                    {/* 👇 NOUVEAU : BARRE DE PROGRESSION VISUELLE */}
                                     {uploading ? (
-                                        <div className="flex flex-col items-center text-amber-600">
+                                        <div className="flex flex-col items-center text-amber-600 w-full px-8">
                                             <Loader2 className="w-8 h-8 animate-spin mb-2"/>
-                                            <span className="text-xs font-bold uppercase tracking-wider">Upload en cours... Patientez</span>
+                                            <span className="text-xs font-bold uppercase tracking-wider mb-2">Upload en cours... {uploadProgress.current} / {uploadProgress.total}</span>
+                                            <div className="w-full h-1.5 bg-amber-200 rounded-full overflow-hidden">
+                                                <div className="h-full bg-amber-600 transition-all duration-300" style={{width: `${(uploadProgress.current / Math.max(1, uploadProgress.total)) * 100}%`}}></div>
+                                            </div>
                                         </div>
                                     ) : (
                                         <>
@@ -484,7 +488,6 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, staffD
                                     )}
                                 </div>
 
-                                {/* Résultat de la sélection client */}
                                 {localData.selectedImages && localData.selectedImages.length > 0 && (
                                     <div className="mt-4 pt-4 border-t border-amber-200/50">
                                         <div className="flex justify-between items-center mb-2">
@@ -527,7 +530,6 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, staffD
                             )}
                         </div>
 
-                        {/* SECTION CLEF USB */}
                         <div className="bg-white p-6 rounded-xl border border-stone-200 shadow-sm">
                             <h4 className="font-bold text-stone-800 mb-4 flex items-center gap-2"><HardDrive className="w-5 h-5 text-stone-400"/> Coffret USB</h4>
                             <div className="space-y-4">
