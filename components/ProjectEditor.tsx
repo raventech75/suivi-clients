@@ -34,10 +34,12 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, staffD
   const [newAlbum, setNewAlbum] = useState({ name: '', format: '', price: 0 });
   const [uploading, setUploading] = useState(false);
   const [sendingInvite, setSendingInvite] = useState(false);
-  const [isDragging, setIsDragging] = useState(false);
+  
+  const [isDragging, setIsDragging] = useState(false); // Pour la couverture
+  const [isGalleryDragging, setIsGalleryDragging] = useState(false); // 👇 NOUVEAU : Pour la galerie
   
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const galleryInputRef = useRef<HTMLInputElement>(null); // Pour la galerie multiple
+  const galleryInputRef = useRef<HTMLInputElement>(null); 
 
   const canEdit = !!user; 
   const now = Date.now();
@@ -134,7 +136,7 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, staffD
       updateField('fastTrackActivationDate', isActive ? new Date().toISOString() : null);
   };
 
-  // UPLOAD COUVERTURE
+  // --- UPLOAD COUVERTURE ---
   const processFile = async (file: File) => {
     if (!canEdit) return;
     try {
@@ -151,14 +153,14 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, staffD
   const handleDrag = (e: React.DragEvent) => { e.preventDefault(); setIsDragging(e.type === "dragenter" || e.type === "dragover"); };
   const handleDrop = (e: React.DragEvent) => { e.preventDefault(); setIsDragging(false); if (e.dataTransfer.files[0]) processFile(e.dataTransfer.files[0]); };
 
-  // 👇 NOUVEAU : UPLOAD GALERIE DE SÉLECTION MULTIPLE
-  const handleGalleryUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-      if (!e.target.files || e.target.files.length === 0 || !canEdit) return;
+  // 👇 NOUVEAU : UPLOAD GALERIE (DRAG & DROP MASSIF)
+  const processGalleryFiles = async (files: File[]) => {
+      if (!canEdit || files.length === 0) return;
       setUploading(true);
-      const files = Array.from(e.target.files);
       const newImages: {url: string, filename: string}[] = [];
       
       try {
+          // Upload en boucle
           for (const file of files) {
               const fileRef = ref(storage, `galleries/${project.id}/${file.name}`);
               await uploadBytes(fileRef, file);
@@ -176,11 +178,25 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, staffD
           alert(`Erreur d'upload: ${err.message}`);
       } finally {
           setUploading(false);
+          setIsGalleryDragging(false);
           if (galleryInputRef.current) galleryInputRef.current.value = '';
       }
   };
+  
+  const handleGalleryUploadClick = (e: React.ChangeEvent<HTMLInputElement>) => {
+      if (e.target.files) processGalleryFiles(Array.from(e.target.files));
+  };
+  const handleGalleryDrag = (e: React.DragEvent) => { 
+      e.preventDefault(); 
+      setIsGalleryDragging(e.type === "dragenter" || e.type === "dragover"); 
+  };
+  const handleGalleryDrop = (e: React.DragEvent) => { 
+      e.preventDefault(); 
+      setIsGalleryDragging(false); 
+      if (e.dataTransfer.files) processGalleryFiles(Array.from(e.dataTransfer.files)); 
+  };
 
-  // 👇 NOUVEAU : COPIE POUR LIGHTROOM
+  // COPIE POUR LIGHTROOM
   const copyLightroomString = () => {
       if (!localData.selectedImages || localData.selectedImages.length === 0) return alert("Aucune photo sélectionnée.");
       const query = localData.selectedImages.join(' OR ');
@@ -267,7 +283,6 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, staffD
   };
 
   const printOrder = () => {
-      // (Gardé identique)
       const win = window.open('', '', 'width=800,height=600');
       if(!win) return;
       const content = `<html><head><title>Bon de Commande - ${project.code}</title></head><body style="font-family: sans-serif; padding: 40px;"><div style="text-align:center; margin-bottom: 40px;"><h1>RavenTech Studio</h1><p>Bon de Commande / Récapitulatif</p></div><div style="border: 1px solid #ccc; padding: 20px; border-radius: 8px; margin-bottom: 30px;"><h3>Client : ${project.clientNames}</h3><p>Code Projet : <strong>${project.code}</strong></p><p>Date Mariage : ${formatDateFR(project.weddingDate)}</p><p>Email : ${project.clientEmail}</p></div><h3>Commandes & Options :</h3><table style="width: 100%; border-collapse: collapse;"><tr style="background: #f0f0f0;"><th style="border: 1px solid #ddd; padding: 10px; text-align: left;">Désignation</th><th style="border: 1px solid #ddd; padding: 10px; text-align: left;">Statut</th><th style="border: 1px solid #ddd; padding: 10px; text-align: right;">Prix</th></tr>${project.isPriority ? `<tr><td style="border:1px solid #ddd; padding:10px;">Option Fast Track (Prioritaire)</td><td style="border:1px solid #ddd; padding:10px;">Activé</td><td style="border:1px solid #ddd; padding:10px; text-align:right;">290 €</td></tr>` : ''}${(project.albums || []).map(a => `<tr><td style="border:1px solid #ddd; padding:10px;">Album ${a.name} (${a.format})</td><td style="border:1px solid #ddd; padding:10px;">${a.paid ? 'PAYÉ' : 'À RÉGLER'}</td><td style="border:1px solid #ddd; padding:10px; text-align:right;">${a.price} €</td></tr>`).join('')}</table><div style="margin-top: 40px; text-align: right;"><p>Date d'impression : ${new Date().toLocaleDateString()}</p></div><script>window.print();</script></body></html>`;
@@ -424,23 +439,49 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, staffD
                                 <button onClick={printOrder} className="text-xs bg-stone-100 hover:bg-stone-200 text-stone-600 px-3 py-1.5 rounded-lg flex items-center gap-1 font-bold transition"><Printer className="w-3 h-3"/> Bon de Commande</button>
                             </div>
                             
-                            {/* 👇 NOUVEAU : SYSTÈME DE GALERIE UPLOAD ADMIN */}
+                            {/* 👇 NOUVEAU : LA ZONE DE GLISSER-DÉPOSER POUR LA GALERIE */}
                             <div className="mb-6 p-4 bg-amber-50 rounded-xl border border-amber-100">
-                                <h5 className="font-bold text-sm text-amber-900 mb-2 flex items-center gap-2"><ImagePlus className="w-4 h-4"/> Galerie de Sélection Client</h5>
-                                <p className="text-xs text-amber-700 mb-3">Uploadez ici les JPEG Basse Résolution. Le client les verra dans son espace pour choisir les photos de l'album.</p>
-                                
-                                <div className="flex items-center gap-3 mb-3">
-                                    <input type="number" className="w-20 p-2 rounded border border-amber-200 text-sm outline-none" placeholder="Max" value={localData.maxSelection || ''} onChange={e => updateField('maxSelection', Number(e.target.value))} title="Nombre maximum de photos autorisées"/>
-                                    <span className="text-xs font-bold text-amber-800">Photos max à sélectionner</span>
+                                <div className="flex items-center justify-between mb-4">
+                                    <div>
+                                        <h5 className="font-bold text-sm text-amber-900 flex items-center gap-2"><ImagePlus className="w-4 h-4"/> Galerie de Sélection Client</h5>
+                                        <p className="text-xs text-amber-700">Déposez ici toutes les photos JPEG allégées pour le client.</p>
+                                    </div>
+                                    <div className="flex flex-col items-end">
+                                        <label className="text-[10px] font-bold text-amber-800 uppercase">Limite max.</label>
+                                        <input type="number" className="w-16 p-1.5 rounded border border-amber-200 text-sm outline-none text-center font-bold" placeholder="Ex: 60" value={localData.maxSelection || ''} onChange={e => updateField('maxSelection', Number(e.target.value))} />
+                                    </div>
                                 </div>
 
-                                <div className="flex items-center gap-3">
-                                    <input type="file" ref={galleryInputRef} multiple accept="image/jpeg, image/png" className="hidden" onChange={handleGalleryUpload} />
-                                    <button onClick={() => galleryInputRef.current?.click()} disabled={uploading} className="bg-amber-600 hover:bg-amber-700 text-white px-4 py-2 rounded-lg text-xs font-bold transition flex items-center gap-2">
-                                        {uploading ? <Loader2 className="w-4 h-4 animate-spin"/> : <Upload className="w-4 h-4"/>} 
-                                        Uploader les photos
-                                    </button>
-                                    <span className="text-xs font-bold text-amber-800">{(localData.galleryImages || []).length} images en ligne</span>
+                                {/* ZONE DROPZONE GÉANTE */}
+                                <div 
+                                    onDragEnter={handleGalleryDrag} 
+                                    onDragLeave={handleGalleryDrag} 
+                                    onDragOver={handleGalleryDrag} 
+                                    onDrop={handleGalleryDrop}
+                                    onClick={() => !uploading && galleryInputRef.current?.click()}
+                                    className={`relative w-full h-32 border-2 border-dashed rounded-xl flex flex-col items-center justify-center transition-all cursor-pointer overflow-hidden ${isGalleryDragging ? 'border-amber-500 bg-amber-100' : 'border-amber-300 bg-white hover:bg-amber-50/50'}`}
+                                >
+                                    <input type="file" ref={galleryInputRef} multiple accept="image/jpeg, image/png" className="hidden" onChange={handleGalleryUploadClick} />
+                                    
+                                    {uploading ? (
+                                        <div className="flex flex-col items-center text-amber-600">
+                                            <Loader2 className="w-8 h-8 animate-spin mb-2"/>
+                                            <span className="text-xs font-bold uppercase tracking-wider">Upload en cours... Patientez</span>
+                                        </div>
+                                    ) : (
+                                        <>
+                                            <Upload className={`w-8 h-8 mb-2 transition-colors ${isGalleryDragging ? 'text-amber-600' : 'text-amber-400'}`}/>
+                                            <span className="text-sm font-bold text-amber-900">Glissez vos photos ici</span>
+                                            <span className="text-xs text-amber-600 mt-1">ou cliquez pour parcourir</span>
+                                        </>
+                                    )}
+                                </div>
+
+                                <div className="mt-3 flex justify-between items-center px-1">
+                                    <span className="text-xs font-bold text-amber-800 bg-amber-200/50 px-2 py-1 rounded">{(localData.galleryImages || []).length} photos en ligne</span>
+                                    {localData.galleryImages && localData.galleryImages.length > 0 && (
+                                         <button onClick={() => {if(confirm("Effacer toute la galerie ?")) updateField('galleryImages', [])}} className="text-[10px] text-red-500 hover:underline">Vider la galerie</button>
+                                    )}
                                 </div>
 
                                 {/* Résultat de la sélection client */}
@@ -450,7 +491,7 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, staffD
                                             <span className="text-xs font-bold text-stone-800">Sélection Client ({localData.selectedImages.length} photos)</span>
                                             {localData.selectionValidated && <span className="bg-green-100 text-green-700 px-2 py-1 rounded text-[10px] font-bold flex items-center gap-1"><CheckCircle2 className="w-3 h-3"/> VALIDÉ</span>}
                                         </div>
-                                        <button onClick={copyLightroomString} className="w-full bg-stone-900 text-white py-2 rounded-lg text-xs font-bold hover:bg-black transition flex items-center justify-center gap-2"><Copy className="w-4 h-4"/> Copier la requête Lightroom</button>
+                                        <button onClick={copyLightroomString} className="w-full bg-stone-900 text-white py-2 rounded-lg text-xs font-bold hover:bg-black transition flex items-center justify-center gap-2 shadow-sm"><Copy className="w-4 h-4"/> Copier pour Lightroom</button>
                                     </div>
                                 )}
                             </div>
