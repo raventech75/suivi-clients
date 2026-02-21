@@ -1,14 +1,14 @@
 'use client';
-import React, { useState, useMemo } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { 
   Plus, Search, Calendar, MapPin, Users, LogOut, BarChart3, 
   Settings, Trash2, Save, AlertCircle, Clock, CheckCircle2, 
   Rocket, Bell, MessageSquare, AlertTriangle, ArrowUpDown, UserCheck, CalendarDays, ArrowLeft,
-  Camera, Video, ChevronRight // <-- Les icônes manquantes sont ici !
+  Camera, Video, ChevronRight, Sliders
 } from 'lucide-react';
-import { collection, addDoc, serverTimestamp, setDoc, doc } from 'firebase/firestore'; 
+import { collection, addDoc, serverTimestamp, setDoc, doc, getDoc } from 'firebase/firestore'; 
 import { db, appId } from '../lib/firebase';
-import { COLLECTION_NAME, Project } from '../lib/config';
+import { COLLECTION_NAME, Project, FORMULAS, FORMULA_OPTIONS, STRIPE_PRIORITY_LINK, STRIPE_RAW_LINK, STRIPE_ARCHIVE_RESTORE_LINK } from '../lib/config';
 import ProjectEditor from './ProjectEditor';
 
 export default function AdminDashboard({ 
@@ -21,7 +21,6 @@ export default function AdminDashboard({
   const [sortMode, setSortMode] = useState<'priority' | 'date'>('priority'); 
   
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
-  
   const [isViewingCalendar, setIsViewingCalendar] = useState(false);
 
   const selectedProject = useMemo(() => 
@@ -34,6 +33,52 @@ export default function AdminDashboard({
   
   const [newStaffName, setNewStaffName] = useState('');
   const [newStaffEmail, setNewStaffEmail] = useState('');
+
+  // 👇 NOUVEAU : GESTION DES PARAMÈTRES DU STUDIO (SaaS PREP)
+  const [isEditingSettings, setIsEditingSettings] = useState(false);
+  const [liveSettings, setLiveSettings] = useState({
+      formulas: FORMULAS,
+      options: FORMULA_OPTIONS,
+      stripePriority: STRIPE_PRIORITY_LINK,
+      stripeRaw: STRIPE_RAW_LINK,
+      stripeArchive: STRIPE_ARCHIVE_RESTORE_LINK
+  });
+  const [tempSettings, setTempSettings] = useState(liveSettings);
+
+  useEffect(() => {
+      const fetchSettings = async () => {
+          try {
+              const snap = await getDoc(doc(db, "settings", "studio_config"));
+              if (snap.exists()) {
+                  const data = snap.data();
+                  setLiveSettings({
+                      formulas: data.formulas || FORMULAS,
+                      options: data.options || FORMULA_OPTIONS,
+                      stripePriority: data.stripePriority || STRIPE_PRIORITY_LINK,
+                      stripeRaw: data.stripeRaw || STRIPE_RAW_LINK,
+                      stripeArchive: data.stripeArchive || STRIPE_ARCHIVE_RESTORE_LINK
+                  });
+              }
+          } catch(e) { console.error(e); }
+      };
+      fetchSettings();
+  }, []);
+
+  const openSettings = () => {
+      setTempSettings(liveSettings);
+      setIsEditingSettings(true);
+  };
+
+  const saveSettings = async () => {
+      try {
+          await setDoc(doc(db, "settings", "studio_config"), tempSettings, { merge: true });
+          setLiveSettings(tempSettings);
+          setIsEditingSettings(false);
+          alert("✅ Paramètres du Studio enregistrés dans la base de données !");
+      } catch (e: any) {
+          alert("Erreur: " + e.message);
+      }
+  };
 
   const [newProject, setNewProject] = useState({
     clientNames: '', clientEmail: '', clientEmail2: '', clientPhone: '', clientPhone2: '', 
@@ -226,27 +271,20 @@ export default function AdminDashboard({
                                     const dayName = dateObj.toLocaleDateString('fr-FR', { weekday: 'short' });
                                     const isPast = dateObj.getTime() < Date.now();
                                     
-                                    // Alertes Staff
                                     const missingPhoto = p.hasPhoto && !p.photographerName;
                                     const missingVideo = p.hasVideo && !p.videographerName;
                                     const hasWarning = (!isPast) && (missingPhoto || missingVideo);
 
                                     return (
                                         <div key={p.id} onClick={() => setSelectedProjectId(p.id)} className={`bg-white p-4 rounded-2xl shadow-sm border cursor-pointer hover:shadow-md transition flex items-center gap-6 ${isPast ? 'opacity-50 grayscale border-stone-100' : hasWarning ? 'border-red-300 bg-red-50/30' : 'border-stone-200'}`}>
-                                            
-                                            {/* Date Box */}
                                             <div className="flex flex-col items-center justify-center w-16 h-16 bg-stone-50 rounded-xl border border-stone-100 shrink-0">
                                                 <span className="text-xs uppercase font-bold text-stone-400">{dayName}</span>
                                                 <span className="text-2xl font-black text-stone-800 leading-none">{dayNum}</span>
                                             </div>
-                                            
-                                            {/* Client Info */}
                                             <div className="flex-1 min-w-[200px]">
                                                 <h3 className="font-bold text-lg text-stone-900">{p.clientNames}</h3>
                                                 <p className="text-sm text-stone-500 flex items-center gap-1 mt-0.5"><MapPin className="w-3 h-3"/> {p.weddingVenue || 'Lieu à définir'}</p>
                                             </div>
-
-                                            {/* Team Assignment */}
                                             <div className="hidden md:flex gap-4 items-center">
                                                 {p.hasPhoto && (
                                                     <div className={`px-3 py-2 rounded-lg border text-sm flex items-center gap-2 ${missingPhoto ? (!isPast ? 'bg-red-100 border-red-200 text-red-700 font-bold animate-pulse' : 'bg-stone-100 text-stone-400') : 'bg-amber-50 border-amber-100 text-amber-800'}`}>
@@ -261,7 +299,6 @@ export default function AdminDashboard({
                                                     </div>
                                                 )}
                                             </div>
-                                            
                                             <ChevronRight className="w-5 h-5 text-stone-300"/>
                                         </div>
                                     )
@@ -287,7 +324,11 @@ export default function AdminDashboard({
                 <span className="bg-stone-200 px-2 py-0.5 rounded text-stone-600 font-bold whitespace-nowrap">{processedProjects.length} dossiers</span>
                 <button onClick={onStats} className="flex items-center gap-1 hover:text-stone-900 transition whitespace-nowrap"><BarChart3 className="w-4 h-4"/> Statistiques</button>
                 <button onClick={() => setIsViewingCalendar(true)} className="flex items-center gap-1 text-emerald-600 hover:text-emerald-700 font-bold transition whitespace-nowrap"><CalendarDays className="w-4 h-4"/> Calendrier</button>
-                <button onClick={() => setIsManagingTeam(true)} className="flex items-center gap-1 hover:text-stone-900 transition text-amber-600 font-bold whitespace-nowrap"><Settings className="w-4 h-4"/> Équipe</button>
+                
+                {/* 👇 NOUVEAU BOUTON : PARAMÈTRES STUDIO */}
+                {isSuperAdmin && <button onClick={openSettings} className="flex items-center gap-1 hover:text-stone-900 transition text-indigo-600 font-bold whitespace-nowrap"><Sliders className="w-4 h-4"/> Studio</button>}
+                
+                <button onClick={() => setIsManagingTeam(true)} className="flex items-center gap-1 hover:text-stone-900 transition text-amber-600 font-bold whitespace-nowrap"><Users className="w-4 h-4"/> Équipe</button>
                 <button onClick={onLogout} className="flex items-center gap-1 text-red-400 hover:text-red-600 transition whitespace-nowrap"><LogOut className="w-4 h-4"/> Quitter</button>
             </div>
           </div>
@@ -340,7 +381,55 @@ export default function AdminDashboard({
           </div>
         </div>
 
-        {/* MODALES */}
+        {/* 👇 NOUVEAU : MODALE PARAMÈTRES DU STUDIO (SaaS) */}
+        {isEditingSettings && (
+            <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+                <div className="bg-white p-8 rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto animate-fade-in">
+                    <h2 className="text-2xl font-serif font-bold mb-2 text-stone-800 flex items-center gap-2"><Sliders className="w-6 h-6 text-indigo-600"/> Paramètres du Studio</h2>
+                    <p className="text-sm text-stone-500 mb-6">Ces données sont utilisées pour générer les devis et contrats de vos clients.</p>
+                    
+                    <div className="space-y-6">
+                        <div>
+                            <h3 className="font-bold text-sm text-stone-400 uppercase tracking-wider mb-3">Vos Formules</h3>
+                            {tempSettings.formulas.map((f: any, i: number) => (
+                                <div key={f.id} className="p-4 border rounded-xl mb-3 bg-stone-50 border-stone-200 shadow-sm">
+                                    <div className="flex gap-2 mb-2">
+                                        <input className="flex-1 p-2 border rounded-lg text-sm font-bold" value={f.name} onChange={e => { const newF = [...tempSettings.formulas]; newF[i].name = e.target.value; setTempSettings({...tempSettings, formulas: newF}); }}/>
+                                        <div className="flex items-center gap-1 bg-white border rounded-lg px-2"><input type="number" className="w-20 p-2 text-sm outline-none text-right" value={f.price} onChange={e => { const newF = [...tempSettings.formulas]; newF[i].price = Number(e.target.value); setTempSettings({...tempSettings, formulas: newF}); }}/><span className="text-stone-500 font-bold mr-2">€</span></div>
+                                    </div>
+                                    <textarea className="w-full p-2 border rounded-lg text-xs bg-white focus:ring-2 outline-none" rows={3} value={f.details.join('\n')} onChange={e => { const newF = [...tempSettings.formulas]; newF[i].details = e.target.value.split('\n'); setTempSettings({...tempSettings, formulas: newF}); }} placeholder="Une ligne par prestation (ex: Séance photo couple)"/>
+                                </div>
+                            ))}
+                        </div>
+
+                        <div>
+                            <h3 className="font-bold text-sm text-stone-400 uppercase tracking-wider mb-3">Options Supplémentaires</h3>
+                            {tempSettings.options.map((o: any, i: number) => (
+                                <div key={o.id} className="flex gap-2 mb-2">
+                                    <input className="flex-1 p-2 border rounded-lg text-sm bg-stone-50" value={o.name} onChange={e => { const newO = [...tempSettings.options]; newO[i].name = e.target.value; setTempSettings({...tempSettings, options: newO}); }}/>
+                                    <div className="flex items-center gap-1 bg-stone-50 border rounded-lg px-2"><input type="number" className="w-20 p-2 bg-transparent text-sm outline-none text-right" value={o.price} onChange={e => { const newO = [...tempSettings.options]; newO[i].price = Number(e.target.value); setTempSettings({...tempSettings, options: newO}); }}/><span className="text-stone-500 font-bold mr-2">€</span></div>
+                                </div>
+                            ))}
+                        </div>
+
+                        <div>
+                            <h3 className="font-bold text-sm text-stone-400 uppercase tracking-wider mb-3">Liens Paiement (Stripe)</h3>
+                            <div className="space-y-3">
+                                <div><label className="text-[10px] font-bold text-stone-500">Lien "Fast Track" (Priorité)</label><input className="w-full p-2 border rounded-lg text-sm bg-stone-50 focus:ring-2 outline-none" value={tempSettings.stripePriority} onChange={e => setTempSettings({...tempSettings, stripePriority: e.target.value})}/></div>
+                                <div><label className="text-[10px] font-bold text-stone-500">Lien "Fichiers RAW"</label><input className="w-full p-2 border rounded-lg text-sm bg-stone-50 focus:ring-2 outline-none" value={tempSettings.stripeRaw} onChange={e => setTempSettings({...tempSettings, stripeRaw: e.target.value})}/></div>
+                                <div><label className="text-[10px] font-bold text-stone-500">Lien "Déverrouillage Archive"</label><input className="w-full p-2 border rounded-lg text-sm bg-stone-50 focus:ring-2 outline-none" value={tempSettings.stripeArchive} onChange={e => setTempSettings({...tempSettings, stripeArchive: e.target.value})}/></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="flex gap-3 pt-6 mt-6 border-t border-stone-100">
+                        <button onClick={() => setIsEditingSettings(false)} className="flex-1 py-3 text-stone-500 font-bold hover:bg-stone-50 rounded-xl transition">Annuler</button>
+                        <button onClick={saveSettings} className="flex-1 py-3 bg-stone-900 text-white font-bold rounded-xl hover:bg-black transition shadow-lg flex justify-center items-center gap-2"><Save className="w-4 h-4"/> Sauvegarder</button>
+                    </div>
+                </div>
+            </div>
+        )}
+
         {isManagingTeam && ( <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"> <div className="bg-white p-8 rounded-2xl shadow-2xl max-w-md w-full animate-fade-in"> <h3 className="text-xl font-bold mb-4 flex items-center gap-2"><Users className="w-5 h-5"/> Gestion de l'équipe</h3> <div className="space-y-2 mb-6 max-h-[200px] overflow-y-auto bg-stone-50 p-2 rounded-lg"> {Object.entries(staffDirectory).map(([name, email]) => ( <div key={name} className="flex justify-between items-center bg-white p-2 rounded border border-stone-100 shadow-sm text-sm"> <div><div className="font-bold">{name}</div><div className="text-xs text-stone-400">{email}</div></div> <button onClick={() => removeStaffMember(name)} className="text-red-400 hover:text-red-600"><Trash2 className="w-4 h-4"/></button> </div> ))} </div> <div className="space-y-3 pt-4 border-t border-stone-100"> <input className="w-full p-2 border rounded text-sm" placeholder="Prénom" value={newStaffName} onChange={e => setNewStaffName(e.target.value)} /> <input className="w-full p-2 border rounded text-sm" placeholder="Email" value={newStaffEmail} onChange={e => setNewStaffEmail(e.target.value)} /> <button onClick={addStaffMember} className="w-full bg-stone-900 text-white py-2 rounded-lg font-bold text-sm hover:bg-black flex justify-center gap-2"><Save className="w-4 h-4"/> Enregistrer</button> </div> <button onClick={() => setIsManagingTeam(false)} className="w-full mt-4 text-stone-400 text-sm hover:text-stone-600">Fermer</button> </div> </div> )}
         {isAdding && ( <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"> <div className="bg-white p-8 rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto animate-fade-in"> <h2 className="text-2xl font-bold mb-6">Nouveau Dossier Mariage</h2> <form onSubmit={createProject} className="space-y-4"> <div className="grid md:grid-cols-2 gap-4"> <div><label className="text-xs font-bold text-stone-500">Noms des Mariés</label><input required className="w-full p-3 bg-stone-50 rounded-lg border border-stone-200" placeholder="Julie & Thomas" value={newProject.clientNames} onChange={e => setNewProject({...newProject, clientNames: e.target.value})} /></div> <div><label className="text-xs font-bold text-stone-500">Date du Mariage</label><input type="date" required className="w-full p-3 bg-stone-50 rounded-lg border border-stone-200" value={newProject.weddingDate} onChange={e => setNewProject({...newProject, weddingDate: e.target.value})} /></div> </div> <div><label className="text-xs font-bold text-stone-500">Email Client (Obligatoire)</label><input type="email" required className="w-full p-3 bg-stone-50 rounded-lg border border-stone-200" placeholder="client@email.com" value={newProject.clientEmail} onChange={e => setNewProject({...newProject, clientEmail: e.target.value})} /></div> <div className="grid md:grid-cols-2 gap-4"> <div><label className="text-xs font-bold text-stone-500">Lieu</label><input className="w-full p-3 bg-stone-50 rounded-lg border border-stone-200" placeholder="Domaine de..." value={newProject.weddingVenue} onChange={e => setNewProject({...newProject, weddingVenue: e.target.value})} /></div> <div><label className="text-xs font-bold text-stone-500">Téléphone</label><input className="w-full p-3 bg-stone-50 rounded-lg border border-stone-200" placeholder="06..." value={newProject.clientPhone} onChange={e => setNewProject({...newProject, clientPhone: e.target.value})} /></div> </div> <div className="flex gap-4 pt-2"> <label className="flex items-center gap-2 bg-stone-100 px-4 py-2 rounded-lg cursor-pointer"><input type="checkbox" checked={newProject.hasPhoto} onChange={e => setNewProject({...newProject, hasPhoto: e.target.checked})} /> <span className="font-bold">Prestation Photo</span></label> <label className="flex items-center gap-2 bg-stone-100 px-4 py-2 rounded-lg cursor-pointer"><input type="checkbox" checked={newProject.hasVideo} onChange={e => setNewProject({...newProject, hasVideo: e.target.checked})} /> <span className="font-bold">Prestation Vidéo</span></label> </div> <div className="flex gap-3 pt-6"> <button type="button" onClick={() => setIsAdding(false)} className="flex-1 py-3 text-stone-500 font-bold hover:bg-stone-100 rounded-xl">Annuler</button> <button type="submit" className="flex-1 py-3 bg-stone-900 text-white font-bold rounded-xl hover:bg-black">Créer le dossier</button> </div> </form> </div> </div> )}
 
