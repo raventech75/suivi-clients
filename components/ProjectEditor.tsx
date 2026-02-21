@@ -3,7 +3,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { 
   Camera, Video, Ban, ChevronRight, Rocket, Mail, 
   BookOpen, Trash2, Image as ImageIcon, CheckSquare, 
-  Upload, Loader2, MapPin, FileText, Users, Calendar, Eye, Timer, Music, Briefcase, History, Archive, RefreshCw, UserCheck, Send, Palette, ExternalLink, HardDrive, Link, Printer, CheckCircle2, ImagePlus, Copy, Wallet, DollarSign, ClipboardList, Clock, Phone
+  Upload, Loader2, MapPin, FileText, Users, Calendar, Eye, Timer, Music, Briefcase, History, Archive, RefreshCw, UserCheck, Send, Palette, ExternalLink, HardDrive, Link, Printer, CheckCircle2, ImagePlus, Copy, Wallet, DollarSign, ClipboardList, Clock, Phone, FileSignature
 } from 'lucide-react';
 import { doc, updateDoc, deleteDoc, serverTimestamp } from 'firebase/firestore'; 
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
@@ -280,6 +280,62 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, staffD
       }
   };
 
+  // 👇 NOUVEAU : IMPRESSION DU CONTRAT JURIDIQUE
+  const printContract = () => {
+      const win = window.open('', '', 'width=800,height=900');
+      if(!win) return;
+      const content = `
+        <html>
+          <head>
+            <title>Contrat - ${project.clientNames}</title>
+            <style>
+              body { font-family: 'Times New Roman', serif; padding: 40px; line-height: 1.6; color: #111; }
+              h1 { text-align: center; font-size: 24px; margin-bottom: 5px; text-transform: uppercase; }
+              .subtitle { text-align: center; font-size: 12px; color: #666; margin-bottom: 40px; }
+              .box { border: 1px solid #ccc; padding: 20px; margin-bottom: 20px; background: #fafafa; }
+              .row { display: flex; justify-content: space-between; margin-bottom: 10px; }
+              .title { font-weight: bold; font-size: 18px; margin-top: 30px; border-bottom: 1px solid #000; padding-bottom: 5px; }
+              .signature-box { margin-top: 50px; text-align: right; }
+              .signature-img { max-width: 250px; border-bottom: 1px solid #000; padding-bottom: 5px; margin-bottom: 10px; }
+            </style>
+          </head>
+          <body>
+            <h1>CONTRAT DE PRESTATION STUDIO</h1>
+            <div class="subtitle">Référence: ${project.code} | Date d'édition: ${new Date().toLocaleDateString()}</div>
+            
+            <div class="box">
+                <div class="row"><strong>Client(s) :</strong> <span>${project.clientNames}</span></div>
+                <div class="row"><strong>Email :</strong> <span>${project.clientEmail}</span></div>
+                <div class="row"><strong>Téléphone :</strong> <span>${project.clientPhone || 'Non renseigné'}</span></div>
+                <div class="row"><strong>Date de l'événement :</strong> <span>${formatDateFR(project.weddingDate)}</span></div>
+            </div>
+
+            <div class="title">1. Détails Financiers</div>
+            <ul>
+                <li>Prix total de la prestation : <strong>${project.totalPrice || 0} €</strong></li>
+                <li>Acompte versé à la réservation : <strong>${project.depositAmount || 0} €</strong></li>
+                <li>Reste à percevoir le jour de l'événement : <strong style="color:red;">${(project.totalPrice || 0) - (project.depositAmount || 0)} €</strong></li>
+            </ul>
+
+            <div class="title">2. Conditions Générales (Extrait)</div>
+            <p>1. Le présent contrat fait office d'accord officiel entre le Studio RavenTech et les Clients désignés ci-dessus.<br/>
+               2. Les droits d'auteur des œuvres photographiques et vidéographiques restent l'entière propriété du Studio.<br/>
+               3. La livraison finale des fichiers (Galerie / Clé USB) ne pourra s'effectuer qu'après règlement intégral de la prestation.</p>
+
+            <div class="signature-box">
+                <p><strong>Lu et approuvé par le(s) client(s) le :</strong> ${project.contractSignedDate ? formatDateFR(project.contractSignedDate) : 'NON SIGNÉ'}</p>
+                ${project.contractSignatureData ? `<img src="${project.contractSignatureData}" class="signature-img"/>` : '<div style="height:100px; width:250px; border-bottom:1px solid #000; float:right;"></div><div style="clear:both;"></div>'}
+                <p style="font-size:12px; color:#666; margin-top:5px;">Signature certifiée électroniquement</p>
+            </div>
+            
+            <script>window.print();</script>
+          </body>
+        </html>
+      `;
+      win.document.write(content);
+      win.document.close();
+  };
+
   const printOrder = () => {
       const win = window.open('', '', 'width=800,height=600');
       if(!win) return;
@@ -339,7 +395,6 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, staffD
                             </div>
                         </div>
 
-                        {/* 👇 FEUILLE DE ROUTE CÔTÉ ADMIN (DOUBLE PRÉPA) */}
                         <div className="bg-white p-6 rounded-xl border border-stone-200 shadow-sm relative">
                             <h4 className="font-bold text-stone-800 mb-4 flex items-center gap-2"><ClipboardList className="w-5 h-5 text-indigo-500"/> Feuille de Route (Jour J)</h4>
                             
@@ -350,7 +405,6 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, staffD
                             )}
 
                             <div className="space-y-5">
-                                {/* Adresses et Horaires */}
                                 <div className="space-y-3">
                                     <div className="flex gap-3">
                                         <div className="w-1/3"><label className="text-[10px] uppercase font-bold text-pink-500 flex items-center gap-1"><Clock className="w-3 h-3"/> Heure (Mariée)</label><input disabled={!canEdit} type="time" className="w-full p-2 border rounded bg-stone-50 text-sm" value={localData.prepTimeBride || ''} onChange={e=>updateField('prepTimeBride', e.target.value)} /></div>
@@ -370,7 +424,6 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, staffD
                                     </div>
                                 </div>
 
-                                {/* Contacts d'urgence */}
                                 <div className="pt-4 border-t border-stone-100 grid grid-cols-2 gap-4">
                                     <div className="p-3 bg-stone-50 rounded-lg border border-stone-100">
                                         <label className="text-[10px] uppercase font-bold text-stone-500 mb-2 block flex items-center gap-1"><Phone className="w-3 h-3"/> Contact Témoin 1</label>
@@ -388,10 +441,18 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, staffD
 
                         {isSuperAdmin && (
                             <div className="bg-white p-6 rounded-xl border border-stone-200 shadow-sm">
-                                <h4 className="font-bold text-stone-800 mb-4 flex items-center gap-2"><Wallet className="w-5 h-5 text-green-600"/> Finances & Rémunération</h4>
+                                <h4 className="font-bold text-stone-800 mb-4 flex items-center justify-between">
+                                    <span className="flex items-center gap-2"><Wallet className="w-5 h-5 text-green-600"/> Finances & Contrat</span>
+                                    {localData.contractSigned && (
+                                        <button onClick={printContract} className="bg-stone-100 hover:bg-stone-200 text-stone-700 px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1">
+                                            <FileSignature className="w-4 h-4"/> Voir le contrat
+                                        </button>
+                                    )}
+                                </h4>
                                 
-                                <div className="mb-6 p-4 bg-green-50 rounded-xl border border-green-100">
+                                <div className="mb-6 p-4 bg-green-50 rounded-xl border border-green-100 relative">
                                     <h5 className="font-bold text-sm text-green-900 mb-3 flex items-center gap-2"><DollarSign className="w-4 h-4"/> Paiement Client</h5>
+                                    
                                     <div className="grid grid-cols-2 gap-4 mb-4">
                                         <div>
                                             <label className="text-[10px] uppercase font-bold text-green-800">Prix Total Contrat (€)</label>
@@ -404,7 +465,7 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, staffD
                                     </div>
                                     
                                     {((localData.totalPrice || 0) - (localData.depositAmount || 0)) > 0 ? (
-                                        <div className="flex items-center justify-between bg-white p-3 rounded-lg border border-red-200 shadow-sm">
+                                        <div className="flex items-center justify-between bg-white p-3 rounded-lg border border-red-200 shadow-sm mb-3">
                                             <span className="text-sm font-bold text-red-600">Solde Jour J : {(localData.totalPrice || 0) - (localData.depositAmount || 0)} €</span>
                                             {canEdit && (
                                                 <button onClick={() => updateField('depositAmount', localData.totalPrice)} className="text-xs bg-green-600 hover:bg-green-700 text-white px-3 py-1.5 rounded-lg font-bold transition flex items-center gap-1">
@@ -413,9 +474,22 @@ export default function ProjectEditor({ project, isSuperAdmin, staffList, staffD
                                             )}
                                         </div>
                                     ) : (localData.totalPrice || 0) > 0 ? (
-                                        <div className="flex items-center gap-2 bg-green-100 text-green-800 p-3 rounded-lg border border-green-200 font-bold text-sm">
+                                        <div className="flex items-center gap-2 bg-green-100 text-green-800 p-3 rounded-lg border border-green-200 font-bold text-sm mb-3">
                                             <CheckCircle2 className="w-5 h-5"/> Prestation 100% payée (Acompte + Jour J)
                                         </div>
+                                    ) : null}
+
+                                    {/* 👇 NOUVEAU : STATUT DU CONTRAT */}
+                                    {localData.totalPrice && localData.totalPrice > 0 ? (
+                                        localData.contractSigned ? (
+                                            <div className="pt-3 border-t border-green-200/50 flex items-center gap-2 text-xs font-bold text-green-700">
+                                                <CheckCircle2 className="w-4 h-4"/> Contrat signé numériquement le {formatDateFR(localData.contractSignedDate!)}
+                                            </div>
+                                        ) : (
+                                            <div className="pt-3 border-t border-green-200/50 flex items-center gap-2 text-xs font-bold text-amber-600 animate-pulse">
+                                                <AlertTriangle className="w-4 h-4"/> Contrat en attente de signature par le client
+                                            </div>
+                                        )
                                     ) : null}
                                 </div>
 

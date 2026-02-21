@@ -190,7 +190,6 @@ export interface Project {
     totalPrice?: number;
     depositAmount?: number;
 
-    // 👇 NOUVEAU : FEUILLE DE ROUTE DÉTAILLÉE
     prepAddressBride?: string;
     prepTimeBride?: string;
     prepAddressGroom?: string;
@@ -204,4 +203,9 @@ export interface Project {
     witness2Name?: string;
     witness2Phone?: string;
     questionnaireFilled?: boolean;
+
+    // 👇 NOUVEAU : CONTRAT ET SIGNATURE ÉLECTRONIQUE
+    contractSigned?: boolean;
+    contractSignatureData?: string;
+    contractSignedDate?: string;
 }

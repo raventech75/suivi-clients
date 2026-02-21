@@ -1,9 +1,9 @@
 'use client';
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   ChevronRight, ChevronLeft, Search, AlertTriangle, ImageIcon, Film, Calendar, 
   Music, Rocket, CheckCircle, CheckSquare, BookOpen, 
-  Copy, ClipboardCheck, X, Users, Camera, Video, UserCheck, HardDrive, Download, Lock, ShoppingBag, Palette, PlayCircle, Heart, ZoomIn, MapPin, Clock, Phone, ClipboardList, CheckCircle2
+  Copy, ClipboardCheck, X, Users, Camera, Video, UserCheck, HardDrive, Download, Lock, ShoppingBag, Palette, PlayCircle, Heart, ZoomIn, MapPin, Clock, Phone, ClipboardList, CheckCircle2, PenTool, Eraser
 } from 'lucide-react';
 import { doc, updateDoc, serverTimestamp } from 'firebase/firestore';
 import { db, appId } from '../lib/firebase';
@@ -22,13 +22,11 @@ export default function ClientPortal({ projects, onBack }: { projects: Project[]
   const [searchCode, setSearchCode] = useState('');
   const [foundProject, setFoundProject] = useState<Project | null>(null);
   
-  // États de l'Espace Créatif
   const [musicLinks, setMusicLinks] = useState('');
   const [musicInstructions, setMusicInstructions] = useState('');
   const [moodLink, setMoodLink] = useState('');
   const [savingMusic, setSavingMusic] = useState(false);
   
-  // États de la Feuille de Route
   const [prepAddressBride, setPrepAddressBride] = useState('');
   const [prepTimeBride, setPrepTimeBride] = useState('');
   const [prepAddressGroom, setPrepAddressGroom] = useState('');
@@ -47,6 +45,11 @@ export default function ClientPortal({ projects, onBack }: { projects: Project[]
   const [previewIndex, setPreviewIndex] = useState<number | null>(null);
   const [error, setError] = useState('');
 
+  // 👇 NOUVEAU : CANVAS POUR LA SIGNATURE
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const [isDrawing, setIsDrawing] = useState(false);
+  const [savingSignature, setSavingSignature] = useState(false);
+
   useEffect(() => {
     if (projects.length === 1 && projects[0].id) {
         setFoundProject(projects[0]);
@@ -58,18 +61,15 @@ export default function ClientPortal({ projects, onBack }: { projects: Project[]
 
   useEffect(() => { 
       if(foundProject) { 
-          // Préférences artistiques
           setMusicLinks(foundProject.musicLinks || ''); 
           setMusicInstructions(foundProject.musicInstructions || '');
           setMoodLink(foundProject.moodboardLink || ''); 
           setSelectedPhotos(foundProject.selectedImages || []); 
           
-          // Questionnaire (Double prépa)
           setPrepAddressBride(foundProject.prepAddressBride || '');
           setPrepTimeBride(foundProject.prepTimeBride || '');
           setPrepAddressGroom(foundProject.prepAddressGroom || '');
           setPrepTimeGroom(foundProject.prepTimeGroom || '');
-          
           setCeremonyAddress(foundProject.ceremonyAddress || '');
           setCeremonyTime(foundProject.ceremonyTime || '');
           setPartyAddress(foundProject.partyAddress || '');
@@ -91,6 +91,83 @@ export default function ClientPortal({ projects, onBack }: { projects: Project[]
       window.addEventListener('keydown', handleKeyDown);
       return () => window.removeEventListener('keydown', handleKeyDown);
   }, [previewIndex, foundProject]);
+
+  // 👇 NOUVELLES FONCTIONS DE DESSIN (SIGNATURE)
+  const startDrawing = (e: any) => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    
+    // Empêcher le scroll sur mobile
+    if(e.type.includes('touch')) document.body.style.overflow = 'hidden';
+
+    const rect = canvas.getBoundingClientRect();
+    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+    
+    ctx.beginPath();
+    ctx.moveTo(clientX - rect.left, clientY - rect.top);
+    ctx.strokeStyle = "#1c1917";
+    ctx.lineWidth = 3;
+    ctx.lineCap = "round";
+    setIsDrawing(true);
+  };
+
+  const draw = (e: any) => {
+    if (!isDrawing) return;
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    const rect = canvas.getBoundingClientRect();
+    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+
+    ctx.lineTo(clientX - rect.left, clientY - rect.top);
+    ctx.stroke();
+  };
+
+  const stopDrawing = (e: any) => {
+    if(e.type.includes('touch')) document.body.style.overflow = 'auto';
+    setIsDrawing(false);
+  };
+
+  const clearSignature = () => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    ctx?.clearRect(0, 0, canvas.width, canvas.height);
+  };
+
+  const handleSignContract = async () => {
+      if(!foundProject) return;
+      const canvas = canvasRef.current;
+      if (!canvas) return;
+
+      // Vérifier si le canvas est vide
+      const blank = document.createElement('canvas');
+      blank.width = canvas.width;
+      blank.height = canvas.height;
+      if (canvas.toDataURL() === blank.toDataURL()) {
+          alert("Veuillez dessiner votre signature avant de valider.");
+          return;
+      }
+
+      setSavingSignature(true);
+      const signatureData = canvas.toDataURL('image/png');
+      
+      const colPath = typeof appId !== 'undefined' ? `artifacts/${appId}/public/data/${COLLECTION_NAME}` : COLLECTION_NAME;
+      await updateDoc(doc(db, colPath, foundProject.id), { 
+          contractSigned: true,
+          contractSignatureData: signatureData,
+          contractSignedDate: new Date().toISOString(),
+          lastUpdated: serverTimestamp() 
+      });
+      alert("Contrat signé et validé avec succès !");
+      setSavingSignature(false);
+  };
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
@@ -217,7 +294,72 @@ export default function ClientPortal({ projects, onBack }: { projects: Project[]
         </div>
         
         <div className="max-w-4xl mx-auto px-4 -mt-16 space-y-8 relative z-10">
+
+          {/* 👇 NOUVEAU : MODULE CONTRAT & SIGNATURE */}
+          {foundProject.totalPrice && foundProject.totalPrice > 0 && !foundProject.contractSigned ? (
+              <div className="bg-white p-6 rounded-2xl border-2 border-stone-800 shadow-xl relative overflow-hidden animate-fade-in">
+                  <div className="absolute top-0 right-0 bg-stone-800 text-white px-4 py-1.5 rounded-bl-xl font-bold text-xs flex items-center gap-1 shadow-sm">
+                      <PenTool className="w-3 h-3"/> Action Requise
+                  </div>
+                  
+                  <h3 className="font-serif text-2xl text-stone-800 flex items-center gap-2 mb-4">Contrat de Prestation</h3>
+                  
+                  <div className="bg-stone-50 p-4 rounded-xl border border-stone-200 text-sm text-stone-600 mb-6 max-h-[150px] overflow-y-auto">
+                      <p className="font-bold text-stone-900 mb-2">Conditions Générales (Extrait) - Résumé de la prestation :</p>
+                      <ul className="list-disc pl-5 space-y-1 mb-4">
+                          <li>Client(s) : {foundProject.clientNames}</li>
+                          <li>Date de l'événement : {formatDateFR(foundProject.weddingDate)}</li>
+                          <li>Prix Total : {foundProject.totalPrice} €</li>
+                          <li>Acompte versé : {foundProject.depositAmount || 0} €</li>
+                          <li className="text-red-600 font-bold">Solde restant dû le jour J : {foundProject.totalPrice - (foundProject.depositAmount || 0)} €</li>
+                      </ul>
+                      <p>Par la présente signature, le client accepte les conditions générales de vente du Studio RavenTech. Les droits d'auteur restent la propriété du photographe/vidéaste. La livraison finale ne pourra s'effectuer qu'après règlement intégral de la somme due.</p>
+                  </div>
+
+                  <div className="mb-4">
+                      <div className="flex justify-between items-center mb-2">
+                          <label className="text-sm font-bold text-stone-800 flex items-center gap-2">Votre Signature</label>
+                          <button onClick={clearSignature} className="text-xs text-stone-400 hover:text-stone-700 flex items-center gap-1"><Eraser className="w-3 h-3"/> Effacer</button>
+                      </div>
+                      <div className="border-2 border-dashed border-stone-300 rounded-xl bg-stone-50 overflow-hidden cursor-crosshair touch-none">
+                          <canvas 
+                              ref={canvasRef}
+                              width={800} 
+                              height={200}
+                              className="w-full h-[200px]"
+                              onMouseDown={startDrawing}
+                              onMouseMove={draw}
+                              onMouseUp={stopDrawing}
+                              onMouseLeave={stopDrawing}
+                              onTouchStart={startDrawing}
+                              onTouchMove={draw}
+                              onTouchEnd={stopDrawing}
+                          />
+                      </div>
+                      <p className="text-[10px] text-stone-400 text-center mt-2">Dessinez avec votre doigt ou votre souris dans le cadre ci-dessus.</p>
+                  </div>
+
+                  <button 
+                      onClick={handleSignContract} 
+                      disabled={savingSignature}
+                      className="w-full bg-stone-900 text-white py-4 rounded-xl font-bold hover:bg-black transition shadow-lg disabled:opacity-50 flex items-center justify-center gap-2"
+                  >
+                      {savingSignature ? 'Validation...' : 'Signer numériquement le contrat'}
+                  </button>
+              </div>
+          ) : foundProject.contractSigned ? (
+              <div className="bg-green-50 p-4 rounded-xl border border-green-200 shadow-sm flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                      <div className="p-2 bg-green-100 rounded-full"><CheckCircle2 className="w-6 h-6 text-green-600"/></div>
+                      <div>
+                          <div className="font-bold text-green-900">Contrat signé</div>
+                          <div className="text-xs text-green-700">Le {formatDateFR(foundProject.contractSignedDate!)}</div>
+                      </div>
+                  </div>
+              </div>
+          ) : null}
           
+          {/* RESTE DU CODE (inchangé) */}
           {hasDelivery && !allConfirmed && (
               <div className="bg-red-600 text-white p-6 rounded-2xl shadow-xl border-2 border-red-400 flex flex-col md:flex-row gap-4 items-start animate-fade-in">
                   <div className="bg-white/20 p-3 rounded-full shrink-0"><HardDrive className="w-8 h-8 text-white" /></div>
@@ -293,7 +435,6 @@ export default function ClientPortal({ projects, onBack }: { projects: Project[]
               )}
           </div>
 
-          {/* FEUILLE DE ROUTE (J-30) */}
           <div className="bg-white p-6 rounded-2xl border border-stone-200 shadow-xl relative overflow-hidden">
               {foundProject.questionnaireFilled && (
                   <div className="absolute top-0 right-0 bg-green-500 text-white px-4 py-1.5 rounded-bl-xl font-bold text-xs flex items-center gap-1 shadow-sm">
@@ -307,9 +448,7 @@ export default function ClientPortal({ projects, onBack }: { projects: Project[]
               </div>
 
               <div className="space-y-6">
-                  {/* Lieux et Horaires */}
                   <div className="grid md:grid-cols-3 gap-4">
-                      {/* Préparatifs (Double) */}
                       <div className="bg-stone-50 p-4 rounded-xl border border-stone-100">
                           <h4 className="font-bold text-sm text-stone-700 flex items-center gap-1 mb-3"><MapPin className="w-4 h-4 text-stone-400"/> Préparatifs</h4>
                           
@@ -348,7 +487,6 @@ export default function ClientPortal({ projects, onBack }: { projects: Project[]
                       </div>
                   </div>
 
-                  {/* Contacts Témoins */}
                   <div className="bg-stone-50 p-4 rounded-xl border border-stone-100">
                       <h4 className="font-bold text-sm text-stone-700 flex items-center gap-1 mb-1"><Phone className="w-4 h-4 text-stone-400"/> Personnes de Confiance (Témoins / Wedding Planner)</h4>
                       <p className="text-[10px] text-stone-500 mb-4">Pour éviter de vous déranger le jour J en cas de question logistique (parking, surprise, etc.).</p>
@@ -375,7 +513,6 @@ export default function ClientPortal({ projects, onBack }: { projects: Project[]
               </div>
           </div>
 
-          {/* GALERIE DE SÉLECTION ALBUM NATIVE */}
           {foundProject.galleryImages && foundProject.galleryImages.length > 0 && (
               <div className="bg-white p-6 rounded-2xl border border-stone-200 shadow-xl overflow-hidden relative">
                   <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6 border-b pb-6">
