@@ -156,7 +156,6 @@ export default function ClientPortal({ projects, onBack }: { projects: Project[]
       setSavingSignature(false);
   };
 
-  // 👇 NOUVEAU : FONCTION D'IMPRESSION DU CONTRAT POUR LE CLIENT
   const printContract = () => {
       if(!foundProject) return;
       const win = window.open('', '', 'width=900,height=1000');
@@ -271,6 +270,67 @@ export default function ClientPortal({ projects, onBack }: { projects: Project[]
     if (p) { setFoundProject(p); setError(''); } else setError('Code introuvable. Vérifiez les majuscules.');
   };
 
+  const handleSaveMusic = async () => {
+      if(!foundProject) return;
+      setSavingMusic(true);
+      const colPath = typeof appId !== 'undefined' ? `artifacts/${appId}/public/data/${COLLECTION_NAME}` : COLLECTION_NAME;
+      await updateDoc(doc(db, colPath, foundProject.id), { 
+          musicLinks, musicInstructions, moodboardLink: moodLink, lastUpdated: serverTimestamp() 
+      });
+      alert("Vos choix artistiques ont été enregistrés !");
+      setSavingMusic(false);
+  };
+
+  const handleSaveQuestionnaire = async () => {
+      if(!foundProject) return;
+      setSavingQuest(true);
+      const colPath = typeof appId !== 'undefined' ? `artifacts/${appId}/public/data/${COLLECTION_NAME}` : COLLECTION_NAME;
+      await updateDoc(doc(db, colPath, foundProject.id), { 
+          prepAddressBride, prepTimeBride, 
+          prepAddressGroom, prepTimeGroom,
+          ceremonyAddress, ceremonyTime, 
+          partyAddress, partyTime, 
+          witness1Name, witness1Phone, 
+          witness2Name, witness2Phone,
+          questionnaireFilled: true,
+          lastUpdated: serverTimestamp() 
+      });
+      alert("Votre feuille de route a bien été transmise à notre équipe !");
+      setSavingQuest(false);
+  };
+
+  const confirmPhoto = async () => {
+      if(!foundProject || !confirm("⚠️ ATTENTION :\n\nEn confirmant, vous certifiez avoir téléchargé TOUS vos fichiers.")) return;
+      const colPath = typeof appId !== 'undefined' ? `artifacts/${appId}/public/data/${COLLECTION_NAME}` : COLLECTION_NAME;
+      await updateDoc(doc(db, colPath, foundProject.id), { deliveryConfirmedPhoto: true, deliveryConfirmedPhotoDate: serverTimestamp() });
+  };
+
+  const confirmVideo = async () => {
+      if(!foundProject || !confirm("⚠️ ATTENTION :\n\nEn confirmant, vous certifiez avoir téléchargé votre film.")) return;
+      const colPath = typeof appId !== 'undefined' ? `artifacts/${appId}/public/data/${COLLECTION_NAME}` : COLLECTION_NAME;
+      await updateDoc(doc(db, colPath, foundProject.id), { deliveryConfirmedVideo: true, deliveryConfirmedVideoDate: serverTimestamp() });
+  };
+
+  const togglePhoto = async (filename: string) => {
+      if(!foundProject || foundProject.selectionValidated) return;
+      let newSel = [...selectedPhotos];
+      if (newSel.includes(filename)) { newSel = newSel.filter(f => f !== filename); } 
+      else {
+          if (foundProject.maxSelection && newSel.length >= foundProject.maxSelection) { alert(`Vous avez atteint la limite de ${foundProject.maxSelection} photos pour votre album.`); return; }
+          newSel.push(filename);
+      }
+      setSelectedPhotos(newSel); 
+      const colPath = typeof appId !== 'undefined' ? `artifacts/${appId}/public/data/${COLLECTION_NAME}` : COLLECTION_NAME;
+      await updateDoc(doc(db, colPath, foundProject.id), { selectedImages: newSel });
+  };
+
+  const validateGallery = async () => {
+      if(!foundProject || !confirm("Êtes-vous sûr(e) de vouloir valider cette sélection ?\nVous ne pourrez plus la modifier.")) return;
+      const colPath = typeof appId !== 'undefined' ? `artifacts/${appId}/public/data/${COLLECTION_NAME}` : COLLECTION_NAME;
+      await updateDoc(doc(db, colPath, foundProject.id), { selectionValidated: true, lastUpdated: serverTimestamp() });
+      alert("Félicitations ! Votre sélection a été envoyée au Studio pour la création de votre Album.");
+  };
+
   if (foundProject) {
     const now = Date.now();
     const deliveryDatePhoto = foundProject.estimatedDeliveryPhoto ? new Date(foundProject.estimatedDeliveryPhoto).getTime() : null;
@@ -299,6 +359,7 @@ export default function ClientPortal({ projects, onBack }: { projects: Project[]
     return (
       <div className="min-h-screen bg-stone-50 pb-20">
         
+        {/* VISIONNEUSE PLEIN ÉCRAN */}
         {previewIndex !== null && foundProject.galleryImages && (
             <div className="fixed inset-0 z-[100] bg-black/95 flex flex-col animate-fade-in backdrop-blur-sm">
                 <div className="flex justify-between items-center p-4 md:p-6 text-white absolute top-0 w-full z-10 bg-gradient-to-b from-black/80 to-transparent">
@@ -329,7 +390,7 @@ export default function ClientPortal({ projects, onBack }: { projects: Project[]
         
         <div className="max-w-4xl mx-auto px-4 -mt-16 space-y-8 relative z-10">
 
-          {/* 👇 NOUVEAU : GESTION DU CONTRAT CÔTÉ CLIENT */}
+          {/* 👇 GESTION DU CONTRAT CÔTÉ CLIENT */}
           {foundProject.totalPrice && foundProject.totalPrice > 0 ? (
               !foundProject.contractSigned ? (
                   <div className="bg-white p-6 rounded-2xl border-2 border-stone-800 shadow-xl relative overflow-hidden animate-fade-in">
@@ -568,7 +629,7 @@ export default function ClientPortal({ projects, onBack }: { projects: Project[]
                       <div className="text-3xl font-bold text-stone-900">
                           <span className={selectedPhotos.length === foundProject.maxSelection ? "text-green-600" : "text-amber-500"}>{selectedPhotos.length}</span> 
                           <span className="text-stone-300 text-lg"> / {foundProject.maxSelection || '∞'}</span>
-                      </div>
+                          </div>
                       <div className="text-[10px] uppercase font-bold text-stone-400 tracking-wider">Sélectionnées</div>
                   </div>
               </div>
