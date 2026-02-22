@@ -5,6 +5,9 @@
 export const COLLECTION_NAME = "wedding_projects";
 export const SETTINGS_COLLECTION = "settings";
 
+// 👇 NOUVEAU : IDENTIFIANT UNIQUE DE VOTRE STUDIO (BASE DU SAAS)
+export const CURRENT_STUDIO_ID = "irzzen_prod";
+
 export const MAKE_WEBHOOK_URL = "https://hook.eu2.make.com/xnuln15n6zggpfk18p78o7olikrd8a99"; 
 export const STRIPE_PRIORITY_LINK = "https://buy.stripe.com/fZu4gz07eaPzcRt54Y5gc0c";
 export const STRIPE_RAW_LINK = "https://buy.stripe.com/cNi5kD5rye1L2cP2WQ5gc0d";
@@ -17,7 +20,6 @@ export const STAFF_DIRECTORY: Record<string, string> = {
     'Feridun': 'feridun.kizgin@gmail.com',
 };
 
-// 👇 NOUVEAU : DÉFINITION DES FORMULES ET OPTIONS
 export const FORMULAS = [
     { id: 'essentielle', name: 'Formule 1 : Essentielle', price: 1800, details: ['Prises de vue à la mairie', 'Séance photo de couple', 'Vidéo des moments clés', '1 Caméraman', 'Montage vidéo complet', 'Album photo numérique', 'Clef USB'] },
     { id: 'prestige', name: 'Formule 2 : Prestige', price: 2800, details: ['Prises de vue à la mairie', 'Séance photo de couple', 'Vidéo des moments clés', '1 Caméraman', 'Montage vidéo complet', 'Album photo numérique et imprimé (30x30)', 'Prestations drone', 'Clef USB'] },
@@ -99,6 +101,9 @@ export interface TeamPayment { id: string; recipient: string; amount: number; da
 
 export interface Project {
     id: string;
+    // 👇 NOUVEAU : SAUVEGARDE DU STUDIO ID
+    studioId?: string;
+    
     code: string;
     clientNames: string;
     clientEmail: string;
@@ -184,7 +189,6 @@ export interface Project {
     contractSignatureData?: string;
     contractSignedDate?: string;
     
-    // 👇 NOUVEAU : SÉLECTION DU CONTRAT
     selectedFormula?: string;
     selectedOptions?: string[];
 }

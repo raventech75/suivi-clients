@@ -8,7 +8,7 @@ import {
 } from 'lucide-react';
 import { collection, addDoc, serverTimestamp, setDoc, doc, getDoc } from 'firebase/firestore'; 
 import { db, appId } from '../lib/firebase';
-import { COLLECTION_NAME, Project, FORMULAS, FORMULA_OPTIONS, STRIPE_PRIORITY_LINK, STRIPE_RAW_LINK, STRIPE_ARCHIVE_RESTORE_LINK } from '../lib/config';
+import { COLLECTION_NAME, Project, FORMULAS, FORMULA_OPTIONS, STRIPE_PRIORITY_LINK, STRIPE_RAW_LINK, STRIPE_ARCHIVE_RESTORE_LINK, CURRENT_STUDIO_ID } from '../lib/config';
 import ProjectEditor from './ProjectEditor';
 
 export default function AdminDashboard({ 
@@ -34,7 +34,7 @@ export default function AdminDashboard({
   const [newStaffName, setNewStaffName] = useState('');
   const [newStaffEmail, setNewStaffEmail] = useState('');
 
-  // 👇 NOUVEAU : GESTION DES PARAMÈTRES DU STUDIO (SaaS PREP)
+  // GESTION DES PARAMÈTRES DU STUDIO (HERMÉTIQUE PAR STUDIO)
   const [isEditingSettings, setIsEditingSettings] = useState(false);
   const [liveSettings, setLiveSettings] = useState({
       formulas: FORMULAS,
@@ -48,7 +48,8 @@ export default function AdminDashboard({
   useEffect(() => {
       const fetchSettings = async () => {
           try {
-              const snap = await getDoc(doc(db, "settings", "studio_config"));
+              // 👇 NOUVEAU : On va chercher les paramètres SPÉCIFIQUES au studio
+              const snap = await getDoc(doc(db, "settings", `studio_config_${CURRENT_STUDIO_ID}`));
               if (snap.exists()) {
                   const data = snap.data();
                   setLiveSettings({
@@ -71,10 +72,11 @@ export default function AdminDashboard({
 
   const saveSettings = async () => {
       try {
-          await setDoc(doc(db, "settings", "studio_config"), tempSettings, { merge: true });
+          // 👇 NOUVEAU : On sauvegarde dans le tiroir du studio
+          await setDoc(doc(db, "settings", `studio_config_${CURRENT_STUDIO_ID}`), tempSettings, { merge: true });
           setLiveSettings(tempSettings);
           setIsEditingSettings(false);
-          alert("✅ Paramètres du Studio enregistrés dans la base de données !");
+          alert("✅ Paramètres du Studio enregistrés !");
       } catch (e: any) {
           alert("Erreur: " + e.message);
       }
@@ -209,6 +211,8 @@ export default function AdminDashboard({
       try {
           const docRef = await addDoc(collection(db, colPath), { 
               ...newProject, 
+              // 👇 NOUVEAU : On attache l'ID de votre studio lors de la création
+              studioId: CURRENT_STUDIO_ID,
               code, 
               statusPhoto: newProject.hasPhoto ? 'waiting' : 'none', 
               statusVideo: newProject.hasVideo ? 'waiting' : 'none', 
@@ -325,7 +329,6 @@ export default function AdminDashboard({
                 <button onClick={onStats} className="flex items-center gap-1 hover:text-stone-900 transition whitespace-nowrap"><BarChart3 className="w-4 h-4"/> Statistiques</button>
                 <button onClick={() => setIsViewingCalendar(true)} className="flex items-center gap-1 text-emerald-600 hover:text-emerald-700 font-bold transition whitespace-nowrap"><CalendarDays className="w-4 h-4"/> Calendrier</button>
                 
-                {/* 👇 NOUVEAU BOUTON : PARAMÈTRES STUDIO */}
                 {isSuperAdmin && <button onClick={openSettings} className="flex items-center gap-1 hover:text-stone-900 transition text-indigo-600 font-bold whitespace-nowrap"><Sliders className="w-4 h-4"/> Studio</button>}
                 
                 <button onClick={() => setIsManagingTeam(true)} className="flex items-center gap-1 hover:text-stone-900 transition text-amber-600 font-bold whitespace-nowrap"><Users className="w-4 h-4"/> Équipe</button>
@@ -381,7 +384,7 @@ export default function AdminDashboard({
           </div>
         </div>
 
-        {/* 👇 NOUVEAU : MODALE PARAMÈTRES DU STUDIO (SaaS) */}
+        {/* MODALE PARAMÈTRES DU STUDIO */}
         {isEditingSettings && (
             <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
                 <div className="bg-white p-8 rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto animate-fade-in">

@@ -9,7 +9,7 @@ import { doc, updateDoc, serverTimestamp, getDoc } from 'firebase/firestore';
 import { db, appId } from '../lib/firebase';
 import { 
   COLLECTION_NAME, STRIPE_PRIORITY_LINK, STRIPE_RAW_LINK, STRIPE_ARCHIVE_RESTORE_LINK,
-  PHOTO_STEPS, VIDEO_STEPS, ALBUM_STATUSES, Project, FORMULAS, FORMULA_OPTIONS 
+  PHOTO_STEPS, VIDEO_STEPS, ALBUM_STATUSES, Project, FORMULAS, FORMULA_OPTIONS, CURRENT_STUDIO_ID 
 } from '../lib/config';
 import ChatBox from './ChatSystem';
 
@@ -49,6 +49,7 @@ export default function ClientPortal({ projects, onBack }: { projects: Project[]
   const [isDrawing, setIsDrawing] = useState(false);
   const [savingSignature, setSavingSignature] = useState(false);
 
+  // LOGIQUE SAAS : Chargement des paramètres spécifiques au studio
   const [studioSettings, setStudioSettings] = useState({ 
       formulas: FORMULAS, 
       options: FORMULA_OPTIONS,
@@ -60,7 +61,7 @@ export default function ClientPortal({ projects, onBack }: { projects: Project[]
   useEffect(() => {
       const fetchSettings = async () => {
           try {
-              const snap = await getDoc(doc(db, "settings", "studio_config"));
+              const snap = await getDoc(doc(db, "settings", `studio_config_${CURRENT_STUDIO_ID}`));
               if (snap.exists()) {
                   const data = snap.data();
                   setStudioSettings(prev => ({
@@ -184,7 +185,6 @@ export default function ClientPortal({ projects, onBack }: { projects: Project[]
       setSavingSignature(false);
   };
 
-  // 👇 PDF OFFICIEL REPRENANT EXACTEMENT VOS TERMES
   const printContract = () => {
       if(!foundProject) return;
       const win = window.open('', '', 'width=900,height=1000');
@@ -404,7 +404,6 @@ export default function ClientPortal({ projects, onBack }: { projects: Project[]
     return (
       <div className="min-h-screen bg-stone-50 pb-20">
         
-        {/* VISIONNEUSE PLEIN ÉCRAN */}
         {previewIndex !== null && foundProject.galleryImages && (
             <div className="fixed inset-0 z-[100] bg-black/95 flex flex-col animate-fade-in backdrop-blur-sm">
                 <div className="flex justify-between items-center p-4 md:p-6 text-white absolute top-0 w-full z-10 bg-gradient-to-b from-black/80 to-transparent">
