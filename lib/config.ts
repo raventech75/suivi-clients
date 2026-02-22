@@ -1,18 +1,21 @@
 // ---------------------------------------------------------------------------
-// CONFIGURATION GLOBALE DU PROJET
+// CONFIGURATION GLOBALE DU PROJET (VERSION SAAS READY)
 // ---------------------------------------------------------------------------
 
 export const COLLECTION_NAME = "wedding_projects";
 export const SETTINGS_COLLECTION = "settings";
+export const USERS_COLLECTION = "users";
 
-// 👇 NOUVEAU : IDENTIFIANT UNIQUE DE VOTRE STUDIO (BASE DU SAAS)
+// 👇 IDENTIFIANT DE VOTRE STUDIO (À RENDRE DYNAMIQUE LORS DE L'INSCRIPTION)
 export const CURRENT_STUDIO_ID = "irzzen_prod";
 
+// Webhooks et Liens Stripe par défaut (seront écrasés par les réglages Firebase)
 export const MAKE_WEBHOOK_URL = "https://hook.eu2.make.com/xnuln15n6zggpfk18p78o7olikrd8a99"; 
 export const STRIPE_PRIORITY_LINK = "https://buy.stripe.com/fZu4gz07eaPzcRt54Y5gc0c";
 export const STRIPE_RAW_LINK = "https://buy.stripe.com/cNi5kD5rye1L2cP2WQ5gc0d";
 export const STRIPE_ARCHIVE_RESTORE_LINK = "https://buy.stripe.com/fZu00j3jq4rb5p140U5gc0e";
 
+// Annuaire de l'équipe (Historique - sera géré par la collection USERS)
 export const STAFF_DIRECTORY: Record<string, string> = {
     'Yunus': 'yunus34@hotmail.fr',
     'Serife': 'serifevideography@gmail.com',
@@ -20,6 +23,7 @@ export const STAFF_DIRECTORY: Record<string, string> = {
     'Feridun': 'feridun.kizgin@gmail.com',
 };
 
+// --- FORMULES ET OPTIONS PAR DÉFAUT ---
 export const FORMULAS = [
     { id: 'essentielle', name: 'Formule 1 : Essentielle', price: 1800, details: ['Prises de vue à la mairie', 'Séance photo de couple', 'Vidéo des moments clés', '1 Caméraman', 'Montage vidéo complet', 'Album photo numérique', 'Clef USB'] },
     { id: 'prestige', name: 'Formule 2 : Prestige', price: 2800, details: ['Prises de vue à la mairie', 'Séance photo de couple', 'Vidéo des moments clés', '1 Caméraman', 'Montage vidéo complet', 'Album photo numérique et imprimé (30x30)', 'Prestations drone', 'Clef USB'] },
@@ -35,6 +39,7 @@ export const FORMULA_OPTIONS = [
     { id: 'kina', name: 'Kina / Henne (Lundi au Jeudi)', price: 1500 }
 ];
 
+// --- LOGIQUE DE PRODUCTION ---
 export const CHECKLIST_PHOTO = [
     { id: 'backup', label: 'Sauvegarde Cartes', weight: 10 },
     { id: 'culling', label: 'Tri & Sélection', weight: 20 },
@@ -93,6 +98,17 @@ export const ALBUM_FORMATS = [
     "30x30", "40x30", "25x25", "20x30", "Coffret Luxe", "Livre Parents (20x20)"
 ];
 
+// --- INTERFACES TYPESCRIPT ---
+
+export interface UserProfile {
+    uid?: string;
+    email: string;
+    displayName: string;
+    role: 'superadmin' | 'admin' | 'staff';
+    studioId: string;
+    isActive: boolean;
+}
+
 export interface HistoryLog { date: string; user: string; action: string; }
 export interface Album { id: string; name: string; format: string; price: number; status: string; paid: boolean; stripeLink?: string; }
 export interface Message { id: string; author: string; text: string; date: string; isStaff: boolean; }
@@ -101,9 +117,7 @@ export interface TeamPayment { id: string; recipient: string; amount: number; da
 
 export interface Project {
     id: string;
-    // 👇 NOUVEAU : SAUVEGARDE DU STUDIO ID
-    studioId?: string;
-    
+    studioId: string; // Désormais requis pour le SaaS
     code: string;
     clientNames: string;
     clientEmail: string;

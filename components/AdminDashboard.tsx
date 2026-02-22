@@ -4,11 +4,15 @@ import {
   Plus, Search, Calendar, MapPin, Users, LogOut, BarChart3, 
   Settings, Trash2, Save, AlertCircle, Clock, CheckCircle2, 
   Rocket, Bell, MessageSquare, AlertTriangle, ArrowUpDown, UserCheck, CalendarDays, ArrowLeft,
-  Camera, Video, ChevronRight, Sliders
+  Camera, Video, ChevronRight, Sliders, ShieldCheck, UserPlus, Mail, Loader2
 } from 'lucide-react';
-import { collection, addDoc, serverTimestamp, setDoc, doc, getDoc } from 'firebase/firestore'; 
+import { collection, addDoc, serverTimestamp, setDoc, doc, getDoc, getDocs, query, where, deleteDoc } from 'firebase/firestore'; 
 import { db, appId } from '../lib/firebase';
-import { COLLECTION_NAME, Project, FORMULAS, FORMULA_OPTIONS, STRIPE_PRIORITY_LINK, STRIPE_RAW_LINK, STRIPE_ARCHIVE_RESTORE_LINK, CURRENT_STUDIO_ID } from '../lib/config';
+import { 
+  COLLECTION_NAME, USERS_COLLECTION, Project, FORMULAS, FORMULA_OPTIONS, 
+  STRIPE_PRIORITY_LINK, STRIPE_RAW_LINK, STRIPE_ARCHIVE_RESTORE_LINK, 
+  CURRENT_STUDIO_ID, UserProfile 
+} from '../lib/config';
 import ProjectEditor from './ProjectEditor';
 
 export default function AdminDashboard({ 
@@ -31,10 +35,12 @@ export default function AdminDashboard({
   const [isManagingTeam, setIsManagingTeam] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
   
-  const [newStaffName, setNewStaffName] = useState('');
-  const [newStaffEmail, setNewStaffEmail] = useState('');
+  // --- ÉTATS GESTION ÉQUIPE SAAS ---
+  const [teamMembers, setTeamMembers] = useState<UserProfile[]>([]);
+  const [newMember, setNewMember] = useState({ displayName: '', email: '', role: 'staff' as 'admin' | 'staff' });
+  const [loadingTeam, setLoadingTeam] = useState(false);
 
-  // GESTION DES PARAMÈTRES DU STUDIO (HERMÉTIQUE PAR STUDIO)
+  // --- ÉTATS PARAMÈTRES STUDIO ---
   const [isEditingSettings, setIsEditingSettings] = useState(false);
   const [liveSettings, setLiveSettings] = useState({
       formulas: FORMULAS,
@@ -45,13 +51,13 @@ export default function AdminDashboard({
   });
   const [tempSettings, setTempSettings] = useState(liveSettings);
 
+  // Chargement initial des données Studio et Équipe
   useEffect(() => {
-      const fetchSettings = async () => {
+      const fetchStudioData = async () => {
           try {
-              // 👇 NOUVEAU : On va chercher les paramètres SPÉCIFIQUES au studio
-              const snap = await getDoc(doc(db, "settings", `studio_config_${CURRENT_STUDIO_ID}`));
-              if (snap.exists()) {
-                  const data = snap.data();
+              const settingsSnap = await getDoc(doc(db, "settings", `studio_config_${CURRENT_STUDIO_ID}`));
+              if (settingsSnap.exists()) {
+                  const data = settingsSnap.data();
                   setLiveSettings({
                       formulas: data.formulas || FORMULAS,
                       options: data.options || FORMULA_OPTIONS,
@@ -60,10 +66,43 @@ export default function AdminDashboard({
                       stripeArchive: data.stripeArchive || STRIPE_ARCHIVE_RESTORE_LINK
                   });
               }
+              fetchTeam();
           } catch(e) { console.error(e); }
       };
-      fetchSettings();
+      fetchStudioData();
   }, []);
+
+  const fetchTeam = async () => {
+    setLoadingTeam(true);
+    try {
+        const q = query(collection(db, USERS_COLLECTION), where("studioId", "==", CURRENT_STUDIO_ID));
+        const snap = await getDocs(q);
+        const members = snap.docs.map(d => ({ ...d.data(), uid: d.id } as UserProfile));
+        setTeamMembers(members);
+    } catch(e) { console.error(e); }
+    setLoadingTeam(false);
+  };
+
+  const inviteMember = async () => {
+      if(!newMember.displayName || !newMember.email) return alert("Nom et Email requis");
+      try {
+          await addDoc(collection(db, USERS_COLLECTION), {
+              ...newMember,
+              studioId: CURRENT_STUDIO_ID,
+              isActive: true,
+              createdAt: serverTimestamp()
+          });
+          setNewMember({ displayName: '', email: '', role: 'staff' });
+          fetchTeam();
+          alert(`✅ ${newMember.displayName} ajouté à l'équipe.`);
+      } catch(e: any) { alert(e.message); }
+  };
+
+  const removeMember = async (id: string) => {
+      if(!confirm("Supprimer ce membre de l'équipe ?")) return;
+      await deleteDoc(doc(db, USERS_COLLECTION, id));
+      fetchTeam();
+  };
 
   const openSettings = () => {
       setTempSettings(liveSettings);
@@ -72,14 +111,11 @@ export default function AdminDashboard({
 
   const saveSettings = async () => {
       try {
-          // 👇 NOUVEAU : On sauvegarde dans le tiroir du studio
           await setDoc(doc(db, "settings", `studio_config_${CURRENT_STUDIO_ID}`), tempSettings, { merge: true });
           setLiveSettings(tempSettings);
           setIsEditingSettings(false);
           alert("✅ Paramètres du Studio enregistrés !");
-      } catch (e: any) {
-          alert("Erreur: " + e.message);
-      }
+      } catch (e: any) { alert("Erreur: " + e.message); }
   };
 
   const [newProject, setNewProject] = useState({
@@ -187,20 +223,6 @@ export default function AdminDashboard({
     return notifs.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
   }, [projects]);
 
-  const addStaffMember = async () => {
-      if(!newStaffName || !newStaffEmail) return alert("Nom et Email requis");
-      const updatedDirectory = { ...staffDirectory, [newStaffName]: newStaffEmail };
-      await setDoc(doc(db, "settings", "general"), { staffDirectory: updatedDirectory }, { merge: true });
-      setNewStaffName(''); setNewStaffEmail(''); alert(`✅ ${newStaffName} ajouté à l'équipe !`);
-  };
-
-  const removeStaffMember = async (name: string) => {
-      if(!confirm(`Supprimer ${name} de la liste ?`)) return;
-      const updatedDirectory = { ...staffDirectory };
-      delete updatedDirectory[name];
-      await setDoc(doc(db, "settings", "general"), { staffDirectory: updatedDirectory }, { merge: true });
-  };
-
   const createProject = async (e: any) => {
       e.preventDefault();
       if (!newProject.clientEmail || !newProject.clientEmail.includes('@')) return alert("⛔️ Email client obligatoire.");
@@ -211,7 +233,6 @@ export default function AdminDashboard({
       try {
           const docRef = await addDoc(collection(db, colPath), { 
               ...newProject, 
-              // 👇 NOUVEAU : On attache l'ID de votre studio lors de la création
               studioId: CURRENT_STUDIO_ID,
               code, 
               statusPhoto: newProject.hasPhoto ? 'waiting' : 'none', 
@@ -238,7 +259,13 @@ export default function AdminDashboard({
       <div className="min-h-screen bg-stone-100">
         <div className="max-w-7xl mx-auto p-4">
           <button onClick={() => setSelectedProjectId(null)} className="mb-4 text-sm font-bold text-stone-500 hover:text-stone-800 flex items-center gap-2">← Retour au tableau de bord</button>
-          <ProjectEditor project={selectedProject} isSuperAdmin={!!isSuperAdmin} staffList={staffList} staffDirectory={staffDirectory} user={user} />
+          <ProjectEditor 
+            project={selectedProject} 
+            isSuperAdmin={!!isSuperAdmin} 
+            staffList={teamMembers.map(m => m.displayName)} 
+            staffDirectory={Object.fromEntries(teamMembers.map(m => [m.displayName, m.email]))} 
+            user={user} 
+          />
         </div>
       </div>
     );
@@ -269,44 +296,23 @@ export default function AdminDashboard({
                             </h2>
                             
                             <div className="grid gap-4">
-                                {monthProjects.map(p => {
-                                    const dateObj = new Date(p.weddingDate);
-                                    const dayNum = dateObj.getDate();
-                                    const dayName = dateObj.toLocaleDateString('fr-FR', { weekday: 'short' });
-                                    const isPast = dateObj.getTime() < Date.now();
-                                    
-                                    const missingPhoto = p.hasPhoto && !p.photographerName;
-                                    const missingVideo = p.hasVideo && !p.videographerName;
-                                    const hasWarning = (!isPast) && (missingPhoto || missingVideo);
-
-                                    return (
-                                        <div key={p.id} onClick={() => setSelectedProjectId(p.id)} className={`bg-white p-4 rounded-2xl shadow-sm border cursor-pointer hover:shadow-md transition flex items-center gap-6 ${isPast ? 'opacity-50 grayscale border-stone-100' : hasWarning ? 'border-red-300 bg-red-50/30' : 'border-stone-200'}`}>
-                                            <div className="flex flex-col items-center justify-center w-16 h-16 bg-stone-50 rounded-xl border border-stone-100 shrink-0">
-                                                <span className="text-xs uppercase font-bold text-stone-400">{dayName}</span>
-                                                <span className="text-2xl font-black text-stone-800 leading-none">{dayNum}</span>
-                                            </div>
-                                            <div className="flex-1 min-w-[200px]">
-                                                <h3 className="font-bold text-lg text-stone-900">{p.clientNames}</h3>
-                                                <p className="text-sm text-stone-500 flex items-center gap-1 mt-0.5"><MapPin className="w-3 h-3"/> {p.weddingVenue || 'Lieu à définir'}</p>
-                                            </div>
-                                            <div className="hidden md:flex gap-4 items-center">
-                                                {p.hasPhoto && (
-                                                    <div className={`px-3 py-2 rounded-lg border text-sm flex items-center gap-2 ${missingPhoto ? (!isPast ? 'bg-red-100 border-red-200 text-red-700 font-bold animate-pulse' : 'bg-stone-100 text-stone-400') : 'bg-amber-50 border-amber-100 text-amber-800'}`}>
-                                                        <Camera className="w-4 h-4"/> 
-                                                        {missingPhoto ? 'À ASSIGNER' : p.photographerName}
-                                                    </div>
-                                                )}
-                                                {p.hasVideo && (
-                                                    <div className={`px-3 py-2 rounded-lg border text-sm flex items-center gap-2 ${missingVideo ? (!isPast ? 'bg-red-100 border-red-200 text-red-700 font-bold animate-pulse' : 'bg-stone-100 text-stone-400') : 'bg-blue-50 border-blue-100 text-blue-800'}`}>
-                                                        <Video className="w-4 h-4"/> 
-                                                        {missingVideo ? 'À ASSIGNER' : p.videographerName}
-                                                    </div>
-                                                )}
-                                            </div>
-                                            <ChevronRight className="w-5 h-5 text-stone-300"/>
+                                {monthProjects.map(p => (
+                                    <div key={p.id} onClick={() => setSelectedProjectId(p.id)} className="bg-white p-4 rounded-2xl shadow-sm border border-stone-200 cursor-pointer hover:shadow-md transition flex items-center gap-6">
+                                        <div className="flex flex-col items-center justify-center w-16 h-16 bg-stone-50 rounded-xl border border-stone-100 shrink-0">
+                                            <span className="text-xs uppercase font-bold text-stone-400">{new Date(p.weddingDate).toLocaleDateString('fr-FR', {weekday: 'short'})}</span>
+                                            <span className="text-2xl font-black text-stone-800 leading-none">{new Date(p.weddingDate).getDate()}</span>
                                         </div>
-                                    )
-                                })}
+                                        <div className="flex-1 min-w-[200px]">
+                                            <h3 className="font-bold text-lg text-stone-900">{p.clientNames}</h3>
+                                            <p className="text-sm text-stone-500 flex items-center gap-1 mt-0.5"><MapPin className="w-3 h-3"/> {p.weddingVenue || 'Lieu non défini'}</p>
+                                        </div>
+                                        <div className="hidden md:flex gap-4 items-center">
+                                            {p.hasPhoto && <div className={`px-3 py-2 rounded-lg border text-sm flex items-center gap-2 ${!p.photographerName ? 'bg-red-50 text-red-600 border-red-100' : 'bg-amber-50 border-amber-100'}`}><Camera className="w-4 h-4"/> {p.photographerName || 'À ASSIGNER'}</div>}
+                                            {p.hasVideo && <div className={`px-3 py-2 rounded-lg border text-sm flex items-center gap-2 ${!p.videographerName ? 'bg-red-50 text-red-600 border-red-100' : 'bg-blue-50 border-blue-100'}`}><Video className="w-4 h-4"/> {p.videographerName || 'À ASSIGNER'}</div>}
+                                        </div>
+                                        <ChevronRight className="w-5 h-5 text-stone-300"/>
+                                    </div>
+                                ))}
                             </div>
                         </div>
                     ))
@@ -328,10 +334,8 @@ export default function AdminDashboard({
                 <span className="bg-stone-200 px-2 py-0.5 rounded text-stone-600 font-bold whitespace-nowrap">{processedProjects.length} dossiers</span>
                 <button onClick={onStats} className="flex items-center gap-1 hover:text-stone-900 transition whitespace-nowrap"><BarChart3 className="w-4 h-4"/> Statistiques</button>
                 <button onClick={() => setIsViewingCalendar(true)} className="flex items-center gap-1 text-emerald-600 hover:text-emerald-700 font-bold transition whitespace-nowrap"><CalendarDays className="w-4 h-4"/> Calendrier</button>
-                
-                {isSuperAdmin && <button onClick={openSettings} className="flex items-center gap-1 hover:text-stone-900 transition text-indigo-600 font-bold whitespace-nowrap"><Sliders className="w-4 h-4"/> Studio</button>}
-                
-                <button onClick={() => setIsManagingTeam(true)} className="flex items-center gap-1 hover:text-stone-900 transition text-amber-600 font-bold whitespace-nowrap"><Users className="w-4 h-4"/> Équipe</button>
+                {isSuperAdmin && <button onClick={openSettings} className="flex items-center gap-1 text-indigo-600 font-bold transition whitespace-nowrap"><Sliders className="w-4 h-4"/> Studio</button>}
+                <button onClick={() => setIsManagingTeam(true)} className="flex items-center gap-1 text-amber-600 font-bold transition whitespace-nowrap"><Users className="w-4 h-4"/> Équipe</button>
                 <button onClick={onLogout} className="flex items-center gap-1 text-red-400 hover:text-red-600 transition whitespace-nowrap"><LogOut className="w-4 h-4"/> Quitter</button>
             </div>
           </div>
@@ -433,16 +437,88 @@ export default function AdminDashboard({
             </div>
         )}
 
-        {isManagingTeam && ( <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"> <div className="bg-white p-8 rounded-2xl shadow-2xl max-w-md w-full animate-fade-in"> <h3 className="text-xl font-bold mb-4 flex items-center gap-2"><Users className="w-5 h-5"/> Gestion de l'équipe</h3> <div className="space-y-2 mb-6 max-h-[200px] overflow-y-auto bg-stone-50 p-2 rounded-lg"> {Object.entries(staffDirectory).map(([name, email]) => ( <div key={name} className="flex justify-between items-center bg-white p-2 rounded border border-stone-100 shadow-sm text-sm"> <div><div className="font-bold">{name}</div><div className="text-xs text-stone-400">{email}</div></div> <button onClick={() => removeStaffMember(name)} className="text-red-400 hover:text-red-600"><Trash2 className="w-4 h-4"/></button> </div> ))} </div> <div className="space-y-3 pt-4 border-t border-stone-100"> <input className="w-full p-2 border rounded text-sm" placeholder="Prénom" value={newStaffName} onChange={e => setNewStaffName(e.target.value)} /> <input className="w-full p-2 border rounded text-sm" placeholder="Email" value={newStaffEmail} onChange={e => setNewStaffEmail(e.target.value)} /> <button onClick={addStaffMember} className="w-full bg-stone-900 text-white py-2 rounded-lg font-bold text-sm hover:bg-black flex justify-center gap-2"><Save className="w-4 h-4"/> Enregistrer</button> </div> <button onClick={() => setIsManagingTeam(false)} className="w-full mt-4 text-stone-400 text-sm hover:text-stone-600">Fermer</button> </div> </div> )}
-        {isAdding && ( <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"> <div className="bg-white p-8 rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto animate-fade-in"> <h2 className="text-2xl font-bold mb-6">Nouveau Dossier Mariage</h2> <form onSubmit={createProject} className="space-y-4"> <div className="grid md:grid-cols-2 gap-4"> <div><label className="text-xs font-bold text-stone-500">Noms des Mariés</label><input required className="w-full p-3 bg-stone-50 rounded-lg border border-stone-200" placeholder="Julie & Thomas" value={newProject.clientNames} onChange={e => setNewProject({...newProject, clientNames: e.target.value})} /></div> <div><label className="text-xs font-bold text-stone-500">Date du Mariage</label><input type="date" required className="w-full p-3 bg-stone-50 rounded-lg border border-stone-200" value={newProject.weddingDate} onChange={e => setNewProject({...newProject, weddingDate: e.target.value})} /></div> </div> <div><label className="text-xs font-bold text-stone-500">Email Client (Obligatoire)</label><input type="email" required className="w-full p-3 bg-stone-50 rounded-lg border border-stone-200" placeholder="client@email.com" value={newProject.clientEmail} onChange={e => setNewProject({...newProject, clientEmail: e.target.value})} /></div> <div className="grid md:grid-cols-2 gap-4"> <div><label className="text-xs font-bold text-stone-500">Lieu</label><input className="w-full p-3 bg-stone-50 rounded-lg border border-stone-200" placeholder="Domaine de..." value={newProject.weddingVenue} onChange={e => setNewProject({...newProject, weddingVenue: e.target.value})} /></div> <div><label className="text-xs font-bold text-stone-500">Téléphone</label><input className="w-full p-3 bg-stone-50 rounded-lg border border-stone-200" placeholder="06..." value={newProject.clientPhone} onChange={e => setNewProject({...newProject, clientPhone: e.target.value})} /></div> </div> <div className="flex gap-4 pt-2"> <label className="flex items-center gap-2 bg-stone-100 px-4 py-2 rounded-lg cursor-pointer"><input type="checkbox" checked={newProject.hasPhoto} onChange={e => setNewProject({...newProject, hasPhoto: e.target.checked})} /> <span className="font-bold">Prestation Photo</span></label> <label className="flex items-center gap-2 bg-stone-100 px-4 py-2 rounded-lg cursor-pointer"><input type="checkbox" checked={newProject.hasVideo} onChange={e => setNewProject({...newProject, hasVideo: e.target.checked})} /> <span className="font-bold">Prestation Vidéo</span></label> </div> <div className="flex gap-3 pt-6"> <button type="button" onClick={() => setIsAdding(false)} className="flex-1 py-3 text-stone-500 font-bold hover:bg-stone-100 rounded-xl">Annuler</button> <button type="submit" className="flex-1 py-3 bg-stone-900 text-white font-bold rounded-xl hover:bg-black">Créer le dossier</button> </div> </form> </div> </div> )}
+        {/* MODALE ÉQUIPE SAAS */}
+        {isManagingTeam && (
+            <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+                <div className="bg-white p-8 rounded-2xl shadow-2xl max-w-md w-full animate-fade-in">
+                    <h3 className="text-xl font-bold mb-1 flex items-center gap-2"><Users className="w-5 h-5"/> Votre Équipe</h3>
+                    <p className="text-xs text-stone-400 mb-6">Ajoutez vos prestataires pour leur donner un accès.</p>
+                    
+                    <div className="space-y-3 mb-6 max-h-[300px] overflow-y-auto">
+                        {loadingTeam ? <div className="text-center py-4"><Loader2 className="w-6 h-6 animate-spin mx-auto text-stone-300"/></div> : teamMembers.map(member => (
+                            <div key={member.uid} className="flex justify-between items-center bg-stone-50 p-3 rounded-xl border border-stone-100">
+                                <div>
+                                    <div className="text-sm font-bold text-stone-800">{member.displayName}</div>
+                                    <div className="text-[10px] text-stone-400 flex items-center gap-1"><Mail className="w-2.5 h-2.5"/> {member.email}</div>
+                                    <div className={`text-[9px] uppercase font-black mt-1 inline-block px-1.5 rounded ${member.role === 'admin' ? 'bg-indigo-100 text-indigo-600' : 'bg-stone-200 text-stone-600'}`}>{member.role}</div>
+                                </div>
+                                <button onClick={() => removeMember(member.uid!)} className="text-red-300 hover:text-red-500 transition p-2"><Trash2 className="w-4 h-4"/></button>
+                            </div>
+                        ))}
+                    </div>
 
+                    <div className="p-4 bg-stone-100 rounded-2xl space-y-3">
+                        <div className="flex gap-2">
+                            <input className="flex-1 p-2 border rounded-lg text-sm" placeholder="Prénom" value={newMember.displayName} onChange={e => setNewMember({...newMember, displayName: e.target.value})} />
+                            <select className="p-2 border rounded-lg text-sm bg-white font-bold" value={newMember.role} onChange={e => setNewMember({...newMember, role: e.target.value as any})}>
+                                <option value="staff">Staff</option>
+                                <option value="admin">Admin</option>
+                            </select>
+                        </div>
+                        <input className="w-full p-2 border rounded-lg text-sm" placeholder="Email (obligatoire)" value={newMember.email} onChange={e => setNewMember({...newMember, email: e.target.value})} />
+                        <button onClick={inviteMember} className="w-full bg-stone-900 text-white py-2.5 rounded-xl font-bold text-sm hover:bg-black transition flex justify-center items-center gap-2"><UserPlus className="w-4 h-4"/> Ajouter à l'équipe</button>
+                    </div>
+                    <button onClick={() => setIsManagingTeam(false)} className="w-full mt-4 text-stone-400 text-sm font-bold hover:text-stone-600 transition">Fermer</button>
+                </div>
+            </div>
+        )}
+
+        {/* MODALE AJOUT DOSSIER */}
+        {isAdding && (
+            <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+                <div className="bg-white p-8 rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto animate-fade-in">
+                    <h2 className="text-2xl font-serif font-bold mb-6">Nouveau Dossier Mariage</h2>
+                    <form onSubmit={createProject} className="space-y-4">
+                        <div className="grid md:grid-cols-2 gap-4">
+                            <div><label className="text-xs font-bold text-stone-500 uppercase">Noms des Mariés</label><input required className="w-full p-3 bg-stone-50 rounded-lg border border-stone-200 outline-none focus:ring-2 focus:ring-stone-200 transition-all" placeholder="Julie & Thomas" value={newProject.clientNames} onChange={e => setNewProject({...newProject, clientNames: e.target.value})} /></div>
+                            <div><label className="text-xs font-bold text-stone-500 uppercase">Date du Mariage</label><input type="date" required className="w-full p-3 bg-stone-50 rounded-lg border border-stone-200 outline-none focus:ring-2 focus:ring-stone-200 transition-all" value={newProject.weddingDate} onChange={e => setNewProject({...newProject, weddingDate: e.target.value})} /></div>
+                        </div>
+                        
+                        <div className="grid md:grid-cols-2 gap-4">
+                            <div><label className="text-xs font-bold text-stone-500 uppercase">Email Client 1</label><input type="email" required className="w-full p-3 bg-stone-50 rounded-lg border border-stone-200 outline-none focus:ring-2 focus:ring-stone-200 transition-all" placeholder="client@email.com" value={newProject.clientEmail} onChange={e => setNewProject({...newProject, clientEmail: e.target.value})} /></div>
+                            <div><label className="text-xs font-bold text-stone-500 uppercase">Tél Client 1</label><input className="w-full p-3 bg-stone-50 rounded-lg border border-stone-200 outline-none focus:ring-2 focus:ring-stone-200 transition-all" placeholder="06..." value={newProject.clientPhone} onChange={e => setNewProject({...newProject, clientPhone: e.target.value})} /></div>
+                        </div>
+
+                        <div className="grid md:grid-cols-2 gap-4">
+                            <div><label className="text-xs font-bold text-stone-500 uppercase">Email Client 2 (Optionnel)</label><input type="email" className="w-full p-3 bg-stone-50 rounded-lg border border-stone-200 outline-none focus:ring-2 focus:ring-stone-200 transition-all" placeholder="conjoint@email.com" value={newProject.clientEmail2} onChange={e => setNewProject({...newProject, clientEmail2: e.target.value})} /></div>
+                            <div><label className="text-xs font-bold text-stone-500 uppercase">Tél Client 2 (Optionnel)</label><input className="w-full p-3 bg-stone-50 rounded-lg border border-stone-200 outline-none focus:ring-2 focus:ring-stone-200 transition-all" placeholder="06..." value={newProject.clientPhone2} onChange={e => setNewProject({...newProject, clientPhone2: e.target.value})} /></div>
+                        </div>
+
+                        <div className="grid md:grid-cols-2 gap-4">
+                            <div><label className="text-xs font-bold text-stone-500 uppercase">Lieu de réception</label><input className="w-full p-3 bg-stone-50 rounded-lg border border-stone-200 outline-none focus:ring-2 focus:ring-stone-200 transition-all" placeholder="Domaine de..." value={newProject.weddingVenue} onChange={e => setNewProject({...newProject, weddingVenue: e.target.value})} /></div>
+                            <div><label className="text-xs font-bold text-stone-500 uppercase">Code Postal Lieu</label><input className="w-full p-3 bg-stone-50 rounded-lg border border-stone-200 outline-none focus:ring-2 focus:ring-stone-200 transition-all" placeholder="75000" value={newProject.weddingVenueZip} onChange={e => setNewProject({...newProject, weddingVenueZip: e.target.value})} /></div>
+                        </div>
+
+                        <div className="flex gap-4 pt-2">
+                            <label className="flex items-center gap-2 bg-stone-100 px-4 py-2 rounded-lg cursor-pointer"><input type="checkbox" checked={newProject.hasPhoto} onChange={e => setNewProject({...newProject, hasPhoto: e.target.checked})} /> <span className="font-bold">Prestation Photo</span></label>
+                            <label className="flex items-center gap-2 bg-stone-100 px-4 py-2 rounded-lg cursor-pointer"><input type="checkbox" checked={newProject.hasVideo} onChange={e => setNewProject({...newProject, hasVideo: e.target.checked})} /> <span className="font-bold">Prestation Vidéo</span></label>
+                        </div>
+
+                        <div className="flex gap-3 pt-6">
+                            <button type="button" onClick={() => setIsAdding(false)} className="flex-1 py-3 text-stone-500 font-bold hover:bg-stone-100 rounded-xl transition">Annuler</button>
+                            <button type="submit" className="flex-1 py-3 bg-stone-900 text-white font-bold rounded-xl hover:bg-black transition shadow-lg">Créer le dossier</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        )}
+
+        {/* LISTE DES PROJETS AVEC VOTRE DESIGN ORIGINAL */}
         {processedProjects.length === 0 ? (
             <div className="text-center py-20 bg-white rounded-2xl border border-stone-200 shadow-sm border-dashed">
                 <div className="text-stone-300 mb-4"><Search className="w-12 h-12 mx-auto"/></div>
                 <h3 className="text-xl font-bold text-stone-800 mb-2">Aucun dossier trouvé</h3>
-                <p className="text-stone-500">
-                    {statusFilter === 'mine' ? "Aucun dossier ne vous est assigné." : "Essayez de changer les filtres ou la recherche."}
-                </p>
+                <p className="text-stone-500">{statusFilter === 'mine' ? "Aucun dossier ne vous est assigné." : "Essayez de changer les filtres ou la recherche."}</p>
             </div>
         ) : (
             <div className="flex flex-col gap-4 pb-10">
